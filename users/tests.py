@@ -3,6 +3,7 @@ import functools
 import pytest
 from django.db import IntegrityError
 
+from users.backends import EmailOrUserBackend
 from users.models import User, get_sentinel_user
 
 
@@ -73,3 +74,53 @@ class TestUser(UserMixin):
                 email="",
                 password="testpass",
             )
+
+
+@pytest.mark.django_db
+class TestEmailOrUserBackend(UserMixin):
+    def test_authenticate_with_username(self):
+        backend = EmailOrUserBackend()
+        user = backend.authenticate(
+            None,
+            username="wendy",
+            password="testpass",
+        )
+        assert user == self.wendy
+
+    def test_authenticate_with_email(self):
+        backend = EmailOrUserBackend()
+        user = backend.authenticate(
+            None,
+            username="wendy@example.com",
+            password="testpass"
+        )
+        assert user == self.wendy
+
+    def test_authenticate_wrong_password(self):
+        backend = EmailOrUserBackend()
+        user = backend.authenticate(
+            None,
+            username="wendy",
+            password="wrong",
+        )
+        assert user is None
+
+    def test_authenticate_nonexistent_user(self):
+        backend = EmailOrUserBackend()
+        user = backend.authenticate(
+            None,
+            username="nobody",
+            password="testpass",
+        )
+        assert user is None
+
+    def test_authenticate_inactive_user(self):
+        self.wendy.is_active = False
+        self.wendy.save()
+        backend = EmailOrUserBackend()
+        user = backend.authenticate(
+            None,
+            username="wendy",
+            password="testpass",
+        )
+        assert user is None

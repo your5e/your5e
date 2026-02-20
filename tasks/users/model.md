@@ -18,4 +18,5 @@ until not `None`.
 
 Authenticating to the site.
 
-- [ ] Login accepts either username or email as identifier
+- [X] Login accepts either username or email as identifier
+- [X] Logout
