@@ -28,7 +28,7 @@ duplicate pages in multiple wikis don't take up extra storage.
 - hash (primary key)
 - data
 
-- [ ] implement wiki models
+- [X] implement wiki models
         - ensure content is globally unique across all wikis
         - ensure content is shared between wikis
         - ensure pages and versions are unique to the wiki
@@ -39,15 +39,15 @@ duplicate pages in multiple wikis don't take up extra storage.
         - enforce path slugs are unique within the wiki,
           near duplicate filenames cannot be created
         - updating a page with identical content does not create a new version
-- [ ] versions are kept when user is deleted, reassigned to sentinel
+- [X] versions are kept when user is deleted, reassigned to sentinel
 
 Convenience methods.
 
 - [ ] wiki "all pages"
 - [ ] wiki "changes since T"
-- [ ] page update
+- [X] page update
         - update with no changes does not produce a new version
-- [ ] page rename, duplicates content, new filename and path
+- [X] page rename, duplicates content, new filename and path
 - [ ] page history
 - [ ] page revert, puts content back but with new version not deleting
 
@@ -63,7 +63,7 @@ Pages are not immediately purged from the database, so they can be recovered.
         - ensure page history does not break
         - ensure version numbers still increment correctly
         - ensure deleting a version only deletes content no longer referenced
-- [ ] method to mark a page as deleted without removing from db
+- [X] method to mark a page as deleted without removing from db
 - [ ] force deleting a page is possible
         - ensure deleting a page deletes versions
 - [ ] wiki does not list "deleted" pages

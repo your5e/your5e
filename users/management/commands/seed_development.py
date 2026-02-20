@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from users.models import ProfileLink, User
+from wikis.models import Page, Wiki
 
 
 class Command(BaseCommand):
@@ -34,4 +35,19 @@ class Command(BaseCommand):
             password="wendy",
             name="Wendy Testaburger",
             short_name="Wendy",
+        )
+
+        wiki = Wiki.objects.create()
+        page = Page.objects.create(wiki=wiki)
+        page.update(
+            filename="Welcome.md",
+            mime_type="text/markdown",
+            data=b"# Welcome\n\nThis is a sample wiki page.",
+            created_by=norm,
+        )
+        page.update(
+            filename="Home.md",
+            mime_type="text/markdown",
+            data=b"# Home\n\nThis is the home page.\n\nRenamed and updated.",
+            created_by=wendy,
         )
