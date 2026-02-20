@@ -53,6 +53,22 @@ class UserMixin:
             return test_method(self, client, *args, **kwargs)
         return wrapper
 
+    @staticmethod
+    def as_susan(test_method):
+        @functools.wraps(test_method)
+        def wrapper(self, client, *args, **kwargs):
+            client.force_login(self.susan)
+            return test_method(self, client, *args, **kwargs)
+        return wrapper
+
+    @staticmethod
+    def as_mary(test_method):
+        @functools.wraps(test_method)
+        def wrapper(self, client, *args, **kwargs):
+            client.force_login(self.mary)
+            return test_method(self, client, *args, **kwargs)
+        return wrapper
+
 
 @pytest.mark.django_db
 class TestUser(UserMixin):

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from notebooks.models import Notebook
+from notebooks.models import Notebook, NotebookPermission
 from users.models import ProfileLink, User
 from wikis.models import Page
 
@@ -43,6 +43,13 @@ class Command(BaseCommand):
             owner=norm,
             visibility=Notebook.Visibility.PUBLIC,
         )
+        index_page = Page.objects.create(wiki=notebook)
+        index_page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Campaign Notes\n\nWelcome to our campaign wiki.",
+            created_by=norm,
+        )
         page = Page.objects.create(wiki=notebook)
         page.update(
             filename="Welcome.md",
@@ -57,7 +64,41 @@ class Command(BaseCommand):
             created_by=wendy,
         )
 
-        Notebook.objects.create(
+        NotebookPermission.objects.create(
+            notebook=notebook,
+            user=wendy,
+            role=NotebookPermission.Role.EDITOR,
+        )
+
+        session_page = Page.objects.create(wiki=notebook)
+        session_page.update(
+            filename="sessions/session-01.md",
+            mime_type="text/markdown",
+            data=b"# Session 1\n\nThe party met in a tavern.",
+            created_by=norm,
+        )
+
+        wendys_notebook = Notebook.objects.create(
             name="World Building",
             owner=wendy,
+        )
+        places_page = Page.objects.create(wiki=wendys_notebook)
+        places_page.update(
+            filename="places/index.md",
+            mime_type="text/markdown",
+            data=b"# Places\n\nLocations in the world.",
+            created_by=wendy,
+        )
+        places_page.update(
+            filename="places/index.md",
+            mime_type="text/markdown",
+            data=b"# Places\n\nLocations in the world.\n\n- The Capital\n- The Wilds",
+            created_by=wendy,
+        )
+        capital_page = Page.objects.create(wiki=wendys_notebook)
+        capital_page.update(
+            filename="places/the-capital.md",
+            mime_type="text/markdown",
+            data=b"# The Capital\n\nA bustling city of commerce and intrigue.",
+            created_by=wendy,
         )

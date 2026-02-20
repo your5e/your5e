@@ -1,9 +1,11 @@
 from http import HTTPStatus
+from io import BytesIO
 
 import pytest
 
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
+from wikis.models import Page
 
 
 class NotebookMixin(UserMixin):
@@ -23,6 +25,37 @@ class NotebookMixin(UserMixin):
             user=self.susan,
             role=NotebookPermission.Role.EDITOR,
         )
+
+        index_page = Page.objects.create(wiki=self.wendys_notebook)
+        index_page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Welcome\n\nThis is the index page.",
+            created_by=self.wendy,
+        )
+        heroes_page = Page.objects.create(wiki=self.wendys_notebook)
+        heroes_page.update(
+            filename="heroes/theron.md",
+            mime_type="text/markdown",
+            data=b"# Theron\n\nA ranger.",
+            created_by=self.wendy,
+        )
+        notes_page = Page.objects.create(wiki=self.wendys_notebook)
+        notes_page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes\n\nSome notes.",
+            created_by=self.wendy,
+        )
+        deleted_page = Page.objects.create(wiki=self.wendys_notebook)
+        deleted_page.update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# Old Draft\n\nDeleted content.",
+            created_by=self.wendy,
+        )
+        deleted_page.soft_delete()
+        self.deleted_page = deleted_page
 
 
 @pytest.mark.django_db
@@ -350,3 +383,128 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             notebook=self.wendys_notebook,
             user=self.mary,
         ).exists()
+
+
+@pytest.mark.django_db
+class TestNotebookIndexPage(NotebookMixin):
+    def assert_shows_content(self, content):
+        assert 'href="heroes/"' in content
+        assert 'href="notes.md"' in content
+        assert "This is the index page" in content
+
+    def assert_shows_edit_features(self, content):
+        assert 'href="notes.md/edit"' in content
+        assert 'href="old-draft.md/restore"' in content
+        assert 'type="file"' in content
+        assert 'href="index.md/edit"' in content
+
+    @UserMixin.as_wendy
+    def test_owner_sees_full_index(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        self.assert_shows_content(content)
+        self.assert_shows_edit_features(content)
+
+    @UserMixin.as_susan
+    def test_editor_sees_full_index(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        self.assert_shows_content(content)
+        self.assert_shows_edit_features(content)
+
+    @UserMixin.as_susan
+    def test_viewer_sees_content_only(self, client):
+        self.susans_permission.role = NotebookPermission.Role.VIEWER
+        self.susans_permission.save()
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        self.assert_shows_content(content)
+        assert 'href="notes.md/edit"' not in content
+        assert "old-draft.md" not in content
+        assert 'type="file"' not in content
+        assert 'href="index.md/edit"' not in content
+
+    @UserMixin.as_mary
+    def test_non_collaborator_cannot_view_private(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_view_private(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestNotebookUpload(NotebookMixin):
+    @UserMixin.as_wendy
+    def test_upload_creates_page_with_markdown_mime(self, client):
+        data = b"# New Page\n\nSome content."
+        upload = BytesIO(data)
+        upload.name = "new-page.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "new-page.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="new-page.md")
+        assert page.latest_version.content.data == data
+        assert page.latest_version.mime_type == "text/markdown"
+
+    @UserMixin.as_wendy
+    def test_upload_creates_page_with_png_mime(self, client):
+        data = b"\x89PNG\r\n\x1a\n"
+        upload = BytesIO(data)
+        upload.name = "image.png"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "image.png",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="image.png")
+        assert page.latest_version.mime_type == "image/png"
+
+    @UserMixin.as_susan
+    def test_upload_rejects_over_2mb(self, client):
+        large_data = b"x" * (2 * 1024 * 1024 + 1)
+        upload = BytesIO(large_data)
+        upload.name = "large-file.bin"
+        initial_page_count = Page.objects.filter(wiki=self.wendys_notebook).count()
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "large-file.bin",
+        })
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        final_page_count = Page.objects.filter(wiki=self.wendys_notebook).count()
+        assert final_page_count == initial_page_count
+
+    @UserMixin.as_mary
+    def test_viewer_cannot_upload(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        upload = BytesIO(b"# Hacked\n")
+        upload.name = "hacked.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "hacked.md",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_upload(self, client):
+        upload = BytesIO(b"# Hacked\n")
+        upload.name = "hacked.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "hacked.md",
+        })
+        assert response.status_code == HTTPStatus.UNAUTHORIZED

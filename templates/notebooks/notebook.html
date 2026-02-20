@@ -5,6 +5,59 @@
 {% block content %}
 <h1>{{ notebook.name }}</h1>
 
+{% if index_content %}
+<div class="index-content">
+{{ index_content }}
+</div>
+{% endif %}
+
+{% if folders %}
+<h2>Folders</h2>
+<ul>
+{% for folder in folders %}
+  <li><a href="{{ folder }}/">{{ folder }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if files %}
+<h2>Pages</h2>
+<ul>
+{% for file in files %}
+  <li>
+    <a href="{{ file }}">{{ file }}</a>
+    {% if can_edit %}<a href="{{ file }}/edit">edit</a>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if deleted_pages %}
+<h2>Deleted Pages</h2>
+<ul>
+{% for page in deleted_pages %}
+  <li>
+    {{ page.filename }}
+    <a href="{{ page.filename }}/restore">restore</a>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if can_edit %}
+<h2>Upload</h2>
+<form method="post" action="{% url 'notebook_upload' %}" enctype="multipart/form-data">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <p>
+    <input type="file" name="file">
+    <input type="text" name="filename" placeholder="Filename (optional)">
+  </p>
+  <button type="submit">Upload</button>
+</form>
+<p><a href="index.md/edit">Edit index.md</a></p>
+{% endif %}
+
 {% if is_owner %}
 <h2>Rename</h2>
 <form method="post" action="{% url 'notebook_rename' %}">

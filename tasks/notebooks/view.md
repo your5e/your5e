@@ -18,15 +18,17 @@ Views enforce permissions.
 Shared with the main notebook view, presents other "folders" and pages
 logically "under" this folder. If `.../index.md` exists, it is folded in.
 
-- [ ] list of "folders"
+- [X] list of "folders"
         - only authorised viewers
-- [ ] list of pages "at" this folder
+- [X] list of pages "at" this folder
         - edit links for owners and editors
         - restore buttons for deleted pages for owners and editors
-- [ ] upload a new page
+- [X] upload a new page
         - only owners and editors
-        -limit content uplaods to 2mb, ensuring new version not made if too big
-- [ ] link to edit `index.md`
+        - limit content uploads to 2mb, ensuring new version not made if too big
+        - use mimetypes.guess_type to set the mime type, fallback to common
+          extensions if this fails, otherwise a useful default
+- [X] link to edit `index.md`
         - only owners and editors
 
 
