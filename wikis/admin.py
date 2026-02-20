@@ -5,6 +5,7 @@ from wikis.models import Content, Page, Version, Wiki
 
 class PageInline(admin.TabularInline):
     model = Page
+    fk_name = "wiki"
     extra = 0
     show_change_link = True
     fields = ("name", "deleted_at")
@@ -27,7 +28,20 @@ class VersionInline(admin.TabularInline):
 
 @admin.register(Wiki)
 class WikiAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "notebook_link"]
+    readonly_fields = ["notebook_link"]
     inlines = [PageInline]
+
+    @admin.display(description="Notebook")
+    def notebook_link(self, obj):
+        if hasattr(obj, "notebook"):
+            from django.utils.html import format_html
+            return format_html(
+                '<a href="/admin/notebooks/notebook/{}/change/">{}</a>',
+                obj.notebook.pk,
+                obj.notebook.name,
+            )
+        return "-"
 
 
 @admin.register(Page)

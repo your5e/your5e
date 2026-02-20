@@ -10,6 +10,7 @@ from django.views import View
 from django.views.generic import DetailView
 from django.views.generic.detail import SingleObjectMixin
 
+from notebooks.models import Notebook
 from users.forms import ProfileForm, ProfileLinkForm
 from users.models import ProfileLink, User
 
@@ -45,6 +46,10 @@ class ProfileView(DetailView):
         if context["is_own_profile"]:
             context["form"] = kwargs.get("form", ProfileForm(instance=self.object))
             context["link_form"] = ProfileLinkForm()
+            context["notebooks"] = Notebook.objects.filter(owner=self.object)
+            context["shared_notebooks"] = Notebook.objects.filter(
+                notebookpermission__user=self.object
+            )
         if context["show_details"]:
             context["profile_links"] = self.object.profile_links.all()
 
@@ -109,6 +114,26 @@ class ProfileVisibilityView(SingleObjectMixin, View):
 
         self.object.is_public = request.POST.get("public") == "true"
         self.object.save()
+
+        return redirect("profile", username=self.object.username)
+
+
+class ProfileNotebooksView(SingleObjectMixin, View):
+    model = User
+    slug_field = "username"
+    slug_url_kwarg = "username"
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        if request.user != self.object:
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
+        name = request.POST.get("notebook_name")
+        if name:
+            Notebook.objects.create(name=name, owner=self.object)
 
         return redirect("profile", username=self.object.username)
 

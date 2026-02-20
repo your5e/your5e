@@ -1,4 +1,4 @@
-@after
+@after profile.md
 
 Users can create multiple tokens for API authorisation.
 Tokens are managed on the profile page.

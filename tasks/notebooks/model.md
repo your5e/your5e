@@ -16,7 +16,7 @@ NotebookPermission model:
 - role (editor, viewer)
 
 
-- [ ] manage notebooks from user profile
+- [X] manage notebooks from user profile
         - names are not unique
-        - slug is unique, 'notes-2' enforced for clashing names
+        - slug is unique per owner, 'notes-2' enforced for clashing names
         - names can be updated, generating a new slug

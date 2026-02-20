@@ -12,6 +12,8 @@ FORBIDDEN_FILENAME_CHARS = r'[]#^|\\:*"<>?'
 
 class Wiki(models.Model):
     def __str__(self):
+        if hasattr(self, "notebook"):
+            return str(self.notebook)
         return f"Wiki {self.pk}"
 
     def latest_versions(self):

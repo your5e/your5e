@@ -1,7 +1,8 @@
 from django.core.management.base import BaseCommand
 
+from notebooks.models import Notebook
 from users.models import ProfileLink, User
-from wikis.models import Page, Wiki
+from wikis.models import Page
 
 
 class Command(BaseCommand):
@@ -37,8 +38,12 @@ class Command(BaseCommand):
             short_name="Wendy",
         )
 
-        wiki = Wiki.objects.create()
-        page = Page.objects.create(wiki=wiki)
+        notebook = Notebook.objects.create(
+            name="Campaign Notes",
+            owner=norm,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+        page = Page.objects.create(wiki=notebook)
         page.update(
             filename="Welcome.md",
             mime_type="text/markdown",
@@ -50,4 +55,9 @@ class Command(BaseCommand):
             mime_type="text/markdown",
             data=b"# Home\n\nThis is the home page.\n\nRenamed and updated.",
             created_by=wendy,
+        )
+
+        Notebook.objects.create(
+            name="World Building",
+            owner=wendy,
         )
