@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 import pytest
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from users.models import get_sentinel_user
 from users.tests import UserMixin
@@ -17,6 +20,36 @@ class WikiMixin(UserMixin):
             data=b"Test content",
             created_by=self.wendy,
         )
+        self.page_with_shared_content = Page.objects.create(wiki=self.wiki)
+        self.page_with_shared_content.update(
+            filename="shared.txt",
+            mime_type="text/plain",
+            data=b"Test content",
+            created_by=self.wendy,
+        )
+        self.page_with_history = Page.objects.create(wiki=self.wiki)
+        for data in [b"First revision", b"Second revision", b"Third revision"]:
+            self.page_with_history.update(
+                filename="history.txt",
+                mime_type="text/plain",
+                data=data,
+                created_by=self.wendy,
+            )
+        self.markdown_pages = []
+        for filename in [
+            "Rules/Combat.md",
+            "Rules/Status/Exhaustion.md",
+            "Rules/Status/Conditions/Blinded.md",
+            "Characters/Theron Blackwood.md",
+        ]:
+            page = Page.objects.create(wiki=self.wiki)
+            page.update(
+                filename=filename,
+                mime_type="text/markdown",
+                data=f"Content of {filename}".encode(),
+                created_by=self.wendy,
+            )
+            self.markdown_pages.append(page)
 
 
 @pytest.mark.django_db
@@ -28,6 +61,7 @@ class TestContent(WikiMixin):
         )
 
     def test_content_is_shared_between_wikis(self):
+        count_before = Content.objects.count()
         wiki_b = Wiki.objects.create()
         page_b = Page.objects.create(wiki=wiki_b)
         page_b.update(
@@ -36,7 +70,12 @@ class TestContent(WikiMixin):
             data=b"Test content",
             created_by=self.wendy,
         )
-        assert Content.objects.count() == 1
+        assert Content.objects.count() == count_before
+
+    def test_content_delete_raises_error(self):
+        orphaned = Content.objects.create(hash="abc123", data=b"orphaned")
+        with pytest.raises(RuntimeError):
+            orphaned.delete()
 
 
 @pytest.mark.django_db
@@ -113,6 +152,7 @@ class TestPage(WikiMixin):
         assert self.page.version_set.count() == 1
 
     def test_rename_with_identical_content_creates_version(self):
+        count_before = Content.objects.count()
         self.page.update(
             filename="renamed.txt",
             mime_type="text/plain",
@@ -120,7 +160,7 @@ class TestPage(WikiMixin):
             created_by=self.wendy,
         )
         assert self.page.version_set.count() == 2
-        assert Content.objects.count() == 1
+        assert Content.objects.count() == count_before
 
     def test_version_numbers_independent_per_page(self):
         page_b = Page.objects.create(wiki=self.wiki)
@@ -159,3 +199,193 @@ class TestPage(WikiMixin):
             created_by=self.wendy,
         )
         assert new_page.version_set.first().path == "document.txt"
+
+    def test_history_returns_versions_ordered_by_number(self):
+        history = self.page_with_history.history()
+        assert len(history) == 3
+        assert [v.number for v in history] == [1, 2, 3]
+
+    def test_revert_creates_new_version_with_old_content(self):
+        reverted = self.page_with_history.revert(
+            version_number=1, reverted_by=self.wendy
+        )
+        assert reverted.number == 4
+        assert reverted.filename == "history.txt"
+        assert reverted.content.data == b"First revision"
+
+    def test_revert_to_current_version_does_not_create_version(self):
+        reverted = self.page_with_history.revert(
+            version_number=3, reverted_by=self.wendy
+        )
+        assert reverted.number == 3
+        assert self.page_with_history.version_set.count() == 3
+
+    def test_revert_to_nonexistent_version_raises(self):
+        with pytest.raises(ValueError):
+            self.page_with_history.revert(version_number=99, reverted_by=self.wendy)
+
+    def test_delete_removes_orphaned_content(self):
+        content_hash = self.page_with_history.version_set.get(number=1).content.hash
+        self.page_with_history.delete()
+        assert not Content.objects.filter(hash=content_hash).exists()
+
+    def test_delete_keeps_shared_content(self):
+        content_hash = self.version.content.hash
+        self.page.delete()
+        assert Content.objects.filter(hash=content_hash).exists()
+
+    def test_delete_version_does_not_break_history(self):
+        self.page_with_history.delete_version(2)
+        assert [v.number for v in self.page_with_history.history()] == [1, 3]
+
+    def test_delete_version_nonexistent_raises(self):
+        with pytest.raises(ValueError):
+            self.page_with_history.delete_version(99)
+
+    def test_delete_version_removes_orphaned_content(self):
+        content_hash = self.page_with_history.version_set.get(number=2).content.hash
+        self.page_with_history.delete_version(2)
+        assert not Content.objects.filter(hash=content_hash).exists()
+
+    def test_delete_version_keeps_shared_content(self):
+        content_hash = self.version.content.hash
+        self.page_with_shared_content.delete_version(1)
+        assert Content.objects.filter(hash=content_hash).exists()
+
+    def test_delete_middle_version_still_increments_correctly(self):
+        self.page_with_history.delete_version(2)
+        new_version = self.page_with_history.update(
+            filename="history.txt",
+            mime_type="text/plain",
+            data=b"Fourth revision",
+            created_by=self.wendy,
+        )
+        assert new_version.number == 4
+
+    def test_delete_only_version_removes_page(self):
+        page_id = self.page.pk
+        self.page.delete_version(1)
+        assert not Page.objects.filter(pk=page_id).exists()
+
+
+@pytest.mark.django_db
+class TestWiki(WikiMixin):
+    def test_get_page_returns_page_by_filename(self):
+        page = self.wiki.get_page(filename="document.txt")
+        assert page == self.page
+
+    def test_get_page_returns_page_by_path(self):
+        page = self.wiki.get_page(path="rules/combat.md")
+        assert page.latest_version.filename == "Rules/Combat.md"
+
+    def test_get_page_raises_for_nonexistent_filename(self):
+        with pytest.raises(Page.DoesNotExist):
+            self.wiki.get_page(filename="nonexistent.txt")
+
+    def test_get_page_does_not_match_old_filename(self):
+        self.page.update(
+            filename="renamed.txt",
+            mime_type="text/plain",
+            data=b"Test content",
+            created_by=self.wendy,
+        )
+        with pytest.raises(Page.DoesNotExist):
+            self.wiki.get_page(filename="document.txt")
+
+    def test_all_pages_returns_latest_versions(self):
+        assert self.wiki.all_pages() == [
+            self.page.latest_version,
+            self.page_with_shared_content.latest_version,
+            self.page_with_history.latest_version,
+            self.markdown_pages[0].latest_version,
+            self.markdown_pages[1].latest_version,
+            self.markdown_pages[2].latest_version,
+            self.markdown_pages[3].latest_version,
+        ]
+
+    def test_all_pages_excludes_deleted(self):
+        self.page.soft_delete()
+        assert len(self.wiki.all_pages()) == 6
+
+    def test_deleted_pages(self):
+        self.page.soft_delete()
+        self.page_with_history.soft_delete()
+        assert self.wiki.deleted_pages() == [
+            self.page.latest_version,
+            self.page_with_history.latest_version,
+        ]
+
+    def test_changes_since_returns_pages_with_new_versions(self):
+        before = timezone.now()
+        self.page.update(
+            filename="document.txt",
+            mime_type="text/plain",
+            data=b"Updated content",
+            created_by=self.wendy,
+        )
+        assert self.wiki.changes_since(before) == [self.page]
+
+    def test_changes_since_returns_deleted_pages(self):
+        before = timezone.now()
+        self.page.soft_delete()
+        assert self.wiki.changes_since(before) == [self.page]
+
+    def test_changes_since_excludes_unchanged_pages(self):
+        after = timezone.now()
+        assert self.wiki.changes_since(after) == []
+
+    def test_files_in_root(self):
+        assert self.wiki.files_in("/") == [
+            "document.txt",
+            "history.txt",
+            "shared.txt",
+        ]
+
+    def test_folders_in_root(self):
+        assert self.wiki.folders_in("/") == [
+            "Characters",
+            "Rules",
+        ]
+
+    def test_files_in_returns_immediate_files(self):
+        assert self.wiki.files_in("/rules/") == [
+            "Combat.md",
+        ]
+
+    def test_folders_in_returns_immediate_folders(self):
+        assert self.wiki.folders_in("/rules/") == [
+            "Status",
+        ]
+
+    def test_files_in_excludes_deleted(self):
+        self.wiki.get_page(filename="Rules/Combat.md").soft_delete()
+        assert self.wiki.files_in("/rules/") == []
+
+    def test_folders_in_excludes_folder_with_only_deleted_pages(self):
+        self.wiki.get_page(filename="Characters/Theron Blackwood.md").soft_delete()
+        assert self.wiki.folders_in("/") == [
+            "Rules",
+        ]
+
+    def test_purge_deleted_removes_pages_before_cutoff(self):
+        self.page.deleted_at = timezone.now() - timedelta(days=30)
+        self.page.save()
+        cutoff = timezone.now() - timedelta(days=7)
+        self.wiki.purge_deleted(cutoff)
+        assert not Page.objects.filter(pk=self.page.pk).exists()
+
+    def test_purge_deleted_removes_orphaned_content(self):
+        content_hash = self.page_with_history.version_set.get(number=1).content.hash
+        self.page_with_history.deleted_at = timezone.now() - timedelta(days=30)
+        self.page_with_history.save()
+        cutoff = timezone.now() - timedelta(days=7)
+        self.wiki.purge_deleted(cutoff)
+        assert not Content.objects.filter(hash=content_hash).exists()
+
+    def test_purge_deleted_keeps_shared_content(self):
+        content_hash = self.version.content.hash
+        self.page.deleted_at = timezone.now() - timedelta(days=30)
+        self.page.save()
+        cutoff = timezone.now() - timedelta(days=7)
+        self.wiki.purge_deleted(cutoff)
+        assert Content.objects.filter(hash=content_hash).exists()

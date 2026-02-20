@@ -43,30 +43,38 @@ duplicate pages in multiple wikis don't take up extra storage.
 
 Convenience methods.
 
-- [ ] wiki "all pages"
-- [ ] wiki "changes since T"
+- [X] wiki "all pages"
+- [X] wiki "changes since T"
+- [X] get page by filename or path
 - [X] page update
         - update with no changes does not produce a new version
 - [X] page rename, duplicates content, new filename and path
-- [ ] page history
-- [ ] page revert, puts content back but with new version not deleting
+- [X] page history
+- [X] page revert, puts content back but with new version not deleting
 
 Pretending there are directories by breaking on the slashes in filenames.
 
-- [ ] wiki "list all files below dir/"
-- [ ] wiki "list all folders below dir/"
+- [X] wiki "list files in dir/"
+        - returns only immediate descendants, so listing "rules/" would
+          return "rules/combat.md" but not "rules/status/exhaustion.md"
+        - excludes deleted pages
+- [X] wiki "list folders in dir/"
+        - returns only immediate descendants, so listing "rules/" would
+          return "rules/status/" using the above example files
+        - excludes deleted pages
 
 Pages are not immediately purged from the database, so they can be recovered.
 
-- [ ] deleting content directly is denied
-- [ ] deleting a version within a page is possible
+- [X] deleting content directly is denied
+- [X] deleting a version within a page is possible
         - ensure page history does not break
         - ensure version numbers still increment correctly
         - ensure deleting a version only deletes content no longer referenced
 - [X] method to mark a page as deleted without removing from db
-- [ ] force deleting a page is possible
+- [X] force deleting a page is possible
         - ensure deleting a page deletes versions
-- [ ] wiki does not list "deleted" pages
-- [ ] wiki lists "deleted" pages separately
-- [ ] wiki "purge deleted" deletes anything older than cutoff
-- [ ] management command for "purge deleted"
+- [X] wiki does not list "deleted" pages
+- [X] wiki lists "deleted" pages separately
+- [X] wiki "purge deleted" deletes anything older than cutoff
+- [X] management command for "purge deleted"
+- [X] deleting the only version in a page removes the page
