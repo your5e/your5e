@@ -21,3 +21,10 @@ class Command(BaseCommand):
             name="Mark Norman Francis",
             short_name="Norm",
         )
+        wendy = User.objects.create_user(
+            username="wendy",
+            email="wendy@localhost",
+            password="wendy",
+            name="Wendy Testaburger",
+            short_name="Wendy",
+        )

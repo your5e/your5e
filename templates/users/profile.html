@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>{{ profile_user.name|default:profile_user.username }}</h1>
+
+{% if is_own_profile %}
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+
+<p><a href="{% url 'password_change' username=profile_user.username %}">Change password</a></p>
+{% endif %}
+{% endblock %}

@@ -1,4 +1,5 @@
 import functools
+from http import HTTPStatus
 
 import pytest
 from django.db import IntegrityError
@@ -16,6 +17,13 @@ class UserMixin:
             password="testpass",
             name="Wendy Testaburger",
             short_name="Wendy",
+        )
+        self.susan = User.objects.create_user(
+            username="susan",
+            email="susan@example.com",
+            password="testpass",
+            name="Susan Test",
+            short_name="Susan",
         )
 
     @staticmethod
@@ -124,3 +132,84 @@ class TestEmailOrUserBackend(UserMixin):
             password="testpass",
         )
         assert user is None
+
+
+@pytest.mark.django_db
+class TestProfileView(UserMixin):
+    def test_profile_redirect_when_logged_out(self, client):
+        response = client.get("/profile/")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/login?next=/profile/"
+
+    @UserMixin.as_wendy
+    def test_profile_redirect_when_logged_in(self, client):
+        response = client.get("/profile/")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+
+    @UserMixin.as_wendy
+    def test_profile_shows_user_details(self, client):
+        response = client.get("/profile/wendy/")
+        assert response.status_code == HTTPStatus.OK
+        assert "Wendy Testaburger" in response.content.decode()
+
+    @UserMixin.as_wendy
+    def test_own_profile_shows_edit_form(self, client):
+        response = client.get("/profile/wendy/")
+        assert response.status_code == HTTPStatus.OK
+        assert "Save</button>" in response.content.decode()
+
+    @UserMixin.as_wendy
+    def test_other_profile_no_edit_form(self, client):
+        response = client.get("/profile/susan/")
+        assert response.status_code == HTTPStatus.OK
+        assert "Save</button>" not in response.content.decode()
+
+    @UserMixin.as_wendy
+    def test_update_own_profile(self, client):
+        response = client.post(
+            "/profile/wendy/", {
+                "name": "Wendy Test",
+                "short_name": "W",
+            }
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        self.wendy.refresh_from_db()
+        assert self.wendy.name == "Wendy Test"
+        assert self.wendy.short_name == "W"
+
+    @UserMixin.as_wendy
+    def test_cannot_update_other_profile(self, client):
+        response = client.post(
+            "/profile/susan/", {
+                "name": "Hacked",
+                "short_name": "H",
+            }
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.susan.refresh_from_db()
+        assert self.susan.name == "Susan Test"
+
+    def test_anonymous_cannot_update_profile(self, client):
+        response = client.post(
+            "/profile/wendy/", {
+                "name": "Hacked",
+                "short_name": "H",
+            }
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        self.wendy.refresh_from_db()
+        assert self.wendy.name == "Wendy Testaburger"
+
+
+@pytest.mark.django_db
+class TestLogin(UserMixin):
+    def test_login_redirects_to_profile(self, client):
+        response = client.post(
+            "/login", {
+                "username": "wendy",
+                "password": "testpass",
+            }
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"

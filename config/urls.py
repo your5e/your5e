@@ -1,7 +1,14 @@
 from django.contrib import admin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LogoutView
 from django.urls import path
 from django.views.generic import RedirectView
+
+from users.views import (
+    PasswordChangeView,
+    ProfileRedirectView,
+    ProfileView,
+    UserLoginView,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -10,11 +17,27 @@ urlpatterns = [
     path(
         route="login",
         name="login",
-        view=LoginView.as_view(template_name="users/login.html"),
+        view=UserLoginView.as_view(),
     ),
     path(
         route="logout",
         name="logout",
         view=LogoutView.as_view(next_page="/"),
+    ),
+
+    path(
+        route="profile/",
+        name="profile_redirect",
+        view=ProfileRedirectView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/",
+        name="profile",
+        view=ProfileView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/password",
+        name="password_change",
+        view=PasswordChangeView.as_view(),
     ),
 ]

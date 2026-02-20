@@ -6,6 +6,21 @@
   <title>{% block title %}Your 5E{% endblock %}</title>
 </head>
 <body>
+  <nav>
+    <ul>
+    {% if user.is_authenticated %}
+      <li><a href="{% url 'profile' username=user.username %}">{{ user.username }}</a></li>
+      <li>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button type="submit">Logout</button>
+        </form>
+      </li>
+    {% else %}
+      <li><a href="{% url 'login' %}">Login</a></li>
+    {% endif %}
+    </ul>
+  </nav>
   {% block content %}{% endblock %}
 </body>
 </html>
