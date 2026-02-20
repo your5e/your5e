@@ -12,9 +12,9 @@ Using a custom user model deliberately, because names aren't first/last
 Referring to a user by name uses short, name, username in that order,
 until not `None`.
 
-- [ ] Create user model
-- [ ] Provide sentinel user
-- [ ] Provide default `admin` superuser and `norm` account in development
+- [X] Create user model
+- [X] Provide sentinel user
+- [X] Provide default `admin` superuser and `norm` account in development
 
 Authenticating to the site.
 
