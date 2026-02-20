@@ -1,11 +1,12 @@
 import functools
+import re
 from http import HTTPStatus
 
 import pytest
 from django.db import IntegrityError
 
 from users.backends import EmailOrUserBackend
-from users.models import User, get_sentinel_user
+from users.models import ProfileLink, User, get_sentinel_user
 
 
 class UserMixin:
@@ -17,6 +18,8 @@ class UserMixin:
             password="testpass",
             name="Wendy Testaburger",
             short_name="Wendy",
+            description="Bio for Wendy",
+            is_public=False,
         )
         self.susan = User.objects.create_user(
             username="susan",
@@ -24,6 +27,22 @@ class UserMixin:
             password="testpass",
             name="Susan Test",
             short_name="Susan",
+            description="Bio for Susan",
+            is_public=True,
+        )
+        self.susan_link = ProfileLink.objects.create(
+            user=self.susan,
+            url="https://mastodon.social/@susan",
+            label="Mastodon",
+        )
+        self.mary = User.objects.create_user(
+            username="mary",
+            email="mary@example.com",
+            password="testpass",
+            name="Mary Test",
+            short_name="Mary",
+            description="Bio for Mary",
+            is_public=False,
         )
 
     @staticmethod
@@ -164,6 +183,107 @@ class TestProfileView(UserMixin):
         response = client.get("/profile/susan/")
         assert response.status_code == HTTPStatus.OK
         assert "Save</button>" not in response.content.decode()
+
+    @UserMixin.as_wendy
+    def test_non_public_profile_hides_details(self, client):
+        response = client.get("/profile/mary/")
+        content = response.content.decode()
+        assert "mary" in content
+        assert "Mary Test" not in content
+        assert "Bio for Mary" not in content
+
+    @UserMixin.as_wendy
+    def test_public_profile_shows_details(self, client):
+        response = client.get("/profile/susan/")
+        content = response.content.decode()
+        assert "Susan Test" in content
+        assert "Bio for Susan" in content
+
+    @UserMixin.as_wendy
+    def test_public_profile_shows_links_with_rel_me(self, client):
+        response = client.get("/profile/susan/")
+        content = response.content.decode()
+        assert re.search(
+            r'<a [^>]*href="https://mastodon.social/@susan"[^>]*rel="me"[^>]*>',
+            content,
+        ) or re.search(
+            r'<a [^>]*rel="me"[^>]*href="https://mastodon.social/@susan"[^>]*>',
+            content,
+        ), "Expected anchor with href and rel='me'"
+
+    @UserMixin.as_wendy
+    def test_owner_sees_full_profile_even_when_not_public(self, client):
+        response = client.get("/profile/wendy/")
+        content = response.content.decode()
+        assert "Wendy Testaburger" in content
+        assert "Bio for Wendy" in content
+
+    @UserMixin.as_wendy
+    def test_profile_form_includes_description(self, client):
+        response = client.get("/profile/wendy/")
+        content = response.content.decode()
+        assert 'name="description"' in content
+
+    @UserMixin.as_wendy
+    def test_profile_shows_visibility_button(self, client):
+        response = client.get("/profile/wendy/")
+        content = response.content.decode()
+        assert "Make profile public" in content
+
+    @UserMixin.as_wendy
+    def test_toggle_profile_visibility(self, client):
+        assert self.wendy.is_public is False
+        response = client.post(
+            "/profile/wendy/visibility", {"public": "true"}
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        self.wendy.refresh_from_db()
+        assert self.wendy.is_public is True
+
+    def test_anonymous_sees_public_profile(self, client):
+        response = client.get("/profile/susan/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "Susan Test" in content
+        assert "Bio for Susan" in content
+
+    def test_anonymous_sees_only_username_for_non_public(self, client):
+        response = client.get("/profile/mary/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "mary" in content
+        assert "Mary Test" not in content
+        assert "Bio for Mary" not in content
+
+    @UserMixin.as_wendy
+    def test_add_profile_link(self, client):
+        response = client.post(
+            "/profile/wendy/links", {
+                "url": "https://example.com/@wendy",
+                "label": "Website",
+            }
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        link = ProfileLink.objects.get(user=self.wendy)
+        assert link.url == "https://example.com/@wendy"
+        assert link.label == "Website"
+
+    @UserMixin.as_wendy
+    def test_delete_profile_link(self, client):
+        link = ProfileLink.objects.create(
+            user=self.wendy,
+            url="https://example.com/@wendy",
+            label="Website",
+        )
+        response = client.post(
+            "/profile/wendy/links", {
+                "delete": link.id,
+            }
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        assert ProfileLink.objects.filter(user=self.wendy).count() == 0
 
     @UserMixin.as_wendy
     def test_update_own_profile(self, client):

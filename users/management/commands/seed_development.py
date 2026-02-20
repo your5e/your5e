@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from users.models import User
+from users.models import ProfileLink, User
 
 
 class Command(BaseCommand):
@@ -20,6 +20,13 @@ class Command(BaseCommand):
             password="norm",
             name="Mark Norman Francis",
             short_name="Norm",
+            description="Developer and tabletop enthusiast.",
+            is_public=True,
+        )
+        ProfileLink.objects.create(
+            user=norm,
+            url="https://marknormanfrancis.com",
+            label="Website",
         )
         wendy = User.objects.create_user(
             username="wendy",

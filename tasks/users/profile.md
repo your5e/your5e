@@ -7,5 +7,5 @@ User profile allows changing details.
 
 Optional public profiles.
 
-- [ ] Public profile is opt-in
-- [ ] Show description and social links (rel=me?)
+- [X] Public profile is opt-in
+- [X] Show description and social links (rel=me?)

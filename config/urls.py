@@ -5,8 +5,10 @@ from django.views.generic import RedirectView
 
 from users.views import (
     PasswordChangeView,
+    ProfileLinksView,
     ProfileRedirectView,
     ProfileView,
+    ProfileVisibilityView,
     UserLoginView,
 )
 
@@ -34,6 +36,16 @@ urlpatterns = [
         route="profile/<str:username>/",
         name="profile",
         view=ProfileView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/links",
+        name="profile_links",
+        view=ProfileLinksView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/visibility",
+        name="profile_visibility",
+        view=ProfileVisibilityView.as_view(),
     ),
     path(
         route="profile/<str:username>/password",

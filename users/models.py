@@ -42,6 +42,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255, blank=True, default="")
     short_name = models.CharField(max_length=50, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    is_public = models.BooleanField(default=False)
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -58,3 +60,16 @@ class User(AbstractBaseUser, PermissionsMixin):
         if self.name:
             return self.name
         return self.username
+
+
+class ProfileLink(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile_links",
+    )
+    url = models.URLField()
+    label = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.user} {self.label} link"

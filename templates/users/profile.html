@@ -3,13 +3,69 @@
 {% block title %}{{ profile_user }} - Your 5E{% endblock %}
 
 {% block content %}
+{% if show_details %}
 <h1>{{ profile_user.name|default:profile_user.username }}</h1>
+
+{% if profile_user.description %}
+{{ profile_user.description|linebreaks }}
+{% endif %}
+
+{% if profile_links %}
+<ul>
+{% for link in profile_links %}
+  <li><a href="{{ link.url }}" rel="me">{{ link.label }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% else %}
+<h1>{{ profile_user.username }}</h1>
+{% endif %}
 
 {% if is_own_profile %}
 <form method="post">
   {% csrf_token %}
   {{ form.as_p }}
   <button type="submit">Save</button>
+</form>
+
+<h2>Visibility</h2>
+{% if profile_user.is_public %}
+<p>Your profile is public.</p>
+<form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
+  {% csrf_token %}
+  <input type="hidden" name="public" value="false">
+  <button type="submit">Make profile private</button>
+</form>
+{% else %}
+<p>Your profile is private.</p>
+<form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
+  {% csrf_token %}
+  <input type="hidden" name="public" value="true">
+  <button type="submit">Make profile public</button>
+</form>
+{% endif %}
+
+<h2>Links</h2>
+{% if profile_links %}
+<ul>
+{% for link in profile_links %}
+  <li>
+    <a href="{{ link.url }}">{{ link.label }}</a>
+    <form method="post" action="{% url 'profile_links' username=profile_user.username %}">
+      {% csrf_token %}
+      <input type="hidden" name="delete" value="{{ link.id }}">
+      <button type="submit">Delete</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" action="{% url 'profile_links' username=profile_user.username %}">
+  {% csrf_token %}
+  {{ link_form.as_p }}
+  <button type="submit">Add link</button>
 </form>
 
 <p><a href="{% url 'password_change' username=profile_user.username %}">Change password</a></p>
