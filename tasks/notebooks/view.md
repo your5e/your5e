@@ -5,14 +5,13 @@ Views enforce permissions.
 
 # Notebook view @phase
 
-- [ ] owner can rename the notebook
-- [ ] owner can change visibility, requires confirmation step
-- [ ] owner can control collaborators on a notebook
-        - owner can alter visibility
+- [X] owner can rename the notebook
+- [X] owner can change visibility, requires confirmation step
+- [X] owner can control collaborators on a notebook
         - owner can add and remove collaborators, requires confirmation step
         - owner can change collaborator role, requires confirmation step
         - permissions only listed to other collaborators
-- [ ] ensure non-owner cannot change notebook or collaborators
+- [X] ensure non-owner cannot change notebook or collaborators
 
 # Notebook index pages @phase
 

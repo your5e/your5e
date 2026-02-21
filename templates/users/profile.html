@@ -72,7 +72,7 @@
 {% if notebooks %}
 <ul>
 {% for notebook in notebooks %}
-  <li>{{ notebook.name }}</li>
+  <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}
@@ -81,7 +81,7 @@
 <h3>Shared with you</h3>
 <ul>
 {% for notebook in shared_notebooks %}
-  <li>{{ notebook.name }} ({{ notebook.owner.username }})</li>
+  <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a> ({{ notebook.owner.username }})</li>
 {% endfor %}
 </ul>
 {% endif %}

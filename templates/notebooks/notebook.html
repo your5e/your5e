@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ notebook.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>{{ notebook.name }}</h1>
+
+{% if is_owner %}
+<h2>Rename</h2>
+<form method="post" action="{% url 'notebook_rename' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <p><input type="text" name="name" value="{{ notebook.name }}"></p>
+  <button type="submit">Rename</button>
+</form>
+
+<h2>Visibility</h2>
+<p>Currently: {{ notebook.visibility }}</p>
+<form method="post" action="{% url 'notebook_visibility' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <select name="visibility">
+    <option value="private"{% if notebook.visibility == "private" %} selected{% endif %}>Private</option>
+    <option value="site"{% if notebook.visibility == "site" %} selected{% endif %}>Site</option>
+    <option value="public"{% if notebook.visibility == "public" %} selected{% endif %}>Public</option>
+  </select>
+  <button type="submit">Change visibility</button>
+</form>
+
+<h2>Collaborators</h2>
+{% if collaborators %}
+<ul>
+{% for permission in collaborators %}
+  <li>
+    {{ permission.user.username }} ({{ permission.role }})
+    <form method="post" action="{% url 'notebook_collaborators' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <input type="hidden" name="remove" value="{{ permission.user.pk }}">
+      <button type="submit">Remove</button>
+    </form>
+    <form method="post" action="{% url 'notebook_collaborators' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
+      <select name="role">
+        <option value="editor"{% if permission.role == "editor" %} selected{% endif %}>Editor</option>
+        <option value="viewer"{% if permission.role == "viewer" %} selected{% endif %}>Viewer</option>
+      </select>
+      <button type="submit">Change role</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" action="{% url 'notebook_collaborators' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <p>
+    <input type="text" name="username" placeholder="Username">
+    <select name="role">
+      <option value="editor">Editor</option>
+      <option value="viewer">Viewer</option>
+    </select>
+  </p>
+  <button type="submit">Add collaborator</button>
+</form>
+{% endif %}
+{% endblock %}

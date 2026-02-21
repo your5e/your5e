@@ -1,4 +1,5 @@
 from django.db import models
+from django.urls import reverse
 from slugify import slugify
 
 from users.models import User
@@ -36,6 +37,12 @@ class Notebook(Wiki):
 
     def __str__(self):
         return f"{self.name} ({self.owner.username})"
+
+    def get_absolute_url(self):
+        return reverse("notebook", kwargs={
+            "username": self.owner.username,
+            "slug": self.slug,
+        })
 
     def save(self, *args, **kwargs):
         if not self.slug:

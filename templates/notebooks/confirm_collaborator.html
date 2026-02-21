@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm collaborator change - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Confirm collaborator change</h1>
+
+{% if action == "add" %}
+<p>Add {{ target_user.username }} as {{ role }} to "{{ notebook.name }}"?</p>
+{% elif action == "remove" %}
+<p>Remove {{ target_user.username }} from "{{ notebook.name }}"?</p>
+{% elif action == "change_role" %}
+<p>Change {{ target_user.username }}'s role to {{ role }} on "{{ notebook.name }}"?</p>
+{% endif %}
+
+<form method="post" action="{% url 'notebook_collaborators' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <input type="hidden" name="confirmed" value="true">
+  {% if action == "add" %}
+  <input type="hidden" name="username" value="{{ target_user.username }}">
+  <input type="hidden" name="role" value="{{ role }}">
+  {% elif action == "remove" %}
+  <input type="hidden" name="remove" value="{{ target_user.pk }}">
+  {% elif action == "change_role" %}
+  <input type="hidden" name="change_role" value="{{ target_user.pk }}">
+  <input type="hidden" name="role" value="{{ role }}">
+  {% endif %}
+  <button type="submit">Confirm</button>
+</form>
+
+<p><a href="{% url 'notebook' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
+{% endblock %}

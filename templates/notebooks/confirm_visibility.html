@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm visibility change - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Confirm visibility change</h1>
+
+<p>Change visibility of "{{ notebook.name }}" from {{ notebook.visibility }} to {{ visibility }}?</p>
+
+<form method="post" action="{% url 'notebook_visibility' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <input type="hidden" name="visibility" value="{{ visibility }}">
+  <input type="hidden" name="confirmed" value="true">
+  <button type="submit">Confirm</button>
+</form>
+
+<p><a href="{% url 'notebook' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
+{% endblock %}

@@ -3,6 +3,12 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path
 from django.views.generic import RedirectView
 
+from notebooks.views import (
+    NotebookCollaboratorsView,
+    NotebookRenameView,
+    NotebookView,
+    NotebookVisibilityView,
+)
 from users.views import (
     PasswordChangeView,
     ProfileLinksView,
@@ -57,5 +63,26 @@ urlpatterns = [
         route="profile/<str:username>/notebooks",
         name="profile_notebooks",
         view=ProfileNotebooksView.as_view(),
+    ),
+
+    path(
+        route="notebooks/rename",
+        name="notebook_rename",
+        view=NotebookRenameView.as_view(),
+    ),
+    path(
+        route="notebooks/visibility",
+        name="notebook_visibility",
+        view=NotebookVisibilityView.as_view(),
+    ),
+    path(
+        route="notebooks/collaborators",
+        name="notebook_collaborators",
+        view=NotebookCollaboratorsView.as_view(),
+    ),
+    path(
+        route="notebooks/<str:username>/<str:slug>/",
+        name="notebook",
+        view=NotebookView.as_view(),
     ),
 ]
