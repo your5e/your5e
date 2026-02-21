@@ -36,7 +36,7 @@ logically "under" this folder. If `.../index.md` exists, it is folded in.
 
 View a page, either Markdown converted to HTML, or the raw uploaded file.
 
-- [ ] view page
+- [X] view page
         - accepts Markdown paths without `.md`
         - redirects Markdown paths with `.md` to without
 - [ ] lists and views older versions

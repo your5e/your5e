@@ -7,7 +7,7 @@
 
 {% if index_content %}
 <div class="index-content">
-{{ index_content }}
+{{ index_content|safe }}
 </div>
 {% endif %}
 
@@ -15,7 +15,7 @@
 <h2>Folders</h2>
 <ul>
 {% for folder in folders %}
-  <li><a href="{{ folder }}/">{{ folder }}</a></li>
+  <li><a href="{{ folder.href }}/">{{ folder.name }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}
@@ -25,8 +25,8 @@
 <ul>
 {% for file in files %}
   <li>
-    <a href="{{ file }}">{{ file }}</a>
-    {% if can_edit %}<a href="{{ file }}/edit">edit</a>{% endif %}
+    <a href="{{ file.path }}">{{ file.display_name }}</a>
+    {% if can_edit %}<a href="{{ file.path }}/edit">edit</a>{% endif %}
   </li>
 {% endfor %}
 </ul>

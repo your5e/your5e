@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.core.management.base import BaseCommand
 
 from notebooks.models import Notebook, NotebookPermission
@@ -43,11 +45,26 @@ class Command(BaseCommand):
             owner=norm,
             visibility=Notebook.Visibility.PUBLIC,
         )
+        commands_dir = Path(__file__).resolve().parent
+        map_data = (commands_dir / "random-hexmap-7.png").read_bytes()
+
+        map_page = Page.objects.create(wiki=notebook)
+        map_page.update(
+            filename="random-hexmap-7.png",
+            mime_type="image/png",
+            data=map_data,
+            created_by=norm,
+        )
+
         index_page = Page.objects.create(wiki=notebook)
         index_page.update(
             filename="index.md",
             mime_type="text/markdown",
-            data=b"# Campaign Notes\n\nWelcome to our campaign wiki.",
+            data=(
+                b"# Campaign Notes\n\n"
+                b"Welcome to our campaign wiki.\n\n"
+                b"![Map](random-hexmap-7.png)"
+            ),
             created_by=norm,
         )
         page = Page.objects.create(wiki=notebook)

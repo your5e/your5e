@@ -1,4 +1,5 @@
 import hashlib
+from collections import namedtuple
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -6,6 +7,9 @@ from django.utils import timezone
 from slugify import slugify
 
 from users.models import User, get_sentinel_user
+from wikis.markdown import render_markdown
+
+FolderLink = namedtuple("FolderLink", ["name", "href"])
 
 FORBIDDEN_FILENAME_CHARS = r'[]#^|\\:*"<>?'
 
@@ -57,31 +61,42 @@ class Wiki(models.Model):
             ).distinct()
         )
 
-    def names_in_directory(self, directory):
-        prefix = directory[1:]
+    def contents_in(self, directory):
+        prefix = directory.strip("/")
         versions = self.latest_versions()
         if prefix:
-            versions = versions.filter(path__startswith=prefix)
-        results = []
-        for version in versions:
-            depth = prefix.count("/")
-            parts = version.filename.split("/")
-            results.append("/".join(parts[depth:]))
-        return results
+            versions = versions.filter(path__startswith=prefix + "/")
 
-    def files_in(self, directory):
         files = []
-        for name in self.names_in_directory(directory):
-            if "/" not in name:
-                files.append(name)
-        return sorted(files)
+        folders = {}
+        for version in versions:
+            full_path = version.path
+            full_filename = version.filename
+            if prefix:
+                rel_path = full_path[len(prefix) + 1:]
+                rel_filename = full_filename.split("/", 1)[1]
+            else:
+                rel_path = full_path
+                rel_filename = full_filename
 
-    def folders_in(self, directory):
-        folders = set()
-        for name in self.names_in_directory(directory):
-            if "/" in name:
-                folders.add(name.split("/", 1)[0])
-        return sorted(folders)
+            if "/" in rel_path:
+                folder_slug = rel_path.split("/", 1)[0]
+                if prefix:
+                    folder_path = prefix + "/" + folder_slug
+                else:
+                    folder_path = folder_slug
+                folder_name = rel_filename.split("/", 1)[0]
+                folders[folder_path] = folder_name
+            else:
+                files.append(version)
+
+        folder_links = [
+            FolderLink(name=name, href=href)
+            for href, name in sorted(folders.items())
+        ]
+        files.sort(key=lambda f: f.display_name)
+
+        return {"folders": folder_links, "files": files}
 
     def purge_deleted(self, cutoff):
         for page in self.page_set.filter(deleted_at__lt=cutoff):
@@ -205,6 +220,13 @@ class Version(models.Model):
     def __str__(self):
         return f"{self.filename} (v{self.number})"
 
+    @property
+    def display_name(self):
+        basename = self.filename.rsplit("/", 1)[-1]
+        if basename.lower().endswith(".md"):
+            return basename[:-3]
+        return basename
+
     def clean(self):
         self.validate_filename()
         self.validate_path_unique()
@@ -224,7 +246,10 @@ class Version(models.Model):
         for part in parts:
             if "." in part:
                 name, ext = part.rsplit(".", 1)
-                result.append(f"{slugify(name)}.{ext.lower()}")
+                if ext.lower() == "md":
+                    result.append(slugify(name))
+                else:
+                    result.append(f"{slugify(name)}.{ext.lower()}")
             else:
                 result.append(slugify(part))
         return "/".join(result)
@@ -253,3 +278,8 @@ class Version(models.Model):
             raise ValidationError(
                 f"Path {self.path} already exists in this wiki"
             )
+
+    def render(self):
+        if self.mime_type == "text/markdown":
+            return render_markdown(self.content.data.decode())
+        return self.content.data

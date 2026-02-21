@@ -7,6 +7,8 @@ from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
 from wikis.models import Page
 
+PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+
 
 class NotebookMixin(UserMixin):
     @pytest.fixture(autouse=True)
@@ -56,6 +58,14 @@ class NotebookMixin(UserMixin):
         )
         deleted_page.soft_delete()
         self.deleted_page = deleted_page
+
+        image_page = Page.objects.create(wiki=self.wendys_notebook)
+        image_page.update(
+            filename="heroes/shield.png",
+            mime_type="image/png",
+            data=PNG_BYTES,
+            created_by=self.wendy,
+        )
 
 
 @pytest.mark.django_db
@@ -389,11 +399,11 @@ class TestNotebookCollaboratorsView(NotebookMixin):
 class TestNotebookIndexPage(NotebookMixin):
     def assert_shows_content(self, content):
         assert 'href="heroes/"' in content
-        assert 'href="notes.md"' in content
+        assert 'href="notes"' in content
         assert "This is the index page" in content
 
     def assert_shows_edit_features(self, content):
-        assert 'href="notes.md/edit"' in content
+        assert 'href="notes/edit"' in content
         assert 'href="old-draft.md/restore"' in content
         assert 'type="file"' in content
         assert 'href="index.md/edit"' in content
@@ -422,7 +432,7 @@ class TestNotebookIndexPage(NotebookMixin):
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
         self.assert_shows_content(content)
-        assert 'href="notes.md/edit"' not in content
+        assert 'href="notes/edit"' not in content
         assert "old-draft.md" not in content
         assert 'type="file"' not in content
         assert 'href="index.md/edit"' not in content
@@ -450,7 +460,7 @@ class TestNotebookUpload(NotebookMixin):
             "filename": "new-page.md",
         })
         assert response.status_code == HTTPStatus.FOUND
-        page = self.wendys_notebook.get_page(path="new-page.md")
+        page = self.wendys_notebook.get_page(path="new-page")
         assert page.latest_version.content.data == data
         assert page.latest_version.mime_type == "text/markdown"
 
@@ -508,3 +518,38 @@ class TestNotebookUpload(NotebookMixin):
             "filename": "hacked.md",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestNotebookPageView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_view_markdown_page_without_extension(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "<h1>Notes</h1>" in content
+
+    @UserMixin.as_user("wendy")
+    def test_view_nested_markdown_page(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/theron")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "<h1>Theron</h1>" in content
+
+    @UserMixin.as_user("wendy")
+    def test_view_markdown_with_extension_redirects(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/theron.md")
+        assert response.status_code == HTTPStatus.MOVED_PERMANENTLY
+        assert response.url == "/notebooks/wendy/heros-legendes/heroes/theron"
+
+    @UserMixin.as_user("wendy")
+    def test_view_non_markdown_file_returns_raw(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/shield.png")
+        assert response.status_code == HTTPStatus.OK
+        assert response["Content-Type"] == "image/png"
+        assert response.content == PNG_BYTES
+
+    @UserMixin.as_user("wendy")
+    def test_view_nonexistent_page_returns_404(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/nonexistent")
+        assert response.status_code == HTTPStatus.NOT_FOUND

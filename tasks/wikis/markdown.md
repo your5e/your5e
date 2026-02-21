@@ -4,7 +4,7 @@
 Support the conversion of Markdown in wiki pages, anything with the mime type
 "text/markdown".
 
-- [ ] render standard Markdown elements
+- [X] render standard Markdown elements
 - [ ] do not render frontmatter
 - [ ] redact/escape embedded HTML
 - [ ] relative and absolute paths in hrefs resolve to a given base

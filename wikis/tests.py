@@ -102,7 +102,11 @@ class TestVersion(WikiMixin):
 
     def test_generate_path_transliterates_and_lowercases(self):
         self.version.filename = "Héros & Légendes/Épée du Crépuscule.md"
-        assert self.version.generate_path() == "heros-legendes/epee-du-crepuscule.md"
+        assert self.version.generate_path() == "heros-legendes/epee-du-crepuscule"
+
+    def test_generate_path_preserves_non_md_extensions(self):
+        self.version.filename = "Maps/World Map.png"
+        assert self.version.generate_path() == "maps/world-map.png"
 
     def test_duplicate_paths_rejected_within_wiki(self):
         page_b = Page.objects.create(wiki=self.wiki)
@@ -124,6 +128,37 @@ class TestVersion(WikiMixin):
             created_by=self.wendy,
         )
         assert page_b.version_set.first().path == "document.txt"
+
+    def test_render_markdown_returns_html(self):
+        page = Page.objects.create(wiki=self.wiki)
+        version = page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Heading",
+            created_by=self.wendy,
+        )
+        assert "<h1>Heading</h1>" in version.render()
+
+    def test_render_non_markdown_returns_bytes(self):
+        assert self.version.render() == b"Test content"
+
+    def test_display_name_markdown(self):
+        page = Page.objects.create(wiki=self.wiki)
+        version = page.update(
+            filename="Guides/Combat Tactics.md",
+            mime_type="text/markdown",
+            data=b"# Combat Tactics",
+            created_by=self.wendy,
+        )
+        assert version.display_name == "Combat Tactics"
+
+    def test_display_name_markdown_uppercase(self):
+        self.version.filename = "Notes/Session Log.MD"
+        assert self.version.display_name == "Session Log"
+
+    def test_display_name_attachment(self):
+        self.version.filename = "Maps/World Map.png"
+        assert self.version.display_name == "World Map.png"
 
 
 @pytest.mark.django_db
@@ -275,7 +310,7 @@ class TestWiki(WikiMixin):
         assert page == self.page
 
     def test_get_page_returns_page_by_path(self):
-        page = self.wiki.get_page(path="rules/combat.md")
+        page = self.wiki.get_page(path="rules/combat")
         assert page.latest_version.filename == "Rules/Combat.md"
 
     def test_get_page_raises_for_nonexistent_filename(self):
@@ -334,38 +369,32 @@ class TestWiki(WikiMixin):
         after = timezone.now()
         assert self.wiki.changes_since(after) == []
 
-    def test_files_in_root(self):
-        assert self.wiki.files_in("/") == [
+    def test_contents_in_root(self):
+        contents = self.wiki.contents_in("/")
+        assert [f.display_name for f in contents["files"]] == [
             "document.txt",
             "history.txt",
             "shared.txt",
         ]
-
-    def test_folders_in_root(self):
-        assert self.wiki.folders_in("/") == [
-            "Characters",
-            "Rules",
+        assert [(f.name, f.href) for f in contents["folders"]] == [
+            ("Characters", "characters"),
+            ("Rules", "rules"),
         ]
 
-    def test_files_in_returns_immediate_files(self):
-        assert self.wiki.files_in("/rules/") == [
-            "Combat.md",
+    def test_contents_in_subdirectory(self):
+        contents = self.wiki.contents_in("/rules/")
+        assert [f.display_name for f in contents["files"]] == ["Combat"]
+        assert [(f.name, f.href) for f in contents["folders"]] == [
+            ("Status", "rules/status"),
         ]
 
-    def test_folders_in_returns_immediate_folders(self):
-        assert self.wiki.folders_in("/rules/") == [
-            "Status",
-        ]
-
-    def test_files_in_excludes_deleted(self):
+    def test_contents_in_excludes_deleted(self):
         self.wiki.get_page(filename="Rules/Combat.md").soft_delete()
-        assert self.wiki.files_in("/rules/") == []
-
-    def test_folders_in_excludes_folder_with_only_deleted_pages(self):
         self.wiki.get_page(filename="Characters/Theron Blackwood.md").soft_delete()
-        assert self.wiki.folders_in("/") == [
-            "Rules",
-        ]
+        contents = self.wiki.contents_in("/")
+        assert [(f.name, f.href) for f in contents["folders"]] == [("Rules", "rules")]
+        contents = self.wiki.contents_in("/rules/")
+        assert contents["files"] == []
 
     def test_purge_deleted_removes_pages_before_cutoff(self):
         self.page.deleted_at = timezone.now() - timedelta(days=30)

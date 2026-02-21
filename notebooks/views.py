@@ -20,8 +20,6 @@ MAX_UPLOAD_SIZE = 2 * 1024 * 1024
 def get_permission(notebook, user):
     if not user.is_authenticated:
         return None
-    if user == notebook.owner:
-        return "owner"
     try:
         permission = NotebookPermission.objects.get(notebook=notebook, user=user)
         return permission.role
@@ -34,12 +32,27 @@ def can_view(notebook, user):
         return True
     if notebook.visibility == Notebook.Visibility.SITE:
         return user.is_authenticated
+    if user.is_authenticated and user == notebook.owner:
+        return True
     return get_permission(notebook, user) is not None
 
 
 def can_edit(notebook, user):
-    permission = get_permission(notebook, user)
-    return permission in ("owner", NotebookPermission.Role.EDITOR)
+    if user.is_authenticated and user == notebook.owner:
+        return True
+    return get_permission(notebook, user) == NotebookPermission.Role.EDITOR
+
+
+def get_notebook_or_error(request, username, slug):
+    owner = get_object_or_404(User, username=username)
+    notebook = get_object_or_404(Notebook, owner=owner, slug=slug)
+
+    if not can_view(notebook, request.user):
+        if not request.user.is_authenticated:
+            return None, HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        return None, HttpResponse(status=HTTPStatus.FORBIDDEN)
+
+    return notebook, None
 
 
 class NotebookActionView(View):
@@ -62,33 +75,33 @@ class NotebookActionView(View):
 
 class NotebookView(View):
     def get(self, request, username, slug, path=""):
-        owner = get_object_or_404(User, username=username)
-        notebook = get_object_or_404(Notebook, owner=owner, slug=slug)
+        notebook, error = get_notebook_or_error(request, username, slug)
+        if error:
+            return error
 
-        if not can_view(notebook, request.user):
-            if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
-        is_owner = request.user == owner
+        is_owner = request.user == notebook.owner
         user_can_edit = can_edit(notebook, request.user)
         directory = "/" + path
+        contents = notebook.contents_in(directory)
 
         context = {
             "notebook": notebook,
             "is_owner": is_owner,
             "can_edit": user_can_edit,
-            "folders": notebook.folders_in(directory),
-            "files": notebook.files_in(directory),
+            "folders": contents["folders"],
+            "files": contents["files"],
         }
 
         if user_can_edit:
             context["deleted_pages"] = notebook.deleted_pages()
 
         try:
-            index_path = path + "index.md" if path else "index.md"
+            if path:
+                index_path = path + "/index"
+            else:
+                index_path = "index"
             index_page = notebook.get_page(path=index_path)
-            context["index_content"] = index_page.latest_version.content.data.decode()
+            context["index_content"] = index_page.latest_version.render()
         except Page.DoesNotExist:
             pass
 
@@ -226,3 +239,29 @@ class NotebookCollaboratorsView(NotebookActionView):
         ).update(role=role)
 
         return redirect(self.notebook)
+
+
+class NotebookPageView(View):
+    def get(self, request, username, slug, path):
+        notebook, error = get_notebook_or_error(request, username, slug)
+        if error:
+            return error
+
+        if path.endswith(".md"):
+            return redirect(f"/notebooks/{username}/{slug}/{path[:-3]}", permanent=True)
+
+        try:
+            page = notebook.get_page(path=path)
+        except Page.DoesNotExist:
+            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+
+        version = page.latest_version
+        content = version.render()
+
+        if isinstance(content, str):
+            return render(request, "notebooks/page.html", {
+                "notebook": notebook,
+                "page": version,
+                "content": content,
+            })
+        return HttpResponse(content, content_type=version.mime_type)
