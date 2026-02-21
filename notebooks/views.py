@@ -101,7 +101,9 @@ class NotebookView(View):
             else:
                 index_path = "index"
             index_page = notebook.get_page(path=index_path)
-            context["index_content"] = index_page.latest_version.render()
+            context["index_content"] = index_page.latest_version.render(
+                base_url=notebook.get_absolute_url()
+            )
         except Page.DoesNotExist:
             pass
 
@@ -256,7 +258,7 @@ class NotebookPageView(View):
             return HttpResponse(status=HTTPStatus.NOT_FOUND)
 
         version = page.latest_version
-        content = version.render()
+        content = version.render(base_url=notebook.get_absolute_url())
 
         if isinstance(content, str):
             return render(request, "notebooks/page.html", {

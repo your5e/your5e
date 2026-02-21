@@ -51,6 +51,47 @@ class WikiMixin(UserMixin):
             )
             self.markdown_pages.append(page)
 
+        self.image_page = Page.objects.create(wiki=self.wiki)
+        self.image_page.update(
+            filename="Maps/World.png",
+            mime_type="image/png",
+            data=b"PNG data",
+            created_by=self.wendy,
+        )
+
+        self.page_with_links = Page.objects.create(wiki=self.wiki)
+        self.page_with_links.update(
+            filename="Rules/Status/Index.md",
+            mime_type="text/markdown",
+            data=b"\n".join([
+                b"[Relative](./exhaustion)",
+                b"[Parent](../combat)",
+                b"[Bare](conditions)",
+                b"[Absolute](/characters)",
+                b"[External](https://example.com)",
+                b"[Anchor](#section)",
+            ]),
+            created_by=self.wendy,
+        )
+
+        self.page_with_wikilinks = Page.objects.create(wiki=self.wiki)
+        self.page_with_wikilinks.update(
+            filename="Index.md",
+            mime_type="text/markdown",
+            data=b"\n".join([
+                b"[[Combat]]",
+                b"[[combat]]",
+                b"[[Theron Blackwood]]",
+                b"[[Combat|fighting]]",
+                b"[[Combat.md]]",
+                b"[[Nonexistent Page]]",
+                b"![[World.png]]",
+                b"![[World.png|300]]",
+                b"![[World.png|640x480]]",
+            ]),
+            created_by=self.wendy,
+        )
+
 
 @pytest.mark.django_db
 class TestContent(WikiMixin):
@@ -129,16 +170,6 @@ class TestVersion(WikiMixin):
         )
         assert page_b.version_set.first().path == "document.txt"
 
-    def test_render_markdown_returns_html(self):
-        page = Page.objects.create(wiki=self.wiki)
-        version = page.update(
-            filename="test.md",
-            mime_type="text/markdown",
-            data=b"# Heading",
-            created_by=self.wendy,
-        )
-        assert "<h1>Heading</h1>" in version.render()
-
     def test_render_non_markdown_returns_bytes(self):
         assert self.version.render() == b"Test content"
 
@@ -159,6 +190,62 @@ class TestVersion(WikiMixin):
     def test_display_name_attachment(self):
         self.version.filename = "Maps/World Map.png"
         assert self.version.display_name == "World Map.png"
+
+    def test_render_resolves_markdown_links(self):
+        html = self.page_with_links.latest_version.render(
+            base_url="/notebooks/wendy/notes"
+        )
+        assert html == (
+            '<p><a href="/notebooks/wendy/notes/rules/status/exhaustion">Relative</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">Parent</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/status/conditions">Bare</a>\n'
+            '<a href="/notebooks/wendy/notes/characters">Absolute</a>\n'
+            '<a href="https://example.com">External</a>\n'
+            '<a href="#section">Anchor</a></p>'
+        )
+
+    def test_render_resolves_wikilinks(self):
+        html = self.page_with_wikilinks.latest_version.render(
+            base_url="/notebooks/wendy/notes"
+        )
+        assert html == (
+            '<p><a href="/notebooks/wendy/notes/rules/combat">Combat</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">combat</a>\n'
+            '<a href="/notebooks/wendy/notes/characters/theron-blackwood">'
+            'Theron Blackwood</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">fighting</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">Combat.md</a>\n'
+            '<a href="/notebooks/wendy/notes/nonexistent-page">Nonexistent Page</a>\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png">\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png" width="300">\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png" width="640" '
+            'height="480"></p>'
+        )
+
+    def test_render_wikilink_shortest_path_wins(self):
+        Page.objects.create(wiki=self.wiki).update(
+            filename="Rules/Advanced/Combat.md",
+            mime_type="text/markdown",
+            data=b"Advanced combat rules.",
+            created_by=self.wendy,
+        )
+        html = self.page_with_wikilinks.latest_version.render(
+            base_url="/notebooks/wendy/notes"
+        )
+        # Still resolves to rules/combat, not rules/advanced/combat
+        assert html == (
+            '<p><a href="/notebooks/wendy/notes/rules/combat">Combat</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">combat</a>\n'
+            '<a href="/notebooks/wendy/notes/characters/theron-blackwood">'
+            'Theron Blackwood</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">fighting</a>\n'
+            '<a href="/notebooks/wendy/notes/rules/combat">Combat.md</a>\n'
+            '<a href="/notebooks/wendy/notes/nonexistent-page">Nonexistent Page</a>\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png">\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png" width="300">\n'
+            '<img src="/notebooks/wendy/notes/maps/world.png" width="640" '
+            'height="480"></p>'
+        )
 
 
 @pytest.mark.django_db
@@ -336,11 +423,14 @@ class TestWiki(WikiMixin):
             self.markdown_pages[1].latest_version,
             self.markdown_pages[2].latest_version,
             self.markdown_pages[3].latest_version,
+            self.image_page.latest_version,
+            self.page_with_links.latest_version,
+            self.page_with_wikilinks.latest_version,
         ]
 
     def test_all_pages_excludes_deleted(self):
         self.page.soft_delete()
-        assert len(self.wiki.all_pages()) == 6
+        assert len(self.wiki.all_pages()) == 9
 
     def test_deleted_pages(self):
         self.page.soft_delete()
@@ -372,12 +462,14 @@ class TestWiki(WikiMixin):
     def test_contents_in_root(self):
         contents = self.wiki.contents_in("/")
         assert [f.display_name for f in contents["files"]] == [
+            "Index",
             "document.txt",
             "history.txt",
             "shared.txt",
         ]
         assert [(f.name, f.href) for f in contents["folders"]] == [
             ("Characters", "characters"),
+            ("Maps", "maps"),
             ("Rules", "rules"),
         ]
 
@@ -392,7 +484,10 @@ class TestWiki(WikiMixin):
         self.wiki.get_page(filename="Rules/Combat.md").soft_delete()
         self.wiki.get_page(filename="Characters/Theron Blackwood.md").soft_delete()
         contents = self.wiki.contents_in("/")
-        assert [(f.name, f.href) for f in contents["folders"]] == [("Rules", "rules")]
+        assert [(f.name, f.href) for f in contents["folders"]] == [
+            ("Maps", "maps"),
+            ("Rules", "rules"),
+        ]
         contents = self.wiki.contents_in("/rules/")
         assert contents["files"] == []
 

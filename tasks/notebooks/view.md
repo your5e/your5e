@@ -41,8 +41,7 @@ View a page, either Markdown converted to HTML, or the raw uploaded file.
         - redirects Markdown paths with `.md` to without
 - [ ] lists and views older versions
         - ignore path differences on older versions
-- [ ] unresolved path gives creation form/edit page
-- [ ] ensure links in Markdown are resolving correctly
+- [X] ensure links in Markdown are resolving correctly
         - relative to current "directory"
         - absolute paths relative to notebook
 
@@ -54,6 +53,7 @@ Edit a page -- upload new content, change the filename, delete.
 - [ ] edit page
         - only owners and editors can see and use
         - offers upload to replace content
+- [ ] unresolved path gives creation form/edit page
 - [ ] saving to non-existence page creates
         - ensure `.md` added to filename if left out
         - current "directory" added by default to filename

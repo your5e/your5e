@@ -1,4 +1,5 @@
 from pathlib import Path
+from textwrap import dedent
 
 from django.core.management.base import BaseCommand
 
@@ -60,11 +61,13 @@ class Command(BaseCommand):
         index_page.update(
             filename="index.md",
             mime_type="text/markdown",
-            data=(
-                b"# Campaign Notes\n\n"
-                b"Welcome to our campaign wiki.\n\n"
-                b"![Map](random-hexmap-7.png)"
-            ),
+            data=dedent("""\
+                # Campaign Notes
+
+                Welcome to our campaign wiki.
+
+                ![Map](random-hexmap-7.png)
+                """).encode(),
             created_by=norm,
         )
         page = Page.objects.create(wiki=notebook)
@@ -109,13 +112,44 @@ class Command(BaseCommand):
         places_page.update(
             filename="places/index.md",
             mime_type="text/markdown",
-            data=b"# Places\n\nLocations in the world.\n\n- The Capital\n- The Wilds",
+            data=dedent("""\
+                # Places
+
+                Locations in the world.
+
+                - [[The Capital]]
+                - [[The Wilds]]
+                """).encode(),
             created_by=wendy,
         )
         capital_page = Page.objects.create(wiki=wendys_notebook)
         capital_page.update(
-            filename="places/the-capital.md",
+            filename="places/The Capital.md",
             mime_type="text/markdown",
-            data=b"# The Capital\n\nA bustling city of commerce and intrigue.",
+            data=dedent("""\
+                # The Capital
+
+                A bustling city of commerce and intrigue.
+
+                See also: [[The Wilds|the wilderness beyond]].
+                """).encode(),
             created_by=wendy,
+        )
+        wilds_page = Page.objects.create(wiki=wendys_notebook)
+        wilds_page.update(
+            filename="places/The Wilds.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # The Wilds
+
+                Untamed forests and ancient ruins.
+
+                Return to [Places](./index).
+                """).encode(),
+            created_by=wendy,
+        )
+        NotebookPermission.objects.create(
+            notebook=wendys_notebook,
+            user=norm,
+            role=NotebookPermission.Role.VIEWER,
         )

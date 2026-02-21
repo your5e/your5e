@@ -7,7 +7,7 @@ from django.utils import timezone
 from slugify import slugify
 
 from users.models import User, get_sentinel_user
-from wikis.markdown import render_markdown
+from wikis.markdown import render_wiki_content
 
 FolderLink = namedtuple("FolderLink", ["name", "href"])
 
@@ -240,8 +240,10 @@ class Version(models.Model):
             if char in self.filename:
                 raise ValidationError(f"Filename cannot contain {char}")
 
-    def generate_path(self):
-        parts = self.filename.split("/")
+    def generate_path(self, filename=None):
+        if filename is None:
+            filename = self.filename
+        parts = filename.split("/")
         result = []
         for part in parts:
             if "." in part:
@@ -279,7 +281,27 @@ class Version(models.Model):
                 f"Path {self.path} already exists in this wiki"
             )
 
-    def render(self):
+    def render(self, base_url=None):
         if self.mime_type == "text/markdown":
-            return render_markdown(self.content.data.decode())
+            current_dir = "/".join(self.path.split("/")[:-1])
+            return render_wiki_content(
+                self.content.data.decode(),
+                self.resolve_wikilink,
+                base_url,
+                current_dir,
+            )
         return self.content.data
+
+    def resolve_wikilink(self, target):
+        target = target.removesuffix(".md").removesuffix(".MD")
+        target_path = self.generate_path(target)
+
+        candidates = []
+        for version in self.page.wiki.latest_versions():
+            path_basename = version.path.rsplit("/", 1)[-1]
+            if path_basename == target_path or version.path == target_path:
+                candidates.append(version.path)
+
+        if candidates:
+            return min(candidates, key=lambda p: p.count("/"))
+        return target_path

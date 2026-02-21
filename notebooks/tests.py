@@ -67,6 +67,14 @@ class NotebookMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        page_with_wikilinks = Page.objects.create(wiki=self.wendys_notebook)
+        page_with_wikilinks.update(
+            filename="links.md",
+            mime_type="text/markdown",
+            data=b"# Links\n\n[[Theron]]\n[Notes](./notes)",
+            created_by=self.wendy,
+        )
+
 
 @pytest.mark.django_db
 class TestNotebook(NotebookMixin):
@@ -553,3 +561,17 @@ class TestNotebookPageView(NotebookMixin):
     def test_view_nonexistent_page_returns_404(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/nonexistent")
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @UserMixin.as_user("wendy")
+    def test_view_page_renders_links(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/links")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert (
+            '<a href="/notebooks/wendy/heros-legendes/heroes/theron">Theron</a>'
+            in content
+        )
+        assert (
+            '<a href="/notebooks/wendy/heros-legendes/notes">Notes</a>'
+            in content
+        )
