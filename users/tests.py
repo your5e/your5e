@@ -45,29 +45,15 @@ class UserMixin:
             is_public=False,
         )
 
-    @staticmethod
-    def as_wendy(test_method):
-        @functools.wraps(test_method)
-        def wrapper(self, client, *args, **kwargs):
-            client.force_login(self.wendy)
-            return test_method(self, client, *args, **kwargs)
-        return wrapper
-
-    @staticmethod
-    def as_susan(test_method):
-        @functools.wraps(test_method)
-        def wrapper(self, client, *args, **kwargs):
-            client.force_login(self.susan)
-            return test_method(self, client, *args, **kwargs)
-        return wrapper
-
-    @staticmethod
-    def as_mary(test_method):
-        @functools.wraps(test_method)
-        def wrapper(self, client, *args, **kwargs):
-            client.force_login(self.mary)
-            return test_method(self, client, *args, **kwargs)
-        return wrapper
+    @classmethod
+    def as_user(cls, attr_name):
+        def decorator(test_method):
+            @functools.wraps(test_method)
+            def wrapper(self, client, *args, **kwargs):
+                client.force_login(getattr(self, attr_name))
+                return test_method(self, client, *args, **kwargs)
+            return wrapper
+        return decorator
 
 
 @pytest.mark.django_db
@@ -176,31 +162,31 @@ class TestProfileView(UserMixin):
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/login?next=/profile/"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_profile_redirect_when_logged_in(self, client):
         response = client.get("/profile/")
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/profile/wendy/"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_profile_shows_user_details(self, client):
         response = client.get("/profile/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert "Wendy Testaburger" in response.content.decode()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_own_profile_shows_edit_form(self, client):
         response = client.get("/profile/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert "Save</button>" in response.content.decode()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_other_profile_no_edit_form(self, client):
         response = client.get("/profile/susan/")
         assert response.status_code == HTTPStatus.OK
         assert "Save</button>" not in response.content.decode()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_public_profile_hides_details(self, client):
         response = client.get("/profile/mary/")
         content = response.content.decode()
@@ -208,14 +194,14 @@ class TestProfileView(UserMixin):
         assert "Mary Test" not in content
         assert "Bio for Mary" not in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_public_profile_shows_details(self, client):
         response = client.get("/profile/susan/")
         content = response.content.decode()
         assert "Susan Test" in content
         assert "Bio for Susan" in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_public_profile_shows_links_with_rel_me(self, client):
         response = client.get("/profile/susan/")
         content = response.content.decode()
@@ -227,26 +213,26 @@ class TestProfileView(UserMixin):
             content,
         ), "Expected anchor with href and rel='me'"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_sees_full_profile_even_when_not_public(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
         assert "Wendy Testaburger" in content
         assert "Bio for Wendy" in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_profile_form_includes_description(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
         assert 'name="description"' in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_profile_shows_visibility_button(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
         assert "Make profile public" in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_toggle_profile_visibility(self, client):
         assert self.wendy.is_public is False
         response = client.post(
@@ -271,7 +257,7 @@ class TestProfileView(UserMixin):
         assert "Mary Test" not in content
         assert "Bio for Mary" not in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_add_profile_link(self, client):
         response = client.post(
             "/profile/wendy/links", {
@@ -285,7 +271,7 @@ class TestProfileView(UserMixin):
         assert link.url == "https://example.com/@wendy"
         assert link.label == "Website"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_delete_profile_link(self, client):
         link = ProfileLink.objects.create(
             user=self.wendy,
@@ -301,7 +287,7 @@ class TestProfileView(UserMixin):
         assert response.url == "/profile/wendy/"
         assert ProfileLink.objects.filter(user=self.wendy).count() == 0
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_update_own_profile(self, client):
         response = client.post(
             "/profile/wendy/", {
@@ -314,7 +300,7 @@ class TestProfileView(UserMixin):
         assert self.wendy.name == "Wendy Test"
         assert self.wendy.short_name == "W"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_cannot_update_other_profile(self, client):
         response = client.post(
             "/profile/susan/", {

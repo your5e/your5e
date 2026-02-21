@@ -42,6 +42,24 @@ def can_edit(notebook, user):
     return permission in ("owner", NotebookPermission.Role.EDITOR)
 
 
+class NotebookActionView(View):
+    require_owner = True
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+
+        self.notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
+
+        if self.require_owner:
+            if request.user != self.notebook.owner:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        elif not can_edit(self.notebook, request.user):
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
+        return super().dispatch(request, *args, **kwargs)
+
+
 class NotebookView(View):
     def get(self, request, username, slug, path=""):
         owner = get_object_or_404(User, username=username)
@@ -82,16 +100,10 @@ class NotebookView(View):
         return render(request, "notebooks/notebook.html", context)
 
 
-class NotebookUploadView(View):
+class NotebookUploadView(NotebookActionView):
+    require_owner = False
+
     def post(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-
-        notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
-
-        if not can_edit(notebook, request.user):
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
         uploaded_file = request.FILES.get("file")
         filename = request.POST.get("filename") or uploaded_file.name
 
@@ -106,7 +118,7 @@ class NotebookUploadView(View):
                 ext = ""
             mime_type = MIME_TYPE_FALLBACKS.get(ext, DEFAULT_MIME_TYPE)
 
-        page = Page.objects.create(wiki=notebook)
+        page = Page.objects.create(wiki=self.notebook)
         page.update(
             filename=filename,
             mime_type=mime_type,
@@ -114,127 +126,103 @@ class NotebookUploadView(View):
             created_by=request.user,
         )
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
 
-class NotebookRenameView(View):
+class NotebookRenameView(NotebookActionView):
     def post(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-
-        notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
-
-        if request.user != notebook.owner:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
         name = request.POST.get("name")
         if name:
-            notebook.rename(name)
+            self.notebook.rename(name)
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
 
-class NotebookVisibilityView(View):
+class NotebookVisibilityView(NotebookActionView):
     def post(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-
-        notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
-
-        if request.user != notebook.owner:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
         visibility = request.POST.get("visibility")
         confirmed = request.POST.get("confirmed") == "true"
 
         if not confirmed:
             return render(request, "notebooks/confirm_visibility.html", {
-                "notebook": notebook,
+                "notebook": self.notebook,
                 "visibility": visibility,
             })
 
-        notebook.visibility = visibility
-        notebook.save()
+        self.notebook.visibility = visibility
+        self.notebook.save()
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
 
-class NotebookCollaboratorsView(View):
+class NotebookCollaboratorsView(NotebookActionView):
     def post(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-
-        notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
-
-        if request.user != notebook.owner:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
         confirmed = request.POST.get("confirmed") == "true"
 
         if "username" in request.POST:
-            return self.handle_add(request, notebook, confirmed)
+            return self.handle_add(request, confirmed)
         elif "remove" in request.POST:
-            return self.handle_remove(request, notebook, confirmed)
+            return self.handle_remove(request, confirmed)
         elif "change_role" in request.POST:
-            return self.handle_change_role(request, notebook, confirmed)
+            return self.handle_change_role(request, confirmed)
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
-    def handle_add(self, request, notebook, confirmed):
+    def handle_add(self, request, confirmed):
         username = request.POST.get("username")
         role = request.POST.get("role")
         user = get_object_or_404(User, username=username)
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": notebook,
+                "notebook": self.notebook,
                 "action": "add",
                 "target_user": user,
                 "role": role,
             })
 
         NotebookPermission.objects.create(
-            notebook=notebook,
+            notebook=self.notebook,
             user=user,
             role=role,
         )
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
-    def handle_remove(self, request, notebook, confirmed):
+    def handle_remove(self, request, confirmed):
         user_pk = request.POST.get("remove")
         user = get_object_or_404(User, pk=user_pk)
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": notebook,
+                "notebook": self.notebook,
                 "action": "remove",
                 "target_user": user,
             })
 
         NotebookPermission.objects.filter(
-            notebook=notebook,
+            notebook=self.notebook,
             user=user,
         ).delete()
 
-        return redirect(notebook)
+        return redirect(self.notebook)
 
-    def handle_change_role(self, request, notebook, confirmed):
+    def handle_change_role(self, request, confirmed):
         user_pk = request.POST.get("change_role")
         role = request.POST.get("role")
         user = get_object_or_404(User, pk=user_pk)
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": notebook,
+                "notebook": self.notebook,
                 "action": "change_role",
                 "target_user": user,
                 "role": role,
             })
 
         NotebookPermission.objects.filter(
-            notebook=notebook,
+            notebook=self.notebook,
             user=user,
         ).update(role=role)
 
-        return redirect(notebook)
+        return redirect(self.notebook)

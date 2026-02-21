@@ -88,19 +88,19 @@ class TestNotebook(NotebookMixin):
 
 @pytest.mark.django_db
 class TestProfileNotebooks(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_own_profile_lists_notebooks(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
         assert "Héros &amp; Légendes" in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_own_profile_shows_create_notebook_form(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
         assert 'name="notebook_name"' in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_create_notebook(self, client):
         response = client.post(
             "/profile/wendy/notebooks",
@@ -111,7 +111,7 @@ class TestProfileNotebooks(NotebookMixin):
         assert notebook.owner == self.wendy
         assert notebook.slug == "new-notebook"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_create_notebook_redirects_to_profile(self, client):
         response = client.post(
             "/profile/wendy/notebooks",
@@ -119,13 +119,13 @@ class TestProfileNotebooks(NotebookMixin):
         )
         assert response.url == "/profile/wendy/"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_other_profile_does_not_show_notebooks(self, client):
         response = client.get("/profile/susan/")
         content = response.content.decode()
         assert "Campaign Notes" not in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_cannot_create_notebook_on_other_profile(self, client):
         response = client.post(
             "/profile/susan/notebooks",
@@ -145,32 +145,32 @@ class TestProfileNotebooks(NotebookMixin):
 
 @pytest.mark.django_db
 class TestNotebookView(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_can_view_notebook(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "Héros &amp; Légendes" in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_sees_rename_form(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
         assert 'name="name"' in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_sees_visibility_controls(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
         assert "visibility" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_sees_collaborator_section(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
         assert "collaborator" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_owner_does_not_see_rename_form(self, client):
         self.susans_notebook.visibility = Notebook.Visibility.SITE
         self.susans_notebook.save()
@@ -178,7 +178,7 @@ class TestNotebookView(NotebookMixin):
         content = response.content.decode()
         assert 'name="name"' not in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_owner_does_not_see_collaborator_section(self, client):
         self.susans_notebook.visibility = Notebook.Visibility.SITE
         self.susans_notebook.save()
@@ -189,7 +189,7 @@ class TestNotebookView(NotebookMixin):
 
 @pytest.mark.django_db
 class TestNotebookRenameView(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_can_rename_notebook(self, client):
         response = client.post(
             "/notebooks/rename",
@@ -200,7 +200,7 @@ class TestNotebookRenameView(NotebookMixin):
         assert self.wendys_notebook.name == "Session Notes"
         assert self.wendys_notebook.slug == "session-notes"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_rename_redirects_to_new_slug(self, client):
         response = client.post(
             "/notebooks/rename",
@@ -208,7 +208,7 @@ class TestNotebookRenameView(NotebookMixin):
         )
         assert response.url == "/notebooks/wendy/session-notes/"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_owner_cannot_rename_notebook(self, client):
         response = client.post(
             "/notebooks/rename",
@@ -230,7 +230,7 @@ class TestNotebookRenameView(NotebookMixin):
 
 @pytest.mark.django_db
 class TestNotebookVisibilityView(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_visibility_change_shows_confirmation(self, client):
         response = client.post(
             "/notebooks/visibility",
@@ -240,7 +240,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         content = response.content.decode()
         assert "confirm" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_visibility_change_confirmed(self, client):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
@@ -251,7 +251,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         self.wendys_notebook.refresh_from_db()
         assert self.wendys_notebook.visibility == Notebook.Visibility.PUBLIC
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_visibility_change_redirects_to_notebook(self, client):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
@@ -260,7 +260,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         })
         assert response.url == "/notebooks/wendy/heros-legendes/"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_owner_cannot_change_visibility(self, client):
         response = client.post("/notebooks/visibility", {
             "notebook": self.susans_notebook.pk,
@@ -284,7 +284,7 @@ class TestNotebookVisibilityView(NotebookMixin):
 
 @pytest.mark.django_db
 class TestNotebookCollaboratorsView(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_add_collaborator_shows_confirmation(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -296,7 +296,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         assert "confirm" in content.lower()
         assert "mary" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_add_collaborator_confirmed(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -311,7 +311,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         )
         assert permission.role == NotebookPermission.Role.VIEWER
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_remove_collaborator_shows_confirmation(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -321,7 +321,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         content = response.content.decode()
         assert "confirm" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_remove_collaborator_confirmed(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -334,7 +334,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             user=self.susan,
         ).exists()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_change_collaborator_role_shows_confirmation(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -345,7 +345,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         content = response.content.decode()
         assert "confirm" in content.lower()
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_change_collaborator_role_confirmed(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
@@ -357,7 +357,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         self.susans_permission.refresh_from_db()
         assert self.susans_permission.role == NotebookPermission.Role.VIEWER
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_non_owner_cannot_add_collaborator(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.susans_notebook.pk,
@@ -398,7 +398,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert 'type="file"' in content
         assert 'href="index.md/edit"' in content
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_owner_sees_full_index(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
@@ -406,7 +406,7 @@ class TestNotebookIndexPage(NotebookMixin):
         self.assert_shows_content(content)
         self.assert_shows_edit_features(content)
 
-    @UserMixin.as_susan
+    @UserMixin.as_user("susan")
     def test_editor_sees_full_index(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
@@ -414,7 +414,7 @@ class TestNotebookIndexPage(NotebookMixin):
         self.assert_shows_content(content)
         self.assert_shows_edit_features(content)
 
-    @UserMixin.as_susan
+    @UserMixin.as_user("susan")
     def test_viewer_sees_content_only(self, client):
         self.susans_permission.role = NotebookPermission.Role.VIEWER
         self.susans_permission.save()
@@ -427,7 +427,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert 'type="file"' not in content
         assert 'href="index.md/edit"' not in content
 
-    @UserMixin.as_mary
+    @UserMixin.as_user("mary")
     def test_non_collaborator_cannot_view_private(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.FORBIDDEN
@@ -439,7 +439,7 @@ class TestNotebookIndexPage(NotebookMixin):
 
 @pytest.mark.django_db
 class TestNotebookUpload(NotebookMixin):
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_upload_creates_page_with_markdown_mime(self, client):
         data = b"# New Page\n\nSome content."
         upload = BytesIO(data)
@@ -454,7 +454,7 @@ class TestNotebookUpload(NotebookMixin):
         assert page.latest_version.content.data == data
         assert page.latest_version.mime_type == "text/markdown"
 
-    @UserMixin.as_wendy
+    @UserMixin.as_user("wendy")
     def test_upload_creates_page_with_png_mime(self, client):
         data = b"\x89PNG\r\n\x1a\n"
         upload = BytesIO(data)
@@ -468,7 +468,7 @@ class TestNotebookUpload(NotebookMixin):
         page = self.wendys_notebook.get_page(path="image.png")
         assert page.latest_version.mime_type == "image/png"
 
-    @UserMixin.as_susan
+    @UserMixin.as_user("susan")
     def test_upload_rejects_over_2mb(self, client):
         large_data = b"x" * (2 * 1024 * 1024 + 1)
         upload = BytesIO(large_data)
@@ -483,7 +483,7 @@ class TestNotebookUpload(NotebookMixin):
         final_page_count = Page.objects.filter(wiki=self.wendys_notebook).count()
         assert final_page_count == initial_page_count
 
-    @UserMixin.as_mary
+    @UserMixin.as_user("mary")
     def test_viewer_cannot_upload(self, client):
         NotebookPermission.objects.create(
             notebook=self.wendys_notebook,

@@ -15,6 +15,19 @@ from users.forms import ProfileForm, ProfileLinkForm
 from users.models import ProfileLink, User
 
 
+class ProfileObjectMixin(SingleObjectMixin):
+    model = User
+    slug_field = "username"
+    slug_url_kwarg = "username"
+
+    def check_owner(self, request):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        if request.user != self.object:
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        return None
+
+
 class UserLoginView(LoginView):
     template_name = "users/login.html"
 
@@ -27,10 +40,7 @@ class ProfileRedirectView(LoginRequiredMixin, View):
         return redirect("profile", username=request.user.username)
 
 
-class ProfileView(DetailView):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
+class ProfileView(ProfileObjectMixin, DetailView):
     template_name = "users/profile.html"
     context_object_name = "profile_user"
 
@@ -57,11 +67,8 @@ class ProfileView(DetailView):
 
     def post(self, request, username):
         self.object = self.get_object()
-
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if request.user != self.object:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        if error := self.check_owner(request):
+            return error
 
         form = ProfileForm(request.POST, instance=self.object)
         if form.is_valid():
@@ -71,18 +78,11 @@ class ProfileView(DetailView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class ProfileLinksView(SingleObjectMixin, View):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
-
+class ProfileLinksView(ProfileObjectMixin, View):
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if request.user != self.object:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        if error := self.check_owner(request):
+            return error
 
         if "delete" in request.POST:
             ProfileLink.objects.filter(
@@ -99,18 +99,11 @@ class ProfileLinksView(SingleObjectMixin, View):
         return redirect("profile", username=self.object.username)
 
 
-class ProfileVisibilityView(SingleObjectMixin, View):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
-
+class ProfileVisibilityView(ProfileObjectMixin, View):
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if request.user != self.object:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        if error := self.check_owner(request):
+            return error
 
         self.object.is_public = request.POST.get("public") == "true"
         self.object.save()
@@ -118,18 +111,11 @@ class ProfileVisibilityView(SingleObjectMixin, View):
         return redirect("profile", username=self.object.username)
 
 
-class ProfileNotebooksView(SingleObjectMixin, View):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
-
+class ProfileNotebooksView(ProfileObjectMixin, View):
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if request.user != self.object:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        if error := self.check_owner(request):
+            return error
 
         name = request.POST.get("notebook_name")
         if name:
