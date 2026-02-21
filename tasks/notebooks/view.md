@@ -39,7 +39,7 @@ View a page, either Markdown converted to HTML, or the raw uploaded file.
 - [X] view page
         - accepts Markdown paths without `.md`
         - redirects Markdown paths with `.md` to without
-- [ ] lists and views older versions
+- [X] lists and views older versions
         - ignore path differences on older versions
 - [X] ensure links in Markdown are resolving correctly
         - relative to current "directory"

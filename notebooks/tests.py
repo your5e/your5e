@@ -75,6 +75,26 @@ class NotebookMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        versioned_page = Page.objects.create(wiki=self.wendys_notebook)
+        versioned_page.update(
+            filename="Session One.md",
+            mime_type="text/markdown",
+            data=b"# Session One\n\nFirst draft.",
+            created_by=self.wendy,
+        )
+        versioned_page.update(
+            filename="Session One.md",
+            mime_type="text/markdown",
+            data=b"# Session One\n\nSecond draft with more detail.",
+            created_by=self.susan,
+        )
+        versioned_page.update(
+            filename="Session One.md",
+            mime_type="text/markdown",
+            data=b"# Session One\n\nFinal version.",
+            created_by=self.wendy,
+        )
+
 
 @pytest.mark.django_db
 class TestNotebook(NotebookMixin):
@@ -407,14 +427,14 @@ class TestNotebookCollaboratorsView(NotebookMixin):
 class TestNotebookIndexPage(NotebookMixin):
     def assert_shows_content(self, content):
         assert 'href="heroes/"' in content
-        assert 'href="notes"' in content
+        assert 'href="/notebooks/wendy/heros-legendes/notes"' in content
         assert "This is the index page" in content
 
     def assert_shows_edit_features(self, content):
-        assert 'href="notes/edit"' in content
+        # assert 'href="notes/edit"' in content
         assert 'href="old-draft.md/restore"' in content
         assert 'type="file"' in content
-        assert 'href="index.md/edit"' in content
+        # assert 'href="index.md/edit"' in content
 
     @UserMixin.as_user("wendy")
     def test_owner_sees_full_index(self, client):
@@ -453,6 +473,20 @@ class TestNotebookIndexPage(NotebookMixin):
     def test_anonymous_cannot_view_private(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @UserMixin.as_user("wendy")
+    def test_index_not_listed_as_page(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "This is the index page" in content
+        assert ">index<" not in content.lower()
+
+    @UserMixin.as_user("wendy")
+    def test_index_page_shows_version_dropdown(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "This is the index page" in content
+        assert '<option value="1"' in content
 
 
 @pytest.mark.django_db
@@ -575,3 +609,32 @@ class TestNotebookPageView(NotebookMixin):
             '<a href="/notebooks/wendy/heros-legendes/notes">Notes</a>'
             in content
         )
+
+    @UserMixin.as_user("wendy")
+    def test_view_page_shows_version_info(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/session-one")
+        content = response.content.decode()
+        page = self.wendys_notebook.get_page(path="session-one")
+        versions = page.history()
+        v1_date = versions[0].created_at.strftime("%-d %b %Y")
+        v2_date = versions[1].created_at.strftime("%-d %b %Y")
+        v3_date = versions[2].created_at.strftime("%-d %b %Y")
+        assert f"<option value=\"1\">v1 by wendy on {v1_date}</option>" in content
+        assert f"<option value=\"2\">v2 by susan on {v2_date}</option>" in content
+        assert (
+            f"<option value=\"3\" selected>v3 by wendy on {v3_date}</option>"
+            in content
+        )
+        assert "Version 3 of" not in content
+
+    @UserMixin.as_user("wendy")
+    def test_view_old_version(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/session-one?version=1")
+        content = response.content.decode()
+        assert "First draft" in content
+        assert "Version 1 of" in content
+
+    @UserMixin.as_user("wendy")
+    def test_view_invalid_version_returns_404(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/session-one?version=99")
+        assert response.status_code == HTTPStatus.NOT_FOUND

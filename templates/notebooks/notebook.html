@@ -7,6 +7,14 @@
 
 {% if index_content %}
 <div class="index-content">
+<header>
+<p>v{{ index_version.number }} by {{ index_version.created_by.username }} on {{ index_version.created_at|date:"j M Y" }}</p>
+<select onchange="if(this.value) window.location.search='?index_version='+this.value">
+{% for version in index_history %}
+<option value="{{ version.number }}"{% if version.number == index_version.number %} selected{% endif %}>v{{ version.number }} by {{ version.created_by.username }} on {{ version.created_at|date:"j M Y" }}</option>
+{% endfor %}
+</select>
+</header>
 {{ index_content|safe }}
 </div>
 {% endif %}
@@ -25,8 +33,8 @@
 <ul>
 {% for file in files %}
   <li>
-    <a href="{{ file.path }}">{{ file.display_name }}</a>
-    {% if can_edit %}<a href="{{ file.path }}/edit">edit</a>{% endif %}
+    <a href="{{ notebook.get_absolute_url }}{{ file.path }}">{{ file.display_name }}</a>
+    {% if can_edit %}<a href="{{ notebook.get_absolute_url }}{{ file.path }}/edit">edit</a>{% endif %}
   </li>
 {% endfor %}
 </ul>

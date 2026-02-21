@@ -81,29 +81,40 @@ class NotebookView(View):
 
         is_owner = request.user == notebook.owner
         user_can_edit = can_edit(notebook, request.user)
-        directory = "/" + path
-        contents = notebook.contents_in(directory)
+        contents = notebook.contents_in(path)
+
+        # index.md is rendered inline, exclude from the file list
+        index_path = (path + "/index").lstrip("/")
+        files = [f for f in contents["files"] if f.path != index_path]
 
         context = {
             "notebook": notebook,
             "is_owner": is_owner,
             "can_edit": user_can_edit,
             "folders": contents["folders"],
-            "files": contents["files"],
+            "files": files,
         }
 
         if user_can_edit:
             context["deleted_pages"] = notebook.deleted_pages()
 
         try:
-            if path:
-                index_path = path + "/index"
-            else:
-                index_path = "index"
             index_page = notebook.get_page(path=index_path)
-            context["index_content"] = index_page.latest_version.render(
+            index_version_number = request.GET.get("index_version")
+            if index_version_number:
+                try:
+                    index_version = index_page.version_set.get(
+                        number=int(index_version_number)
+                    )
+                except (ValueError, index_page.version_set.model.DoesNotExist):
+                    return HttpResponse(status=HTTPStatus.NOT_FOUND)
+            else:
+                index_version = index_page.latest_version
+            context["index_content"] = index_version.render(
                 base_url=notebook.get_absolute_url()
             )
+            context["index_version"] = index_version
+            context["index_history"] = index_page.history()
         except Page.DoesNotExist:
             pass
 
@@ -257,7 +268,18 @@ class NotebookPageView(View):
         except Page.DoesNotExist:
             return HttpResponse(status=HTTPStatus.NOT_FOUND)
 
-        version = page.latest_version
+        history = page.history()
+        version_number = request.GET.get("version")
+        if version_number:
+            try:
+                version = page.version_set.get(number=int(version_number))
+            except (ValueError, page.version_set.model.DoesNotExist):
+                return HttpResponse(status=HTTPStatus.NOT_FOUND)
+            is_old_version = True
+        else:
+            version = page.latest_version
+            is_old_version = False
+
         content = version.render(base_url=notebook.get_absolute_url())
 
         if isinstance(content, str):
@@ -265,5 +287,7 @@ class NotebookPageView(View):
                 "notebook": notebook,
                 "page": version,
                 "content": content,
+                "history": history,
+                "is_old_version": is_old_version,
             })
         return HttpResponse(content, content_type=version.mime_type)
