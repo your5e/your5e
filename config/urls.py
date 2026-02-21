@@ -23,7 +23,7 @@ from users.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", RedirectView.as_view(url="/login/")),
+    path("", RedirectView.as_view(url="/login")),
 
     path(
         route="login",
