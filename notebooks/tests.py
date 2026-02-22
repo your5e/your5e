@@ -431,10 +431,10 @@ class TestNotebookIndexPage(NotebookMixin):
         assert "This is the index page" in content
 
     def assert_shows_edit_features(self, content):
-        # assert 'href="notes/edit"' in content
+        assert 'href="/notebooks/wendy/heros-legendes/notes?edit"' in content
         assert 'href="old-draft.md/restore"' in content
         assert 'type="file"' in content
-        # assert 'href="index.md/edit"' in content
+        assert 'href="index?edit"' in content
 
     @UserMixin.as_user("wendy")
     def test_owner_sees_full_index(self, client):
@@ -638,3 +638,162 @@ class TestNotebookPageView(NotebookMixin):
     def test_view_invalid_version_returns_404(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/session-one?version=99")
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @UserMixin.as_user("wendy")
+    def test_edit_markdown_shows_form_with_content(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "<form" in content
+        assert "# Notes" in content
+        assert "<textarea" in content
+        assert 'type="file"' in content
+        assert 'type="submit"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_edit_binary_shows_form(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/shield.png?edit")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "<form" in content
+        assert "<textarea" in content
+        assert 'type="file"' in content
+        assert 'type="submit"' in content
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_see_edit_form(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
+        assert response.status_code == HTTPStatus.OK
+        assert "<form" in response.content.decode()
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_see_edit_form(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_see_edit_form(self, client):
+        self.wendys_notebook.visibility = Notebook.Visibility.PUBLIC
+        self.wendys_notebook.save()
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_edit_page(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "content": "# Updated Notes\n\nNew content.",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/notes"
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content."
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_edit_page(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "content": "# Editor Update",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.latest_version.content.data == b"# Editor Update"
+        assert page.latest_version.created_by == self.susan
+
+    @UserMixin.as_user("wendy")
+    def test_edit_page_with_file_upload(self, client):
+        page = self.wendys_notebook.get_page(path="heroes/shield.png")
+        initial_version_count = page.version_set.count()
+        new_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02"
+        upload = BytesIO(new_png)
+        upload.name = "shield.png"
+        response = client.post(
+            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
+            {"file": upload},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.content.data == new_png
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_upload_file(self, client):
+        page = self.wendys_notebook.get_page(path="heroes/shield.png")
+        new_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x03"
+        upload = BytesIO(new_png)
+        upload.name = "shield.png"
+        response = client.post(
+            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
+            {"file": upload},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.latest_version.content.data == new_png
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_upload_file(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        page = self.wendys_notebook.get_page(path="heroes/shield.png")
+        initial_data = page.latest_version.content.data
+        upload = BytesIO(b"\x89PNG\r\n\x1a\n")
+        upload.name = "shield.png"
+        response = client.post(
+            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
+            {"file": upload},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        page.refresh_from_db()
+        assert page.latest_version.content.data == initial_data
+
+    def test_anonymous_cannot_upload_file(self, client):
+        self.wendys_notebook.visibility = Notebook.Visibility.PUBLIC
+        self.wendys_notebook.save()
+        page = self.wendys_notebook.get_page(path="heroes/shield.png")
+        initial_data = page.latest_version.content.data
+        upload = BytesIO(b"\x89PNG\r\n\x1a\n")
+        upload.name = "shield.png"
+        response = client.post(
+            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
+            {"file": upload},
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        page.refresh_from_db()
+        assert page.latest_version.content.data == initial_data
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_edit(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_data = page.latest_version.content.data
+        response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "content": "# Hacked",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        page.refresh_from_db()
+        assert page.latest_version.content.data == initial_data
+
+    def test_anonymous_cannot_edit(self, client):
+        self.wendys_notebook.visibility = Notebook.Visibility.PUBLIC
+        self.wendys_notebook.save()
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_data = page.latest_version.content.data
+        response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "content": "# Hacked",
+        })
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        page.refresh_from_db()
+        assert page.latest_version.content.data == initial_data

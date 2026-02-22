@@ -3,6 +3,7 @@ from http import HTTPStatus
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views import View
 
 from notebooks.models import Notebook, NotebookPermission
@@ -17,78 +18,100 @@ DEFAULT_MIME_TYPE = "application/octet-stream"
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
 
 
-def get_permission(notebook, user):
-    if not user.is_authenticated:
-        return None
-    try:
-        permission = NotebookPermission.objects.get(notebook=notebook, user=user)
-        return permission.role
-    except NotebookPermission.DoesNotExist:
-        return None
+class NotebookPermissions:
+    @staticmethod
+    def get_permission(notebook, user):
+        if not user.is_authenticated:
+            return None
+        try:
+            permission = NotebookPermission.objects.get(notebook=notebook, user=user)
+            return permission.role
+        except NotebookPermission.DoesNotExist:
+            return None
 
+    @staticmethod
+    def can_view(notebook, user):
+        if notebook.visibility == Notebook.Visibility.PUBLIC:
+            return True
+        if notebook.visibility == Notebook.Visibility.SITE:
+            return user.is_authenticated
+        if user.is_authenticated and user == notebook.owner:
+            return True
+        return NotebookPermissions.get_permission(notebook, user) is not None
 
-def can_view(notebook, user):
-    if notebook.visibility == Notebook.Visibility.PUBLIC:
-        return True
-    if notebook.visibility == Notebook.Visibility.SITE:
-        return user.is_authenticated
-    if user.is_authenticated and user == notebook.owner:
-        return True
-    return get_permission(notebook, user) is not None
+    @staticmethod
+    def can_edit(notebook, user):
+        if user.is_authenticated and user == notebook.owner:
+            return True
+        return (
+            NotebookPermissions.get_permission(notebook, user)
+            == NotebookPermission.Role.EDITOR
+        )
 
-
-def can_edit(notebook, user):
-    if user.is_authenticated and user == notebook.owner:
-        return True
-    return get_permission(notebook, user) == NotebookPermission.Role.EDITOR
-
-
-def get_notebook_or_error(request, username, slug):
-    owner = get_object_or_404(User, username=username)
-    notebook = get_object_or_404(Notebook, owner=owner, slug=slug)
-
-    if not can_view(notebook, request.user):
-        if not request.user.is_authenticated:
-            return None, HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        return None, HttpResponse(status=HTTPStatus.FORBIDDEN)
-
-    return notebook, None
-
-
-class NotebookActionView(View):
-    require_owner = True
-
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
+    @staticmethod
+    def check_edit(notebook, user):
+        if not user.is_authenticated:
             return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-
-        self.notebook = get_object_or_404(Notebook, pk=request.POST.get("notebook"))
-
-        if self.require_owner:
-            if request.user != self.notebook.owner:
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
-        elif not can_edit(self.notebook, request.user):
+        if not NotebookPermissions.can_edit(notebook, user):
             return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        return None
 
-        return super().dispatch(request, *args, **kwargs)
+    @staticmethod
+    def view_required(method):
+        def wrapper(self, request, *args, **kwargs):
+            self.object = self.get_object()
+            if not NotebookPermissions.can_view(self.object, request.user):
+                if not request.user.is_authenticated:
+                    return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+            return method(self, request, *args, **kwargs)
+        return wrapper
+
+    @staticmethod
+    def edit_required(method):
+        def wrapper(self, request, *args, **kwargs):
+            self.object = self.get_object()
+            if error := NotebookPermissions.check_edit(self.object, request.user):
+                return error
+            return method(self, request, *args, **kwargs)
+        return wrapper
+
+    @staticmethod
+    def owner_required(method):
+        def wrapper(self, request, *args, **kwargs):
+            self.object = self.get_object()
+            if not request.user.is_authenticated:
+                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+            if request.user != self.object.owner:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+            return method(self, request, *args, **kwargs)
+        return wrapper
 
 
-class NotebookView(View):
+class NotebookReadMixin:
+    def get_object(self):
+        owner = get_object_or_404(User, username=self.kwargs['username'])
+        return get_object_or_404(Notebook, owner=owner, slug=self.kwargs['slug'])
+
+
+class NotebookWriteMixin:
+    def get_object(self):
+        return get_object_or_404(Notebook, pk=self.request.POST.get("notebook"))
+
+
+class NotebookView(NotebookReadMixin, View):
+    @NotebookPermissions.view_required
     def get(self, request, username, slug, path=""):
-        notebook, error = get_notebook_or_error(request, username, slug)
-        if error:
-            return error
-
-        is_owner = request.user == notebook.owner
-        user_can_edit = can_edit(notebook, request.user)
-        contents = notebook.contents_in(path)
+        is_owner = request.user == self.object.owner
+        user_can_edit = NotebookPermissions.can_edit(self.object, request.user)
+        contents = self.object.contents_in(path)
 
         # index.md is rendered inline, exclude from the file list
         index_path = (path + "/index").lstrip("/")
         files = [f for f in contents["files"] if f.path != index_path]
 
         context = {
-            "notebook": notebook,
+            "notebook": self.object,
             "is_owner": is_owner,
             "can_edit": user_can_edit,
             "folders": contents["folders"],
@@ -96,10 +119,10 @@ class NotebookView(View):
         }
 
         if user_can_edit:
-            context["deleted_pages"] = notebook.deleted_pages()
+            context["deleted_pages"] = self.object.deleted_pages()
 
         try:
-            index_page = notebook.get_page(path=index_path)
+            index_page = self.object.get_page(path=index_path)
             index_version_number = request.GET.get("index_version")
             if index_version_number:
                 try:
@@ -111,7 +134,7 @@ class NotebookView(View):
             else:
                 index_version = index_page.latest_version
             context["index_content"] = index_version.render(
-                base_url=notebook.get_absolute_url()
+                base_url=self.object.get_absolute_url()
             )
             context["index_version"] = index_version
             context["index_history"] = index_page.history()
@@ -120,15 +143,14 @@ class NotebookView(View):
 
         if is_owner:
             context["collaborators"] = NotebookPermission.objects.filter(
-                notebook=notebook
+                notebook=self.object
             ).select_related("user")
 
         return render(request, "notebooks/notebook.html", context)
 
 
-class NotebookUploadView(NotebookActionView):
-    require_owner = False
-
+class NotebookUploadView(NotebookWriteMixin, View):
+    @NotebookPermissions.edit_required
     def post(self, request):
         uploaded_file = request.FILES.get("file")
         filename = request.POST.get("filename") or uploaded_file.name
@@ -144,7 +166,7 @@ class NotebookUploadView(NotebookActionView):
                 ext = ""
             mime_type = MIME_TYPE_FALLBACKS.get(ext, DEFAULT_MIME_TYPE)
 
-        page = Page.objects.create(wiki=self.notebook)
+        page = Page.objects.create(wiki=self.object)
         page.update(
             filename=filename,
             mime_type=mime_type,
@@ -152,36 +174,39 @@ class NotebookUploadView(NotebookActionView):
             created_by=request.user,
         )
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
 
-class NotebookRenameView(NotebookActionView):
+class NotebookRenameView(NotebookWriteMixin, View):
+    @NotebookPermissions.owner_required
     def post(self, request):
         name = request.POST.get("name")
         if name:
-            self.notebook.rename(name)
+            self.object.rename(name)
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
 
-class NotebookVisibilityView(NotebookActionView):
+class NotebookVisibilityView(NotebookWriteMixin, View):
+    @NotebookPermissions.owner_required
     def post(self, request):
         visibility = request.POST.get("visibility")
         confirmed = request.POST.get("confirmed") == "true"
 
         if not confirmed:
             return render(request, "notebooks/confirm_visibility.html", {
-                "notebook": self.notebook,
+                "notebook": self.object,
                 "visibility": visibility,
             })
 
-        self.notebook.visibility = visibility
-        self.notebook.save()
+        self.object.visibility = visibility
+        self.object.save()
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
 
-class NotebookCollaboratorsView(NotebookActionView):
+class NotebookCollaboratorsView(NotebookWriteMixin, View):
+    @NotebookPermissions.owner_required
     def post(self, request):
         confirmed = request.POST.get("confirmed") == "true"
 
@@ -192,7 +217,7 @@ class NotebookCollaboratorsView(NotebookActionView):
         elif "change_role" in request.POST:
             return self.handle_change_role(request, confirmed)
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
     def handle_add(self, request, confirmed):
         username = request.POST.get("username")
@@ -201,19 +226,19 @@ class NotebookCollaboratorsView(NotebookActionView):
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": self.notebook,
+                "notebook": self.object,
                 "action": "add",
                 "target_user": user,
                 "role": role,
             })
 
         NotebookPermission.objects.create(
-            notebook=self.notebook,
+            notebook=self.object,
             user=user,
             role=role,
         )
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
     def handle_remove(self, request, confirmed):
         user_pk = request.POST.get("remove")
@@ -221,17 +246,17 @@ class NotebookCollaboratorsView(NotebookActionView):
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": self.notebook,
+                "notebook": self.object,
                 "action": "remove",
                 "target_user": user,
             })
 
         NotebookPermission.objects.filter(
-            notebook=self.notebook,
+            notebook=self.object,
             user=user,
         ).delete()
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
     def handle_change_role(self, request, confirmed):
         user_pk = request.POST.get("change_role")
@@ -240,33 +265,53 @@ class NotebookCollaboratorsView(NotebookActionView):
 
         if not confirmed:
             return render(request, "notebooks/confirm_collaborator.html", {
-                "notebook": self.notebook,
+                "notebook": self.object,
                 "action": "change_role",
                 "target_user": user,
                 "role": role,
             })
 
         NotebookPermission.objects.filter(
-            notebook=self.notebook,
+            notebook=self.object,
             user=user,
         ).update(role=role)
 
-        return redirect(self.notebook)
+        return redirect(self.object)
 
 
-class NotebookPageView(View):
+class NotebookPageView(NotebookReadMixin, View):
+    @NotebookPermissions.view_required
     def get(self, request, username, slug, path):
-        notebook, error = get_notebook_or_error(request, username, slug)
-        if error:
-            return error
-
         if path.endswith(".md"):
-            return redirect(f"/notebooks/{username}/{slug}/{path[:-3]}", permanent=True)
+            url = reverse("notebook_page", kwargs={
+                "username": username,
+                "slug": slug,
+                "path": path[:-3],
+            })
+            return redirect(url, permanent=True)
 
         try:
-            page = notebook.get_page(path=path)
+            page = self.object.get_page(path=path)
         except Page.DoesNotExist:
             return HttpResponse(status=HTTPStatus.NOT_FOUND)
+
+        if "edit" in request.GET:
+            if error := NotebookPermissions.check_edit(self.object, request.user):
+                return error
+
+            version = page.latest_version
+            content = version.content.data
+            if version.mime_type.startswith("text/"):
+                content = content.decode("utf-8")
+            else:
+                content = ""
+
+            return render(request, "notebooks/edit.html", {
+                "notebook": self.object,
+                "page": page,
+                "version": version,
+                "content": content,
+            })
 
         history = page.history()
         version_number = request.GET.get("version")
@@ -280,14 +325,46 @@ class NotebookPageView(View):
             version = page.latest_version
             is_old_version = False
 
-        content = version.render(base_url=notebook.get_absolute_url())
+        content = version.render(base_url=self.object.get_absolute_url())
 
         if isinstance(content, str):
             return render(request, "notebooks/page.html", {
-                "notebook": notebook,
+                "notebook": self.object,
                 "page": version,
                 "content": content,
                 "history": history,
                 "is_old_version": is_old_version,
             })
         return HttpResponse(content, content_type=version.mime_type)
+
+    @NotebookPermissions.edit_required
+    def post(self, request, username, slug, path):
+        try:
+            page = self.object.get_page(path=path)
+        except Page.DoesNotExist:
+            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+
+        version = page.latest_version
+        mime_type = version.mime_type
+
+        if "file" in request.FILES:
+            uploaded_file = request.FILES["file"]
+            if uploaded_file.size > MAX_UPLOAD_SIZE:
+                return HttpResponse(status=HTTPStatus.BAD_REQUEST)
+            data = uploaded_file.read()
+        else:
+            data = request.POST.get("content", "").encode("utf-8")
+
+        page.update(
+            filename=version.filename,
+            mime_type=mime_type,
+            data=data,
+            created_by=request.user,
+        )
+
+        url = reverse("notebook_page", kwargs={
+            "username": username,
+            "slug": slug,
+            "path": path,
+        })
+        return redirect(url)

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ version.filename }} - {{ notebook.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<article>
+<h1>Edit {{ version.display_name }}</h1>
+<form method="post" enctype="multipart/form-data">
+{% csrf_token %}
+<p>
+<label for="content">Content</label><br>
+<textarea id="content" name="content" rows="20" cols="80">{{ content }}</textarea>
+</p>
+<p>
+<label for="file">Or upload a file</label><br>
+<input type="file" id="file" name="file">
+</p>
+<p>
+<input type="submit" value="Save">
+</p>
+</form>
+</article>
+{% endblock %}
