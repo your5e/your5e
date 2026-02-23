@@ -86,7 +86,18 @@ class Wiki(models.Model):
                 else:
                     folder_path = folder_slug
                 folder_name = rel_filename.split("/", 1)[0]
-                folders[folder_path] = folder_name
+                current = folders.get(folder_path)
+                current_is_slug = (
+                    current is not None
+                    and current == current.lower()
+                    and " " not in current
+                )
+                new_is_display = (
+                    " " in folder_name
+                    or folder_name != folder_name.lower()
+                )
+                if current is None or (current_is_slug and new_is_display):
+                    folders[folder_path] = folder_name
             else:
                 files.append(version)
 
@@ -101,6 +112,27 @@ class Wiki(models.Model):
     def purge_deleted(self, cutoff):
         for page in self.page_set.filter(deleted_at__lt=cutoff):
             page.delete()
+
+    def suggest_filename(self, path):
+        parts = path.split("/")
+        result = []
+
+        for i, part in enumerate(parts):
+            is_folder = i < len(parts) - 1
+            if is_folder:
+                folder_slug = "/".join(parts[: i + 1])
+                existing = self.latest_versions().filter(
+                    path__startswith=folder_slug + "/"
+                ).first()
+                if existing:
+                    folder_name = existing.filename.split("/")[i]
+                    result.append(folder_name)
+                else:
+                    result.append(part.replace("-", " ").title())
+            else:
+                result.append(part.replace("-", " ").title())
+
+        return "/".join(result)
 
 
 class Page(models.Model):

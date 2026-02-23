@@ -63,7 +63,11 @@
   </p>
   <button type="submit">Upload</button>
 </form>
+{% if index_exists %}
 <p><a href="index?edit">Edit index.md</a></p>
+{% else %}
+<p><a href="index">Create index.md</a></p>
+{% endif %}
 {% endif %}
 
 {% if is_owner %}

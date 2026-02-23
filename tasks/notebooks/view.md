@@ -56,8 +56,8 @@ Edit a page -- upload new content, change the filename, delete.
 - [X] edit page
         - only owners and editors can see and use
         - offers upload to replace content
-- [ ] unresolved path gives creation form/edit page
-- [ ] saving to non-existence page creates
+- [X] unresolved path gives creation form/edit page
+- [X] saving to non-existence page creates
         - ensure `.md` added to filename if left out
         - current "directory" added by default to filename
         - no filename is error

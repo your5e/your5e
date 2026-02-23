@@ -110,19 +110,43 @@ class NotebookView(NotebookReadMixin, View):
         index_path = (path + "/index").lstrip("/")
         files = [f for f in contents["files"] if f.path != index_path]
 
+        index_exists = False
+        try:
+            index_page = self.object.get_page(path=index_path)
+            index_exists = True
+        except Page.DoesNotExist:
+            index_page = None
+
+        # an index only "exists" if there is content below
+        if not files and not contents["folders"] and not index_exists:
+            context = {"notebook": self.object, "path": path}
+            if user_can_edit:
+                context["suggested_filename"] = self.object.suggest_filename(index_path)
+                context["form_action"] = reverse("notebook_page", kwargs={
+                    "username": username,
+                    "slug": slug,
+                    "path": index_path,
+                })
+            return render(
+                request,
+                "notebooks/not_found.html",
+                context,
+                status=HTTPStatus.NOT_FOUND,
+            )
+
         context = {
             "notebook": self.object,
             "is_owner": is_owner,
             "can_edit": user_can_edit,
             "folders": contents["folders"],
             "files": files,
+            "index_exists": index_exists,
         }
 
         if user_can_edit:
             context["deleted_pages"] = self.object.deleted_pages()
 
-        try:
-            index_page = self.object.get_page(path=index_path)
+        if index_page:
             index_version_number = request.GET.get("index_version")
             if index_version_number:
                 try:
@@ -138,8 +162,6 @@ class NotebookView(NotebookReadMixin, View):
             )
             context["index_version"] = index_version
             context["index_history"] = index_page.history()
-        except Page.DoesNotExist:
-            pass
 
         if is_owner:
             context["collaborators"] = NotebookPermission.objects.filter(
@@ -293,7 +315,15 @@ class NotebookPageView(NotebookReadMixin, View):
         try:
             page = self.object.get_page(path=path)
         except Page.DoesNotExist:
-            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+            context = {"notebook": self.object, "path": path}
+            if NotebookPermissions.can_edit(self.object, request.user):
+                context["suggested_filename"] = self.object.suggest_filename(path)
+            return render(
+                request,
+                "notebooks/not_found.html",
+                context,
+                status=HTTPStatus.NOT_FOUND,
+            )
 
         if "edit" in request.GET:
             if error := NotebookPermissions.check_edit(self.object, request.user):
@@ -334,6 +364,7 @@ class NotebookPageView(NotebookReadMixin, View):
                 "content": content,
                 "history": history,
                 "is_old_version": is_old_version,
+                "can_edit": NotebookPermissions.can_edit(self.object, request.user),
             })
         return HttpResponse(content, content_type=version.mime_type)
 
@@ -342,7 +373,7 @@ class NotebookPageView(NotebookReadMixin, View):
         try:
             page = self.object.get_page(path=path)
         except Page.DoesNotExist:
-            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+            return self.create_page(request, username, slug, path)
 
         version = page.latest_version
         mime_type = version.mime_type
@@ -362,9 +393,73 @@ class NotebookPageView(NotebookReadMixin, View):
             created_by=request.user,
         )
 
+        if path.endswith("/index") or path == "index":
+            folder_path = path.removesuffix("/index").removesuffix("index")
+            if folder_path:
+                url = reverse("notebook_directory", kwargs={
+                    "username": username,
+                    "slug": slug,
+                    "path": folder_path,
+                })
+            else:
+                url = reverse("notebook", kwargs={
+                    "username": username,
+                    "slug": slug,
+                })
+            return redirect(url)
+
         url = reverse("notebook_page", kwargs={
             "username": username,
             "slug": slug,
             "path": path,
         })
+        return redirect(url)
+
+    def create_page(self, request, username, slug, path):
+        filename = request.POST.get("filename", "").strip()
+        if not filename:
+            return HttpResponse(status=HTTPStatus.BAD_REQUEST)
+
+        content = request.POST.get("content", "")
+        if not content:
+            if path.endswith("/index"):
+                folder_path = path.removesuffix("/index")
+                url = reverse("notebook_directory", kwargs={
+                    "username": username,
+                    "slug": slug,
+                    "path": folder_path,
+                })
+                return redirect(url)
+            return redirect(request.path)
+
+        if "/" not in filename:
+            directory = "/".join(path.split("/")[:-1])
+            if directory:
+                filename = f"{directory}/{filename}"
+
+        if not filename.endswith(".md"):
+            filename = f"{filename}.md"
+
+        page = Page.objects.create(wiki=self.object)
+        page.update(
+            filename=filename,
+            mime_type="text/markdown",
+            data=content.encode("utf-8"),
+            created_by=request.user,
+        )
+
+        page_path = page.latest_version.path
+        if page_path.endswith("/index"):
+            folder_path = page_path.removesuffix("/index")
+            url = reverse("notebook_directory", kwargs={
+                "username": username,
+                "slug": slug,
+                "path": folder_path,
+            })
+        else:
+            url = reverse("notebook_page", kwargs={
+                "username": username,
+                "slug": slug,
+                "path": page_path,
+            })
         return redirect(url)

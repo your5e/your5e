@@ -491,6 +491,64 @@ class TestWiki(WikiMixin):
         contents = self.wiki.contents_in("/rules/")
         assert contents["files"] == []
 
+    def test_contents_in_folder_prefers_display_name_over_slug(self):
+        page_a = Page.objects.create(wiki=self.wiki)
+        page_a.update(
+            filename="magic-items/index.md",
+            mime_type="text/markdown",
+            data=b"Index",
+            created_by=self.wendy,
+        )
+        page_b = Page.objects.create(wiki=self.wiki)
+        page_b.update(
+            filename="Magic Items/Bag of Holding.md",
+            mime_type="text/markdown",
+            data=b"A bag",
+            created_by=self.wendy,
+        )
+        contents = self.wiki.contents_in("/")
+        folder_names = [f.name for f in contents["folders"]]
+        assert "Magic Items" in folder_names
+        assert "magic-items" not in folder_names
+
+    def test_contents_in_folder_prefers_display_name_regardless_of_order(self):
+        page_a = Page.objects.create(wiki=self.wiki)
+        page_a.update(
+            filename="Magic Items/Bag of Holding.md",
+            mime_type="text/markdown",
+            data=b"A bag",
+            created_by=self.wendy,
+        )
+        page_b = Page.objects.create(wiki=self.wiki)
+        page_b.update(
+            filename="magic-items/index.md",
+            mime_type="text/markdown",
+            data=b"Index",
+            created_by=self.wendy,
+        )
+        contents = self.wiki.contents_in("/")
+        folder_names = [f.name for f in contents["folders"]]
+        assert "Magic Items" in folder_names
+        assert "magic-items" not in folder_names
+
+    def test_suggest_filename_titlecases_path(self):
+        assert self.wiki.suggest_filename("rumours") == "Rumours"
+
+    def test_suggest_filename_titlecases_nested_path(self):
+        assert self.wiki.suggest_filename("magic-items/bag-of-holding") == \
+            "Magic Items/Bag Of Holding"
+
+    def test_suggest_filename_preserves_existing_folder(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="magic-items/index.md",
+            mime_type="text/markdown",
+            data=b"# Magic Items",
+            created_by=self.wendy,
+        )
+        assert self.wiki.suggest_filename("magic-items/bag-of-holding") == \
+            "magic-items/Bag Of Holding"
+
     def test_purge_deleted_removes_pages_before_cutoff(self):
         self.page.deleted_at = timezone.now() - timedelta(days=30)
         self.page.save()

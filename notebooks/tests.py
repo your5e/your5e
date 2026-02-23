@@ -11,6 +11,12 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
 
 
 class NotebookMixin(UserMixin):
+    # Permission matrix:
+    #   wendy's notebook (private): susan=editor, mary=viewer
+    #   susan's notebook (public):  mary=editor
+    #   mary's notebook (site):     wendy=editor
+    #   hugh has no permissions
+
     @pytest.fixture(autouse=True)
     def setup_notebooks(self, db, setup_users):
         self.wendys_notebook = Notebook.objects.create(
@@ -22,9 +28,29 @@ class NotebookMixin(UserMixin):
             owner=self.susan,
             visibility=Notebook.Visibility.PUBLIC,
         )
+        self.marys_notebook = Notebook.objects.create(
+            name="World Lore",
+            owner=self.mary,
+            visibility=Notebook.Visibility.SITE,
+        )
         self.susans_permission = NotebookPermission.objects.create(
             notebook=self.wendys_notebook,
             user=self.susan,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        NotebookPermission.objects.create(
+            notebook=self.susans_notebook,
+            user=self.mary,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        NotebookPermission.objects.create(
+            notebook=self.marys_notebook,
+            user=self.wendy,
             role=NotebookPermission.Role.EDITOR,
         )
 
@@ -338,14 +364,14 @@ class TestNotebookCollaboratorsView(NotebookMixin):
     def test_add_collaborator_confirmed(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
-            "username": "mary",
+            "username": "hugh",
             "role": "viewer",
             "confirmed": "true",
         })
         assert response.status_code == HTTPStatus.FOUND
         permission = NotebookPermission.objects.get(
             notebook=self.wendys_notebook,
-            user=self.mary,
+            user=self.hugh,
         )
         assert permission.role == NotebookPermission.Role.VIEWER
 
@@ -398,28 +424,28 @@ class TestNotebookCollaboratorsView(NotebookMixin):
     @UserMixin.as_user("wendy")
     def test_non_owner_cannot_add_collaborator(self, client):
         response = client.post("/notebooks/collaborators", {
-            "notebook": self.susans_notebook.pk,
-            "username": "mary",
+            "notebook": self.marys_notebook.pk,
+            "username": "hugh",
             "role": "editor",
             "confirmed": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert not NotebookPermission.objects.filter(
-            notebook=self.susans_notebook,
-            user=self.mary,
+            notebook=self.marys_notebook,
+            user=self.hugh,
         ).exists()
 
     def test_anonymous_cannot_add_collaborator(self, client):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
-            "username": "mary",
+            "username": "hugh",
             "role": "editor",
             "confirmed": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert not NotebookPermission.objects.filter(
             notebook=self.wendys_notebook,
-            user=self.mary,
+            user=self.hugh,
         ).exists()
 
 
@@ -465,7 +491,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert 'type="file"' not in content
         assert 'href="index.md/edit"' not in content
 
-    @UserMixin.as_user("mary")
+    @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_view_private(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.FORBIDDEN
@@ -487,6 +513,42 @@ class TestNotebookIndexPage(NotebookMixin):
         content = response.content.decode()
         assert "This is the index page" in content
         assert '<option value="1"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_empty_folder_returns_404_with_creation_form(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/monsters/")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        content = response.content.decode()
+        assert 'name="filename" value="Monsters/Index"' in content
+        assert 'action="/notebooks/wendy/heros-legendes/monsters/index"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_folder_with_content_but_no_index_shows_create(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Create index" in content
+        assert "Edit index" not in content
+
+    @UserMixin.as_user("wendy")
+    def test_creating_index_redirects_to_folder(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/monsters/index", {
+            "filename": "monsters/index",
+            "content": "# Monsters",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/monsters/"
+
+    @UserMixin.as_user("wendy")
+    def test_creating_page_with_no_content_does_not_create(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/monsters/index", {
+            "filename": "monsters/index",
+            "content": "",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/monsters/"
+        with pytest.raises(Page.DoesNotExist):
+            self.wendys_notebook.get_page(path="monsters/index")
 
 
 @pytest.mark.django_db
@@ -537,11 +599,6 @@ class TestNotebookUpload(NotebookMixin):
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_upload(self, client):
-        NotebookPermission.objects.create(
-            notebook=self.wendys_notebook,
-            user=self.mary,
-            role=NotebookPermission.Role.VIEWER,
-        )
         upload = BytesIO(b"# Hacked\n")
         upload.name = "hacked.md"
         response = client.post("/notebooks/upload", {
@@ -668,11 +725,6 @@ class TestNotebookPageView(NotebookMixin):
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_see_edit_form(self, client):
-        NotebookPermission.objects.create(
-            notebook=self.wendys_notebook,
-            user=self.mary,
-            role=NotebookPermission.Role.VIEWER,
-        )
         response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
         assert response.status_code == HTTPStatus.FORBIDDEN
 
@@ -681,6 +733,25 @@ class TestNotebookPageView(NotebookMixin):
         self.wendys_notebook.save()
         response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @UserMixin.as_user("wendy")
+    def test_owner_sees_edit_link(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes")
+        assert '?edit"' in response.content.decode()
+
+    @UserMixin.as_user("susan")
+    def test_editor_sees_edit_link(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes")
+        assert '?edit"' in response.content.decode()
+
+    @UserMixin.as_user("mary")
+    def test_viewer_does_not_see_edit_link(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert '?edit"' not in response.content.decode()
+
+    def test_anonymous_does_not_see_edit_link(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert '?edit"' not in response.content.decode()
 
     @UserMixin.as_user("wendy")
     def test_owner_can_edit_page(self, client):
@@ -705,6 +776,14 @@ class TestNotebookPageView(NotebookMixin):
         page.refresh_from_db()
         assert page.latest_version.content.data == b"# Editor Update"
         assert page.latest_version.created_by == self.susan
+
+    @UserMixin.as_user("wendy")
+    def test_editing_index_redirects_to_folder(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/index", {
+            "content": "# Updated Index",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/"
 
     @UserMixin.as_user("wendy")
     def test_edit_page_with_file_upload(self, client):
@@ -738,11 +817,6 @@ class TestNotebookPageView(NotebookMixin):
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_upload_file(self, client):
-        NotebookPermission.objects.create(
-            notebook=self.wendys_notebook,
-            user=self.mary,
-            role=NotebookPermission.Role.VIEWER,
-        )
         page = self.wendys_notebook.get_page(path="heroes/shield.png")
         initial_data = page.latest_version.content.data
         upload = BytesIO(b"\x89PNG\r\n\x1a\n")
@@ -772,11 +846,6 @@ class TestNotebookPageView(NotebookMixin):
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_edit(self, client):
-        NotebookPermission.objects.create(
-            notebook=self.wendys_notebook,
-            user=self.mary,
-            role=NotebookPermission.Role.VIEWER,
-        )
         page = self.wendys_notebook.get_page(path="notes")
         initial_data = page.latest_version.content.data
         response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
@@ -797,3 +866,72 @@ class TestNotebookPageView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         page.refresh_from_db()
         assert page.latest_version.content.data == initial_data
+
+    @UserMixin.as_user("wendy")
+    def test_unresolved_path_returns_404_with_form_for_owner(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/rumours")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        content = response.content.decode()
+        assert "<form" in content
+        assert 'name="filename" value="Rumours"' in content
+
+    @UserMixin.as_user("susan")
+    def test_unresolved_path_returns_404_with_form_for_editor(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/monsters/goblin")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        content = response.content.decode()
+        assert "<form" in content
+        assert 'name="filename" value="Monsters/Goblin"' in content
+
+    @UserMixin.as_user("mary")
+    def test_unresolved_path_returns_404_without_form_for_viewer(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/rumours")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        content = response.content.decode()
+        assert 'name="filename"' not in content
+
+    def test_unresolved_path_returns_404_without_form_for_anonymous(self, client):
+        self.wendys_notebook.visibility = Notebook.Visibility.PUBLIC
+        self.wendys_notebook.save()
+        response = client.get("/notebooks/wendy/heros-legendes/rumours")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        content = response.content.decode()
+        assert 'name="filename"' not in content
+
+    @UserMixin.as_user("wendy")
+    def test_create_page_from_unresolved_path(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/bestiary/dragon", {
+            "filename": "dragon",
+            "content": "# Dragon\n\nA fearsome creature.",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/bestiary/dragon"
+        page = self.wendys_notebook.get_page(path="bestiary/dragon")
+        assert page.latest_version.filename == "bestiary/dragon.md"
+        assert page.latest_version.content.data == b"# Dragon\n\nA fearsome creature."
+        assert page.latest_version.created_by == self.wendy
+
+    @UserMixin.as_user("wendy")
+    def test_create_page_allows_different_filename(self, client):
+        response = client.post(
+            "/notebooks/wendy/heros-legendes/quests/retrieve-artifact",
+            {
+                "filename": "Adventures/The MacGuffin Quest.md",
+                "content": "# The MacGuffin Quest",
+            },
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        expected_url = "/notebooks/wendy/heros-legendes/adventures/the-macguffin-quest"
+        assert response.url == expected_url
+        page = self.wendys_notebook.get_page(path="adventures/the-macguffin-quest")
+        assert page.latest_version.filename == "Adventures/The MacGuffin Quest.md"
+
+    @UserMixin.as_user("wendy")
+    def test_create_page_without_filename_returns_error(self, client):
+        initial_count = Page.objects.filter(wiki=self.wendys_notebook).count()
+        response = client.post("/notebooks/wendy/heros-legendes/tavern", {
+            "filename": "",
+            "content": "# The Prancing Pony",
+        })
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert Page.objects.filter(wiki=self.wendys_notebook).count() == initial_count

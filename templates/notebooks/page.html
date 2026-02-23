@@ -11,6 +11,7 @@
 <option value="{{ version.number }}"{% if version.number == page.number %} selected{% endif %}>v{{ version.number }} by {{ version.created_by.username }} on {{ version.created_at|date:"j M Y" }}</option>
 {% endfor %}
 </select>
+{% if can_edit %}<p><a href="?edit">Edit</a></p>{% endif %}
 </header>
 {{ content|safe }}
 </article>

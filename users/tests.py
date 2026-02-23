@@ -44,6 +44,15 @@ class UserMixin:
             description="Bio for Mary",
             is_public=False,
         )
+        self.hugh = User.objects.create_user(
+            username="hugh",
+            email="hugh@example.com",
+            password="testpass",
+            name="Hugh Test",
+            short_name="Hugh",
+            description="Bio for Hugh",
+            is_public=False,
+        )
 
     @classmethod
     def as_user(cls, attr_name):
