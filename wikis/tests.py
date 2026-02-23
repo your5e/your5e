@@ -149,6 +149,12 @@ class TestVersion(WikiMixin):
         self.version.filename = "Maps/World Map.png"
         assert self.version.generate_path() == "maps/world-map.png"
 
+    def test_generate_path_strips_apostrophes(self):
+        self.version.filename = "Baker's Dozen.md"
+        assert self.version.generate_path() == "bakers-dozen"
+        self.version.filename = "Baker\u2019s Dozen.md"
+        assert self.version.generate_path() == "bakers-dozen"
+
     def test_duplicate_paths_rejected_within_wiki(self):
         page_b = Page.objects.create(wiki=self.wiki)
         with pytest.raises(ValidationError):

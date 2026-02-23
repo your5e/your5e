@@ -7,18 +7,16 @@
 <h1>Page not found</h1>
 <p>The page <strong>{{ path }}</strong> does not exist in {{ notebook.name }}.</p>
 
-{% if suggested_filename %}
+{% if form %}
 <h2>Create this page</h2>
+{% if form.non_field_errors %}
+<ul class="errors">
+{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+</ul>
+{% endif %}
 <form method="post"{% if form_action %} action="{{ form_action }}"{% endif %}>
 {% csrf_token %}
-<p>
-<label for="filename">Filename</label><br>
-<input type="text" id="filename" name="filename" value="{{ suggested_filename }}">
-</p>
-<p>
-<label for="content">Content</label><br>
-<textarea id="content" name="content" rows="20" cols="80"></textarea>
-</p>
+{% include "notebooks/includes/page_form_fields.html" %}
 <p>
 <input type="submit" value="Create">
 </p>

@@ -706,6 +706,7 @@ class TestNotebookPageView(NotebookMixin):
         assert "<textarea" in content
         assert 'type="file"' in content
         assert 'type="submit"' in content
+        assert 'name="filename" value="notes"' in content
 
     @UserMixin.as_user("wendy")
     def test_edit_binary_shows_form(self, client):
@@ -758,6 +759,7 @@ class TestNotebookPageView(NotebookMixin):
         page = self.wendys_notebook.get_page(path="notes")
         initial_version_count = page.version_set.count()
         response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "filename": "notes",
             "content": "# Updated Notes\n\nNew content.",
         })
         assert response.status_code == HTTPStatus.FOUND
@@ -770,6 +772,7 @@ class TestNotebookPageView(NotebookMixin):
     def test_editor_can_edit_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")
         response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "filename": "notes",
             "content": "# Editor Update",
         })
         assert response.status_code == HTTPStatus.FOUND
@@ -780,6 +783,7 @@ class TestNotebookPageView(NotebookMixin):
     @UserMixin.as_user("wendy")
     def test_editing_index_redirects_to_folder(self, client):
         response = client.post("/notebooks/wendy/heros-legendes/index", {
+            "filename": "index",
             "content": "# Updated Index",
         })
         assert response.status_code == HTTPStatus.FOUND
@@ -794,7 +798,7 @@ class TestNotebookPageView(NotebookMixin):
         upload.name = "shield.png"
         response = client.post(
             "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"file": upload},
+            {"filename": "heroes/shield.png", "file": upload},
         )
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
@@ -809,7 +813,7 @@ class TestNotebookPageView(NotebookMixin):
         upload.name = "shield.png"
         response = client.post(
             "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"file": upload},
+            {"filename": "heroes/shield.png", "file": upload},
         )
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
@@ -823,7 +827,7 @@ class TestNotebookPageView(NotebookMixin):
         upload.name = "shield.png"
         response = client.post(
             "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"file": upload},
+            {"filename": "heroes/shield.png", "file": upload},
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
         page.refresh_from_db()
@@ -838,7 +842,7 @@ class TestNotebookPageView(NotebookMixin):
         upload.name = "shield.png"
         response = client.post(
             "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"file": upload},
+            {"filename": "heroes/shield.png", "file": upload},
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         page.refresh_from_db()
@@ -849,6 +853,7 @@ class TestNotebookPageView(NotebookMixin):
         page = self.wendys_notebook.get_page(path="notes")
         initial_data = page.latest_version.content.data
         response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "filename": "notes",
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
@@ -861,6 +866,7 @@ class TestNotebookPageView(NotebookMixin):
         page = self.wendys_notebook.get_page(path="notes")
         initial_data = page.latest_version.content.data
         response = client.post("/notebooks/wendy/heros-legendes/notes?edit", {
+            "filename": "notes",
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
@@ -935,3 +941,37 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert Page.objects.filter(wiki=self.wendys_notebook).count() == initial_count
+
+    @UserMixin.as_user("wendy")
+    def test_edit_page_with_new_filename_renames(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "archive/Campaign Notes",
+            "content": "# Campaign Notes\n\nRenamed.",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/archive/campaign-notes"
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.filename == "archive/Campaign Notes.md"
+        assert page.latest_version.content.data == b"# Campaign Notes\n\nRenamed."
+
+    @UserMixin.as_user("wendy")
+    def test_rename_to_existing_path_shows_error_with_link(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "Session One",
+            "content": "# Conflict",
+        })
+        assert response.status_code == HTTPStatus.CONFLICT
+        content = response.content.decode()
+        assert "already exists" in content
+        expected_link = (
+            '<a href="/notebooks/wendy/heros-legendes/session-one">'
+            "Session One</a>"
+        )
+        assert expected_link in content
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count

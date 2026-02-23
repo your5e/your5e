@@ -5,15 +5,21 @@
 {% block content %}
 <article>
 <h1>Edit {{ version.display_name }}</h1>
+{% if conflict_url %}
+<p class="error">A page already exists at <a href="{{ conflict_url }}">{{ conflict_filename }}</a>.</p>
+{% endif %}
+{% if form.non_field_errors %}
+<ul class="errors">
+{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+</ul>
+{% endif %}
 <form method="post" enctype="multipart/form-data">
 {% csrf_token %}
+{% include "notebooks/includes/page_form_fields.html" %}
 <p>
-<label for="content">Content</label><br>
-<textarea id="content" name="content" rows="20" cols="80">{{ content }}</textarea>
-</p>
-<p>
-<label for="file">Or upload a file</label><br>
-<input type="file" id="file" name="file">
+{{ form.file.label_tag }}<br>
+{{ form.file }}
+{% if form.file.errors %}<span class="error">{{ form.file.errors.0 }}</span>{% endif %}
 </p>
 <p>
 <input type="submit" value="Save">

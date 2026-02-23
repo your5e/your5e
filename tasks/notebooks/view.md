@@ -61,7 +61,7 @@ Edit a page -- upload new content, change the filename, delete.
         - ensure `.md` added to filename if left out
         - current "directory" added by default to filename
         - no filename is error
-- [ ] changing filename renames before updating content
+- [X] changing filename renames before updating content
         - redirects to new path
 - [ ] delete shows confirmation
 - [ ] upload file resets mime type and filename

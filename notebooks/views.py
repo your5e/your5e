@@ -1,11 +1,13 @@
 import mimetypes
 from http import HTTPStatus
 
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
+from notebooks.forms import PageForm
 from notebooks.models import Notebook, NotebookPermission
 from users.models import User
 from wikis.models import Page
@@ -121,7 +123,8 @@ class NotebookView(NotebookReadMixin, View):
         if not files and not contents["folders"] and not index_exists:
             context = {"notebook": self.object, "path": path}
             if user_can_edit:
-                context["suggested_filename"] = self.object.suggest_filename(index_path)
+                filename = self.object.suggest_filename(index_path)
+                context["form"] = PageForm(initial={"filename": filename})
                 context["form_action"] = reverse("notebook_page", kwargs={
                     "username": username,
                     "slug": slug,
@@ -317,7 +320,8 @@ class NotebookPageView(NotebookReadMixin, View):
         except Page.DoesNotExist:
             context = {"notebook": self.object, "path": path}
             if NotebookPermissions.can_edit(self.object, request.user):
-                context["suggested_filename"] = self.object.suggest_filename(path)
+                filename = self.object.suggest_filename(path)
+                context["form"] = PageForm(initial={"filename": filename})
             return render(
                 request,
                 "notebooks/not_found.html",
@@ -336,11 +340,16 @@ class NotebookPageView(NotebookReadMixin, View):
             else:
                 content = ""
 
+            filename = version.filename
+            if filename.lower().endswith(".md"):
+                filename = filename[:-3]
+
+            form = PageForm(initial={"filename": filename, "content": content})
             return render(request, "notebooks/edit.html", {
                 "notebook": self.object,
                 "page": page,
                 "version": version,
-                "content": content,
+                "form": form,
             })
 
         history = page.history()
@@ -372,29 +381,121 @@ class NotebookPageView(NotebookReadMixin, View):
     def post(self, request, username, slug, path):
         try:
             page = self.object.get_page(path=path)
+            version = page.latest_version
+            mime_type = version.mime_type
+            default_filename = version.filename
         except Page.DoesNotExist:
-            return self.create_page(request, username, slug, path)
+            page = None
+            version = None
+            mime_type = "text/markdown"
+            default_filename = None
 
-        version = page.latest_version
-        mime_type = version.mime_type
+        form = PageForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return render(
+                request,
+                "notebooks/edit.html",
+                {
+                    "notebook": self.object,
+                    "page": page,
+                    "version": version,
+                    "form": form,
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
 
-        if "file" in request.FILES:
-            uploaded_file = request.FILES["file"]
+        filename = form.cleaned_data["filename"].strip()
+        if filename:
+            if "/" not in filename:
+                directory = "/".join(path.split("/")[:-1])
+                if directory:
+                    filename = f"{directory}/{filename}"
+            if mime_type == "text/markdown" and not filename.lower().endswith(".md"):
+                filename = f"{filename}.md"
+        elif default_filename:
+            filename = default_filename
+        else:
+            form.add_error("filename", "Filename is required")
+            return render(
+                request,
+                "notebooks/edit.html",
+                {
+                    "notebook": self.object,
+                    "page": page,
+                    "version": version,
+                    "form": form,
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+        if form.cleaned_data.get("file"):
+            uploaded_file = form.cleaned_data["file"]
             if uploaded_file.size > MAX_UPLOAD_SIZE:
-                return HttpResponse(status=HTTPStatus.BAD_REQUEST)
+                form.add_error("file", "File too large (max 2MB)")
+                return render(
+                    request,
+                    "notebooks/edit.html",
+                    {
+                        "notebook": self.object,
+                        "page": page,
+                        "version": version,
+                        "form": form,
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
             data = uploaded_file.read()
         else:
-            data = request.POST.get("content", "").encode("utf-8")
+            content = form.cleaned_data.get("content", "")
+            if not content and page is None:
+                if path.endswith("/index"):
+                    folder_path = path.removesuffix("/index")
+                    url = reverse("notebook_directory", kwargs={
+                        "username": username,
+                        "slug": slug,
+                        "path": folder_path,
+                    })
+                    return redirect(url)
+                return redirect(request.path)
+            data = content.encode("utf-8")
 
-        page.update(
-            filename=version.filename,
-            mime_type=mime_type,
-            data=data,
-            created_by=request.user,
-        )
+        if page is None:
+            page = Page.objects.create(wiki=self.object)
 
-        if path.endswith("/index") or path == "index":
-            folder_path = path.removesuffix("/index").removesuffix("index")
+        try:
+            new_version = page.update(
+                filename=filename,
+                mime_type=mime_type,
+                data=data,
+                created_by=request.user,
+            )
+        except ValidationError as e:
+            context = {
+                "notebook": self.object,
+                "page": page,
+                "version": page.latest_version,
+                "form": form,
+            }
+            for message in e.messages:
+                if "already exists" in message:
+                    conflict_path = message.split()[1]
+                    context["conflict_filename"] = form.cleaned_data["filename"]
+                    context["conflict_url"] = reverse("notebook_page", kwargs={
+                        "username": username,
+                        "slug": slug,
+                        "path": conflict_path,
+                    })
+                else:
+                    form.add_error(None, message)
+            return render(
+                request,
+                "notebooks/edit.html",
+                context,
+                status=HTTPStatus.CONFLICT,
+            )
+
+        new_path = new_version.path
+        if new_path.endswith("/index") or new_path == "index":
+            folder_path = new_path.removesuffix("/index").removesuffix("index")
             if folder_path:
                 url = reverse("notebook_directory", kwargs={
                     "username": username,
@@ -411,55 +512,6 @@ class NotebookPageView(NotebookReadMixin, View):
         url = reverse("notebook_page", kwargs={
             "username": username,
             "slug": slug,
-            "path": path,
+            "path": new_path,
         })
-        return redirect(url)
-
-    def create_page(self, request, username, slug, path):
-        filename = request.POST.get("filename", "").strip()
-        if not filename:
-            return HttpResponse(status=HTTPStatus.BAD_REQUEST)
-
-        content = request.POST.get("content", "")
-        if not content:
-            if path.endswith("/index"):
-                folder_path = path.removesuffix("/index")
-                url = reverse("notebook_directory", kwargs={
-                    "username": username,
-                    "slug": slug,
-                    "path": folder_path,
-                })
-                return redirect(url)
-            return redirect(request.path)
-
-        if "/" not in filename:
-            directory = "/".join(path.split("/")[:-1])
-            if directory:
-                filename = f"{directory}/{filename}"
-
-        if not filename.endswith(".md"):
-            filename = f"{filename}.md"
-
-        page = Page.objects.create(wiki=self.object)
-        page.update(
-            filename=filename,
-            mime_type="text/markdown",
-            data=content.encode("utf-8"),
-            created_by=request.user,
-        )
-
-        page_path = page.latest_version.path
-        if page_path.endswith("/index"):
-            folder_path = page_path.removesuffix("/index")
-            url = reverse("notebook_directory", kwargs={
-                "username": username,
-                "slug": slug,
-                "path": folder_path,
-            })
-        else:
-            url = reverse("notebook_page", kwargs={
-                "username": username,
-                "slug": slug,
-                "path": page_path,
-            })
         return redirect(url)

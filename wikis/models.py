@@ -278,6 +278,7 @@ class Version(models.Model):
         parts = filename.split("/")
         result = []
         for part in parts:
+            part = part.replace("'", "")
             if "." in part:
                 name, ext = part.rsplit(".", 1)
                 if ext.lower() == "md":

@@ -1,0 +1,10 @@
+<p>
+{{ form.filename.label_tag }}<br>
+{{ form.filename }}
+{% if form.filename.errors %}<span class="error">{{ form.filename.errors.0 }}</span>{% endif %}
+</p>
+<p>
+{{ form.content.label_tag }}<br>
+{{ form.content }}
+{% if form.content.errors %}<span class="error">{{ form.content.errors.0 }}</span>{% endif %}
+</p>
