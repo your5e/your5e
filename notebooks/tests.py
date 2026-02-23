@@ -149,6 +149,14 @@ class TestNotebook(NotebookMixin):
         assert self.wendys_notebook.name == "Session Log"
         assert self.wendys_notebook.slug == "session-log-2"
 
+    def test_get_folder_url_for_nested_path(self):
+        url = self.wendys_notebook.get_folder_url("heroes/theron")
+        assert url == "/notebooks/wendy/heros-legendes/heroes/"
+
+    def test_get_folder_url_for_root_path(self):
+        url = self.wendys_notebook.get_folder_url("notes")
+        assert url == "/notebooks/wendy/heros-legendes/"
+
 
 @pytest.mark.django_db
 class TestProfileNotebooks(NotebookMixin):
@@ -461,6 +469,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert 'href="old-draft.md/restore"' in content
         assert 'type="file"' in content
         assert 'href="index?edit"' in content
+        assert 'action="/notebooks/delete"' in content
 
     @UserMixin.as_user("wendy")
     def test_owner_sees_full_index(self, client):
@@ -490,6 +499,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert "old-draft.md" not in content
         assert 'type="file"' not in content
         assert 'href="index.md/edit"' not in content
+        assert 'action="/notebooks/delete"' not in content
 
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_view_private(self, client):
@@ -707,6 +717,7 @@ class TestNotebookPageView(NotebookMixin):
         assert 'type="file"' in content
         assert 'type="submit"' in content
         assert 'name="filename" value="notes"' in content
+        assert 'action="/notebooks/delete"' in content
 
     @UserMixin.as_user("wendy")
     def test_edit_binary_shows_form(self, client):
@@ -975,3 +986,68 @@ class TestNotebookPageView(NotebookMixin):
         assert expected_link in content
         page.refresh_from_db()
         assert page.version_set.count() == initial_version_count
+
+
+@pytest.mark.django_db
+class TestNotebookPageDeleteView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_delete_shows_confirmation(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        response = client.post("/notebooks/delete", {
+            "notebook": self.wendys_notebook.pk,
+            "page": page.pk,
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "confirm" in content.lower()
+        assert "notes" in content.lower()
+
+    @UserMixin.as_user("wendy")
+    def test_delete_confirmed_soft_deletes_and_redirects_to_folder(self, client):
+        page = self.wendys_notebook.get_page(path="heroes/theron")
+        assert page.deleted_at is None
+        response = client.post("/notebooks/delete", {
+            "notebook": self.wendys_notebook.pk,
+            "page": page.pk,
+            "confirmed": "true",
+        })
+        assert response.status_code == HTTPStatus.SEE_OTHER
+        assert response.url == "/notebooks/wendy/heros-legendes/heroes/"
+        page.refresh_from_db()
+        assert page.deleted_at is not None
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_delete_page(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        response = client.post("/notebooks/delete", {
+            "notebook": self.wendys_notebook.pk,
+            "page": page.pk,
+            "confirmed": "true",
+        })
+        assert response.status_code == HTTPStatus.SEE_OTHER
+        page.refresh_from_db()
+        assert page.deleted_at is not None
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_delete_page(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        response = client.post("/notebooks/delete", {
+            "notebook": self.wendys_notebook.pk,
+            "page": page.pk,
+            "confirmed": "true",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        page.refresh_from_db()
+        assert page.deleted_at is None
+
+    def test_anonymous_cannot_delete_page(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        response = client.post("/notebooks/delete", {
+            "notebook": self.wendys_notebook.pk,
+            "page": page.pk,
+            "confirmed": "true",
+        })
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        page.refresh_from_db()
+        assert page.deleted_at is None
+

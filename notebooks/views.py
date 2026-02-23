@@ -2,7 +2,7 @@ import mimetypes
 from http import HTTPStatus
 
 from django.core.exceptions import ValidationError
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
@@ -230,6 +230,26 @@ class NotebookVisibilityView(NotebookWriteMixin, View):
         return redirect(self.object)
 
 
+class NotebookPageDeleteView(NotebookWriteMixin, View):
+    @NotebookPermissions.edit_required
+    def post(self, request):
+        page = get_object_or_404(Page, pk=request.POST.get("page"))
+        confirmed = request.POST.get("confirmed") == "true"
+
+        if not confirmed:
+            return render(request, "notebooks/confirm_delete.html", {
+                "notebook": self.object,
+                "page": page,
+            })
+
+        page.soft_delete()
+
+        return HttpResponseRedirect(
+            self.object.get_folder_url(page.latest_version.path),
+            status=HTTPStatus.SEE_OTHER,
+        )
+
+
 class NotebookCollaboratorsView(NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
@@ -448,13 +468,7 @@ class NotebookPageView(NotebookReadMixin, View):
             content = form.cleaned_data.get("content", "")
             if not content and page is None:
                 if path.endswith("/index"):
-                    folder_path = path.removesuffix("/index")
-                    url = reverse("notebook_directory", kwargs={
-                        "username": username,
-                        "slug": slug,
-                        "path": folder_path,
-                    })
-                    return redirect(url)
+                    return redirect(self.object.get_folder_url(path))
                 return redirect(request.path)
             data = content.encode("utf-8")
 
@@ -495,19 +509,7 @@ class NotebookPageView(NotebookReadMixin, View):
 
         new_path = new_version.path
         if new_path.endswith("/index") or new_path == "index":
-            folder_path = new_path.removesuffix("/index").removesuffix("index")
-            if folder_path:
-                url = reverse("notebook_directory", kwargs={
-                    "username": username,
-                    "slug": slug,
-                    "path": folder_path,
-                })
-            else:
-                url = reverse("notebook", kwargs={
-                    "username": username,
-                    "slug": slug,
-                })
-            return redirect(url)
+            return redirect(self.object.get_folder_url(new_path))
 
         url = reverse("notebook_page", kwargs={
             "username": username,

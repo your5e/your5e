@@ -34,7 +34,10 @@
 {% for file in files %}
   <li>
     <a href="{{ notebook.get_absolute_url }}{{ file.path }}">{{ file.display_name }}</a>
-    {% if can_edit %}<a href="{{ notebook.get_absolute_url }}{{ file.path }}?edit">edit</a>{% endif %}
+    {% if can_edit %}
+    <a href="{{ notebook.get_absolute_url }}{{ file.path }}?edit">edit</a>
+    {% include "notebooks/includes/delete_form.html" with page_pk=file.page.pk %}
+    {% endif %}
   </li>
 {% endfor %}
 </ul>

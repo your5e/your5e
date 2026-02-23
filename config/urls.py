@@ -5,6 +5,7 @@ from django.views.generic import RedirectView
 
 from notebooks.views import (
     NotebookCollaboratorsView,
+    NotebookPageDeleteView,
     NotebookPageView,
     NotebookRenameView,
     NotebookUploadView,
@@ -86,6 +87,11 @@ urlpatterns = [
         route="notebooks/upload",
         name="notebook_upload",
         view=NotebookUploadView.as_view(),
+    ),
+    path(
+        route="notebooks/delete",
+        name="notebook_delete",
+        view=NotebookPageDeleteView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/",

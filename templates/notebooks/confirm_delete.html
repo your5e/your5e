@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm delete - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Confirm delete</h1>
+
+<p>Delete "{{ page.latest_version.display_name }}" from "{{ notebook.name }}"?</p>
+
+<form method="post" action="{% url 'notebook_delete' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <input type="hidden" name="page" value="{{ page.pk }}">
+  <input type="hidden" name="confirmed" value="true">
+  <button type="submit">Confirm</button>
+</form>
+
+<p><a href="{% url 'notebook' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
+{% endblock %}

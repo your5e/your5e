@@ -44,6 +44,16 @@ class Notebook(Wiki):
             "slug": self.slug,
         })
 
+    def get_folder_url(self, path):
+        if "/" in path:
+            folder = path.rsplit("/", 1)[0]
+            return reverse("notebook_directory", kwargs={
+                "username": self.owner.username,
+                "slug": self.slug,
+                "path": folder,
+            })
+        return self.get_absolute_url()
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = self.generate_unique_slug()

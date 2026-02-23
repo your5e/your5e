@@ -63,7 +63,7 @@ Edit a page -- upload new content, change the filename, delete.
         - no filename is error
 - [X] changing filename renames before updating content
         - redirects to new path
-- [ ] delete shows confirmation
+- [X] delete shows confirmation
 - [ ] upload file resets mime type and filename
 
 
