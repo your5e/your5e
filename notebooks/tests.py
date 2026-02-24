@@ -593,6 +593,20 @@ class TestNotebookUpload(NotebookMixin):
         assert page.latest_version.mime_type == "image/png"
 
     @UserMixin.as_user("susan")
+    def test_editor_can_upload(self, client):
+        data = b"\x89PNG\r\n\x1a\n"
+        upload = BytesIO(data)
+        upload.name = "editor-upload.png"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "editor-upload.png",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="editor-upload.png")
+        assert page.latest_version.content.data == data
+
+    @UserMixin.as_user("susan")
     def test_upload_rejects_over_2mb(self, client):
         large_data = b"x" * (2 * 1024 * 1024 + 1)
         upload = BytesIO(large_data)
@@ -606,6 +620,65 @@ class TestNotebookUpload(NotebookMixin):
         assert response.status_code == HTTPStatus.BAD_REQUEST
         final_page_count = Page.objects.filter(wiki=self.wendys_notebook).count()
         assert final_page_count == initial_page_count
+
+    @UserMixin.as_user("wendy")
+    def test_upload_with_form_filename_uses_form_filename(self, client):
+        data = b"# New Page\n\nSome content."
+        upload = BytesIO(data)
+        upload.name = "ignored.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "Specified Name.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="specified-name")
+        assert page.latest_version.filename == "Specified Name.md"
+
+    @UserMixin.as_user("wendy")
+    def test_upload_without_form_filename_uses_uploaded_filename(self, client):
+        data = b"# New Page\n\nSome content."
+        upload = BytesIO(data)
+        upload.name = "Uploaded File.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="uploaded-file")
+        assert page.latest_version.filename == "Uploaded File.md"
+
+    @UserMixin.as_user("wendy")
+    def test_upload_existing_filename_creates_new_version(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        upload = BytesIO(b"# Updated Notes\n\nNew content.")
+        upload.name = "notes.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "notes.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content."
+
+    @UserMixin.as_user("wendy")
+    def test_upload_identical_content_does_not_create_version(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        existing_content = page.latest_version.content.data
+        upload = BytesIO(existing_content)
+        upload.name = "notes.md"
+        response = client.post("/notebooks/upload", {
+            "notebook": self.wendys_notebook.pk,
+            "file": upload,
+            "filename": "notes.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_upload(self, client):
@@ -799,65 +872,6 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/wendy/heros-legendes/"
-
-    @UserMixin.as_user("wendy")
-    def test_edit_page_with_file_upload(self, client):
-        page = self.wendys_notebook.get_page(path="heroes/shield.png")
-        initial_version_count = page.version_set.count()
-        new_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02"
-        upload = BytesIO(new_png)
-        upload.name = "shield.png"
-        response = client.post(
-            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"filename": "heroes/shield.png", "file": upload},
-        )
-        assert response.status_code == HTTPStatus.FOUND
-        page.refresh_from_db()
-        assert page.version_set.count() == initial_version_count + 1
-        assert page.latest_version.content.data == new_png
-
-    @UserMixin.as_user("susan")
-    def test_editor_can_upload_file(self, client):
-        page = self.wendys_notebook.get_page(path="heroes/shield.png")
-        new_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x03"
-        upload = BytesIO(new_png)
-        upload.name = "shield.png"
-        response = client.post(
-            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"filename": "heroes/shield.png", "file": upload},
-        )
-        assert response.status_code == HTTPStatus.FOUND
-        page.refresh_from_db()
-        assert page.latest_version.content.data == new_png
-
-    @UserMixin.as_user("mary")
-    def test_viewer_cannot_upload_file(self, client):
-        page = self.wendys_notebook.get_page(path="heroes/shield.png")
-        initial_data = page.latest_version.content.data
-        upload = BytesIO(b"\x89PNG\r\n\x1a\n")
-        upload.name = "shield.png"
-        response = client.post(
-            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"filename": "heroes/shield.png", "file": upload},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        page.refresh_from_db()
-        assert page.latest_version.content.data == initial_data
-
-    def test_anonymous_cannot_upload_file(self, client):
-        self.wendys_notebook.visibility = Notebook.Visibility.PUBLIC
-        self.wendys_notebook.save()
-        page = self.wendys_notebook.get_page(path="heroes/shield.png")
-        initial_data = page.latest_version.content.data
-        upload = BytesIO(b"\x89PNG\r\n\x1a\n")
-        upload.name = "shield.png"
-        response = client.post(
-            "/notebooks/wendy/heros-legendes/heroes/shield.png?edit",
-            {"filename": "heroes/shield.png", "file": upload},
-        )
-        assert response.status_code == HTTPStatus.UNAUTHORIZED
-        page.refresh_from_db()
-        assert page.latest_version.content.data == initial_data
 
     @UserMixin.as_user("mary")
     def test_viewer_cannot_edit(self, client):

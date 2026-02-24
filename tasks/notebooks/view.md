@@ -30,7 +30,7 @@ logically "under" this folder. If `.../index.md` exists, it is folded in.
           extensions if this fails, otherwise a useful default
 - [X] link to edit `index.md`
         - only owners and editors
-- [ ] clarify what uploading a file with an existing filename does
+- [X] clarify what uploading a file with an existing filename does
         - add tests to document the current behaviour
         - decide if it should update the existing page or error
 
@@ -64,7 +64,7 @@ Edit a page -- upload new content, change the filename, delete.
 - [X] changing filename renames before updating content
         - redirects to new path
 - [X] delete shows confirmation
-- [ ] upload file resets mime type and filename
+- [X] upload file resets mime type and filename
 
 
 # Notebook permissions check @phase

@@ -13,18 +13,28 @@
 {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
 </ul>
 {% endif %}
-<form method="post" enctype="multipart/form-data">
+<form method="post">
 {% csrf_token %}
 {% include "notebooks/includes/page_form_fields.html" %}
-<p>
-{{ form.file.label_tag }}<br>
-{{ form.file }}
-{% if form.file.errors %}<span class="error">{{ form.file.errors.0 }}</span>{% endif %}
-</p>
 <p>
 <input type="submit" value="Save">
 </p>
 </form>
+
+<h2>Replace with file</h2>
+<form method="post" action="/notebooks/upload" enctype="multipart/form-data">
+{% csrf_token %}
+<input type="hidden" name="notebook" value="{{ notebook.pk }}">
+<input type="hidden" name="filename" value="{{ version.filename }}">
+<p>
+{{ form.file.label_tag }}<br>
+{{ form.file }}
+</p>
+<p>
+<input type="submit" value="Upload">
+</p>
+</form>
+
 {% include "notebooks/includes/delete_form.html" with page_pk=page.pk %}
 </article>
 {% endblock %}

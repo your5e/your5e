@@ -178,7 +178,11 @@ class NotebookUploadView(NotebookWriteMixin, View):
     @NotebookPermissions.edit_required
     def post(self, request):
         uploaded_file = request.FILES.get("file")
-        filename = request.POST.get("filename") or uploaded_file.name
+        form_filename = request.POST.get("filename")
+        if form_filename:
+            filename = form_filename
+        else:
+            filename = uploaded_file.name
 
         if uploaded_file.size > MAX_UPLOAD_SIZE:
             return HttpResponse(status=HTTPStatus.BAD_REQUEST)
@@ -191,7 +195,11 @@ class NotebookUploadView(NotebookWriteMixin, View):
                 ext = ""
             mime_type = MIME_TYPE_FALLBACKS.get(ext, DEFAULT_MIME_TYPE)
 
-        page = Page.objects.create(wiki=self.object)
+        try:
+            page = self.object.get_page(filename=filename)
+        except Page.DoesNotExist:
+            page = Page.objects.create(wiki=self.object)
+
         page.update(
             filename=filename,
             mime_type=mime_type,
@@ -410,7 +418,7 @@ class NotebookPageView(NotebookReadMixin, View):
             mime_type = "text/markdown"
             default_filename = None
 
-        form = PageForm(request.POST, request.FILES)
+        form = PageForm(request.POST)
         if not form.is_valid():
             return render(
                 request,
@@ -430,8 +438,9 @@ class NotebookPageView(NotebookReadMixin, View):
                 directory = "/".join(path.split("/")[:-1])
                 if directory:
                     filename = f"{directory}/{filename}"
-            if mime_type == "text/markdown" and not filename.lower().endswith(".md"):
-                filename = f"{filename}.md"
+            if mime_type == "text/markdown":
+                if not filename.lower().endswith(".md"):
+                    filename = f"{filename}.md"
         elif default_filename:
             filename = default_filename
         else:
@@ -448,29 +457,12 @@ class NotebookPageView(NotebookReadMixin, View):
                 status=HTTPStatus.BAD_REQUEST,
             )
 
-        if form.cleaned_data.get("file"):
-            uploaded_file = form.cleaned_data["file"]
-            if uploaded_file.size > MAX_UPLOAD_SIZE:
-                form.add_error("file", "File too large (max 2MB)")
-                return render(
-                    request,
-                    "notebooks/edit.html",
-                    {
-                        "notebook": self.object,
-                        "page": page,
-                        "version": version,
-                        "form": form,
-                    },
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            data = uploaded_file.read()
-        else:
-            content = form.cleaned_data.get("content", "")
-            if not content and page is None:
-                if path.endswith("/index"):
-                    return redirect(self.object.get_folder_url(path))
-                return redirect(request.path)
-            data = content.encode("utf-8")
+        content = form.cleaned_data.get("content", "")
+        if not content and page is None:
+            if path.endswith("/index"):
+                return redirect(self.object.get_folder_url(path))
+            return redirect(request.path)
+        data = content.encode("utf-8")
 
         if page is None:
             page = Page.objects.create(wiki=self.object)
