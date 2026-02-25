@@ -4,7 +4,7 @@ from textwrap import dedent
 from django.core.management.base import BaseCommand
 
 from notebooks.models import Notebook, NotebookPermission
-from users.models import ProfileLink, User
+from users.models import AuthToken, ProfileLink, User
 from wikis.models import Page
 
 
@@ -33,6 +33,9 @@ class Command(BaseCommand):
             url="https://marknormanfrancis.com",
             label="Website",
         )
+        _, token = AuthToken.objects.create(user=norm, name="Development")
+        self.stdout.write(f"API token for norm: {token}")
+
         wendy = User.objects.create_user(
             username="wendy",
             email="wendy@localhost",

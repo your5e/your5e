@@ -92,6 +92,31 @@
   <button type="submit">Create notebook</button>
 </form>
 
+<h2>API Tokens</h2>
+{% if token_created %}
+<p><strong>Copy this now:</strong> <code>{{ token_created }}</code></p>
+{% endif %}
+{% if tokens %}
+<ul>
+{% for token in tokens %}
+  <li>
+    {{ token.name|default:"Unnamed token" }} ({{ token.created|date:"j M Y" }})
+    <form method="post" action="{% url 'profile_tokens' username=profile_user.username %}">
+      {% csrf_token %}
+      <input type="hidden" name="delete" value="{{ token.pk }}">
+      <button type="submit">Delete</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" action="{% url 'profile_tokens' username=profile_user.username %}">
+  {% csrf_token %}
+  <p><input type="text" name="name" placeholder="Token name (optional)"></p>
+  <button type="submit">Create token</button>
+</form>
+
 <p><a href="{% url 'password_change' username=profile_user.username %}">Change password</a></p>
 {% endif %}
 {% endblock %}

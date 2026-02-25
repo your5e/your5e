@@ -3,12 +3,10 @@
 Users can create multiple tokens for API authorisation.
 Tokens are managed on the profile page.
 
-Token
-- name (user provided, nullable)
-- value (unique, generated)
-- created_at
-- last_used_at
+Use django-rest-framework and django-rest-knox for token authentication.
+Knox handles token hashing (shown once at creation, never retrievable).
 
-- [ ] user can create a token without giving it a name, one is provided
-- [ ] user can change the token name
-- [ ] user can delete any token
+Optionally, tokens can be named to help users identify them.
+
+- [X] user can create a token
+- [X] user can delete any token

@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
+    "knox",
     "users",
     "wikis",
     "notebooks",
@@ -82,3 +84,9 @@ if DEBUG:
     PASSWORD_HASHERS = [
         "django.contrib.auth.hashers.MD5PasswordHasher",
     ]
+
+KNOX_TOKEN_MODEL = "users.AuthToken"
+
+REST_KNOX = {
+    "TOKEN_TTL": None,
+}

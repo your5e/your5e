@@ -5,6 +5,7 @@ from django.contrib.auth.models import (
 )
 from django.db import models
 from django.utils import timezone
+from knox.models import AbstractAuthToken
 
 
 def get_sentinel_user():
@@ -73,3 +74,10 @@ class ProfileLink(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.label} link"
+
+
+class AuthToken(AbstractAuthToken):
+    name = models.CharField(max_length=100, blank=True, default="")
+
+    def __str__(self):
+        return f"{self.user} token ({self.name or 'unnamed'})"

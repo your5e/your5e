@@ -18,6 +18,7 @@ from users.views import (
     ProfileLinksView,
     ProfileNotebooksView,
     ProfileRedirectView,
+    ProfileTokensView,
     ProfileView,
     ProfileVisibilityView,
     UserLoginView,
@@ -67,6 +68,11 @@ urlpatterns = [
         route="profile/<str:username>/notebooks",
         name="profile_notebooks",
         view=ProfileNotebooksView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/tokens",
+        name="profile_tokens",
+        view=ProfileTokensView.as_view(),
     ),
 
     path(

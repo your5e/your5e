@@ -6,7 +6,7 @@ import pytest
 from django.db import IntegrityError
 
 from users.backends import EmailOrUserBackend
-from users.models import ProfileLink, User, get_sentinel_user
+from users.models import AuthToken, ProfileLink, User, get_sentinel_user
 
 
 class UserMixin:
@@ -399,6 +399,79 @@ class TestProfileView(UserMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.wendy.refresh_from_db()
         assert self.wendy.name == "Wendy Testaburger"
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_create_token(self, client):
+        response = client.post("/profile/wendy/tokens", {})
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        token = AuthToken.objects.get(user=self.wendy)
+        assert token.expiry is None
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_create_named_token(self, client):
+        response = client.post("/profile/wendy/tokens", {"name": "My Script"})
+        assert response.status_code == HTTPStatus.FOUND
+        token = AuthToken.objects.get(user=self.wendy)
+        assert token.name == "My Script"
+
+    @UserMixin.as_user("wendy")
+    def test_token_shown_once_after_creation(self, client):
+        response = client.post(
+            "/profile/wendy/tokens", {}, follow=True
+        )
+        content = response.content.decode()
+        assert "token_created" in content or "Copy this now" in content
+
+    @UserMixin.as_user("wendy")
+    def test_token_not_shown_on_subsequent_loads(self, client):
+        response = client.post("/profile/wendy/tokens", {})
+        assert response.status_code == HTTPStatus.FOUND
+        assert AuthToken.objects.filter(user=self.wendy).count() == 1
+        client.get("/profile/wendy/")               # consumes token notice
+        response = client.get("/profile/wendy/")    # fetch again
+        content = response.content.decode()
+        assert "Copy this now" not in content
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_delete_token(self, client):
+        _, token = AuthToken.objects.create(user=self.wendy)
+        auth_token = AuthToken.objects.get(user=self.wendy)
+        response = client.post(
+            "/profile/wendy/tokens", {"delete": auth_token.pk}
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert AuthToken.objects.filter(user=self.wendy).count() == 0
+
+    @UserMixin.as_user("wendy")
+    def test_other_user_cannot_create_token(self, client):
+        response = client.post("/profile/susan/tokens", {})
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert AuthToken.objects.filter(user=self.susan).count() == 0
+
+    def test_anonymous_cannot_create_token(self, client):
+        response = client.post("/profile/wendy/tokens", {})
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert AuthToken.objects.filter(user=self.wendy).count() == 0
+
+    @UserMixin.as_user("wendy")
+    def test_other_user_cannot_delete_token(self, client):
+        _, token = AuthToken.objects.create(user=self.susan)
+        auth_token = AuthToken.objects.get(user=self.susan)
+        response = client.post(
+            "/profile/susan/tokens", {"delete": auth_token.pk}
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert AuthToken.objects.filter(user=self.susan).count() == 1
+
+    def test_anonymous_cannot_delete_token(self, client):
+        _, token = AuthToken.objects.create(user=self.wendy)
+        auth_token = AuthToken.objects.get(user=self.wendy)
+        response = client.post(
+            "/profile/wendy/tokens", {"delete": auth_token.pk}
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert AuthToken.objects.filter(user=self.wendy).count() == 1
 
 
 @pytest.mark.django_db

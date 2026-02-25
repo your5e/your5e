@@ -12,7 +12,7 @@ from django.views.generic.detail import SingleObjectMixin
 
 from notebooks.models import Notebook
 from users.forms import ProfileForm, ProfileLinkForm
-from users.models import ProfileLink, User
+from users.models import AuthToken, ProfileLink, User
 
 
 class ProfileObjectMixin(SingleObjectMixin):
@@ -64,6 +64,8 @@ class ProfileView(ProfileObjectMixin, DetailView):
             context["shared_notebooks"] = Notebook.objects.filter(
                 notebookpermission__user=self.object
             )
+            context["tokens"] = AuthToken.objects.filter(user=self.object)
+            context["token_created"] = self.request.session.pop("token_created", None)
         if context["show_details"]:
             context["profile_links"] = self.object.profile_links.all()
 
@@ -116,8 +118,30 @@ class ProfileNotebooksView(ProfileObjectMixin, View):
         return redirect("profile", username=self.object.username)
 
 
-class PasswordChangeView(LoginRequiredMixin, DjangoPasswordChangeView):
+class ProfileTokensView(ProfileObjectMixin, View):
+    @ProfileObjectMixin.owner_required
+    def post(self, request, *args, **kwargs):
+        if "delete" in request.POST:
+            AuthToken.objects.filter(
+                pk=request.POST["delete"],
+                user=self.object,
+            ).delete()
+        else:
+            instance, token = AuthToken.objects.create(
+                user=self.object,
+                name=request.POST.get("name", ""),
+            )
+            request.session["token_created"] = token
+
+        return redirect("profile", username=self.object.username)
+
+
+class PasswordChangeView(ProfileObjectMixin, DjangoPasswordChangeView):
     template_name = "users/password_change.html"
 
+    @ProfileObjectMixin.owner_required
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
+
     def get_success_url(self):
-        return reverse("profile", kwargs={"username": self.request.user.username})
+        return reverse("profile", kwargs={"username": self.object.username})
