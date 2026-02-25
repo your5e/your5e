@@ -98,6 +98,15 @@ class Command(BaseCommand):
             created_by=norm,
         )
 
+        deleted_page = Page.objects.create(wiki=notebook)
+        deleted_page.update(
+            filename="Old Notes.md",
+            mime_type="text/markdown",
+            data=b"# Old Notes\n\nThese notes are no longer needed.",
+            created_by=norm,
+        )
+        deleted_page.soft_delete()
+
         wendys_notebook = Notebook.objects.create(
             name="World Building",
             owner=wendy,

@@ -307,6 +307,12 @@ class TestPage(WikiMixin):
         assert self.page.deleted_at is not None
         assert Page.objects.filter(pk=self.page.pk).exists()
 
+    def test_restore_clears_deleted_at(self):
+        self.page.soft_delete()
+        assert self.page.deleted_at is not None
+        self.page.restore()
+        assert self.page.deleted_at is None
+
     def test_version_reassigned_to_sentinel_on_user_delete(self):
         self.wendy.delete()
         self.version.refresh_from_db()

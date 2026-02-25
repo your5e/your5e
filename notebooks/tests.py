@@ -287,13 +287,13 @@ class NotebookMixin(UserMixin):
 
     def assert_edit_controls_present(self, content):
         assert '?edit">Edit' in content
-        assert '>restore</a>' in content
+        assert 'action="/notebooks/restore"' in content
         assert '<input type="file"' in content
         assert 'action="/notebooks/delete"' in content
 
     def assert_edit_controls_absent(self, content):
         assert '?edit">Edit' not in content
-        assert '>restore</a>' not in content
+        assert 'action="/notebooks/restore"' not in content
         assert '<input type="file"' not in content
         assert 'action="/notebooks/delete"' not in content
 
@@ -1951,4 +1951,56 @@ class TestNotebookPageDeleteView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         page.refresh_from_db()
         assert page.deleted_at is None
+
+
+class TestNotebookPageRestoreView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_owner_can_restore_page(self, client):
+        response = client.post("/notebooks/restore", {
+            "notebook": self.wendys_notebook.pk,
+            "page": self.deleted_page.pk,
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/"
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_restore_page(self, client):
+        response = client.post("/notebooks/restore", {
+            "notebook": self.wendys_notebook.pk,
+            "page": self.deleted_page.pk,
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_restore_page(self, client):
+        response = client.post("/notebooks/restore", {
+            "notebook": self.wendys_notebook.pk,
+            "page": self.deleted_page.pk,
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_restore_page(self, client):
+        response = client.post("/notebooks/restore", {
+            "notebook": self.wendys_notebook.pk,
+            "page": self.deleted_page.pk,
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    def test_anonymous_cannot_restore_page(self, client):
+        response = client.post("/notebooks/restore", {
+            "notebook": self.wendys_notebook.pk,
+            "page": self.deleted_page.pk,
+        })
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
 

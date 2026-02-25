@@ -176,6 +176,10 @@ class Page(models.Model):
         self.deleted_at = timezone.now()
         self.save()
 
+    def restore(self):
+        self.deleted_at = None
+        self.save()
+
     def history(self):
         return list(self.version_set.order_by("number"))
 

@@ -252,6 +252,15 @@ class NotebookPageDeleteView(NotebookWriteMixin, View):
         )
 
 
+class NotebookPageRestoreView(NotebookWriteMixin, View):
+    @NotebookPermissions.edit_required
+    def post(self, request):
+        page = get_object_or_404(Page, pk=request.POST.get("page"))
+        page.restore()
+
+        return redirect(self.object)
+
+
 class NotebookCollaboratorsView(NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):

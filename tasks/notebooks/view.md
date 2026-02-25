@@ -65,7 +65,7 @@ Edit a page -- upload new content, change the filename, delete.
         - redirects to new path
 - [X] delete shows confirmation
 - [X] upload file resets mime type and filename
-- [ ] restore deleted page
+- [X] restore deleted page
         - redirects to notebook index
 
 
