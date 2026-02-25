@@ -6,11 +6,7 @@
 <article>
 <header>
 <p>v{{ page.number }} by {{ page.created_by.username }} on {{ page.created_at|date:"j M Y" }}</p>
-<select onchange="if(this.value) window.location.search='?version='+this.value">
-{% for version in history %}
-<option value="{{ version.number }}"{% if version.number == page.number %} selected{% endif %}>v{{ version.number }} by {{ version.created_by.username }} on {{ version.created_at|date:"j M Y" }}</option>
-{% endfor %}
-</select>
+{% include "notebooks/includes/version_select.html" with versions=history selected=page param_name="version" %}
 {% if can_edit %}<p><a href="?edit">Edit</a></p>{% endif %}
 </header>
 {{ content|safe }}

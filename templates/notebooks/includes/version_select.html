@@ -1,0 +1,12 @@
+{% if versions|length > 1 %}
+<form>
+<select name="{{ param_name }}">
+{% for version in versions %}
+{% if version != selected %}
+<option value="{{ version.number }}">v{{ version.number }} by {{ version.created_by.username }} on {{ version.created_at|date:"j M Y" }}</option>
+{% endif %}
+{% endfor %}
+</select>
+<button type="submit">Go</button>
+</form>
+{% endif %}

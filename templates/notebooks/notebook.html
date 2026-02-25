@@ -9,11 +9,7 @@
 <div class="index-content">
 <header>
 <p>v{{ index_version.number }} by {{ index_version.created_by.username }} on {{ index_version.created_at|date:"j M Y" }}</p>
-<select onchange="if(this.value) window.location.search='?index_version='+this.value">
-{% for version in index_history %}
-<option value="{{ version.number }}"{% if version.number == index_version.number %} selected{% endif %}>v{{ version.number }} by {{ version.created_by.username }} on {{ version.created_at|date:"j M Y" }}</option>
-{% endfor %}
-</select>
+{% include "notebooks/includes/version_select.html" with versions=index_history selected=index_version param_name="index_version" %}
 </header>
 {{ index_content|safe }}
 </div>

@@ -144,16 +144,12 @@ class NotebookView(NotebookReadMixin, View):
             context["deleted_pages"] = self.object.deleted_pages()
 
         if index_page:
-            index_version_number = request.GET.get("index_version")
-            if index_version_number:
-                try:
-                    index_version = index_page.version_set.get(
-                        number=int(index_version_number)
-                    )
-                except (ValueError, index_page.version_set.model.DoesNotExist):
-                    return HttpResponse(status=HTTPStatus.NOT_FOUND)
-            else:
-                index_version = index_page.latest_version
+            try:
+                index_version = index_page.get_version(
+                    request.GET.get("index_version")
+                )
+            except Page.DoesNotExist:
+                return HttpResponse(status=HTTPStatus.NOT_FOUND)
             context["index_content"] = index_version.render(
                 base_url=self.object.get_absolute_url()
             )
@@ -387,15 +383,11 @@ class NotebookPageView(NotebookReadMixin, View):
 
         history = page.history()
         version_number = request.GET.get("version")
-        if version_number:
-            try:
-                version = page.version_set.get(number=int(version_number))
-            except (ValueError, page.version_set.model.DoesNotExist):
-                return HttpResponse(status=HTTPStatus.NOT_FOUND)
-            is_old_version = True
-        else:
-            version = page.latest_version
-            is_old_version = False
+        try:
+            version = page.get_version(version_number)
+        except Page.DoesNotExist:
+            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+        is_old_version = version_number is not None
 
         content = version.render(base_url=self.object.get_absolute_url())
 

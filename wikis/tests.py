@@ -401,6 +401,23 @@ class TestPage(WikiMixin):
         self.page.delete_version(1)
         assert not Page.objects.filter(pk=page_id).exists()
 
+    def test_get_version_returns_latest_when_no_number(self):
+        version = self.page_with_history.get_version()
+        assert version.number == 3
+
+    def test_get_version_returns_specific_version(self):
+        version = self.page_with_history.get_version(number=2)
+        assert version.number == 2
+        assert version.content.data == b"Second revision"
+
+    def test_get_version_raises_for_nonexistent_version(self):
+        with pytest.raises(Page.DoesNotExist):
+            self.page_with_history.get_version(number=99)
+
+    def test_get_version_raises_for_invalid_version_string(self):
+        with pytest.raises(Page.DoesNotExist):
+            self.page_with_history.get_version(number="invalid")
+
 
 @pytest.mark.django_db
 class TestWiki(WikiMixin):

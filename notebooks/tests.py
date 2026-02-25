@@ -101,13 +101,19 @@ class NotebookMixin(UserMixin):
             created_by=self.wendy,
         )
 
-        self.wendys_heroes_index_text = "Meet the heroes of this campaign."
+        self.wendys_heroes_index_text = "Updated heroes introduction."
         heroes_index = Page.objects.create(wiki=self.wendys_notebook)
         heroes_index.update(
             filename="heroes/index.md",
             mime_type="text/markdown",
-            data=b"# Heroes\n\n" + self.wendys_heroes_index_text.encode(),
+            data=b"# Heroes\n\nMeet the heroes of this campaign.",
             created_by=self.wendy,
+        )
+        heroes_index.update(
+            filename="heroes/index.md",
+            mime_type="text/markdown",
+            data=b"# Heroes\n\n" + self.wendys_heroes_index_text.encode(),
+            created_by=self.susan,
         )
 
         villains_page = Page.objects.create(wiki=self.wendys_notebook)
@@ -325,6 +331,28 @@ class NotebookMixin(UserMixin):
         assert 'type="file"' in content
         assert 'type="submit"' in content
         assert 'action="/notebooks/delete"' in content
+
+    def assert_versions_present(self, content, param_name, page, current=None):
+        assert '<form ' in content
+        assert f'name="{param_name}"' in content
+        assert '<button' in content
+        if current is None:
+            current = page.latest_version
+        for version in page.history():
+            option_value = f'<option value="{version.number}"'
+            if version == current:
+                assert option_value not in content
+            else:
+                date = version.created_at.strftime("%-d %b %Y")
+                expected = (
+                    f'<option value="{version.number}">'
+                    f'v{version.number} by {version.created_by.username} on {date}'
+                    f'</option>'
+                )
+                assert expected in content
+
+    def assert_versions_absent(self, content, param_name):
+        assert param_name not in content
 
 
 @pytest.mark.django_db
@@ -983,12 +1011,23 @@ class TestNotebookIndexPage(NotebookMixin):
         assert self.wendys_heroes_index_text in content
         assert ">index<" not in content.lower()
 
+    @UserMixin.as_user("susan")
+    def test_index_page_hides_version_select_when_single_version(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/npcs/")
+        content = response.content.decode()
+        assert self.susans_npcs_index_text in content
+        self.assert_versions_absent(content, "index_version")
+
     @UserMixin.as_user("wendy")
-    def test_index_page_shows_version_dropdown(self, client):
+    def test_index_page_shows_version_select_in_form(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/heroes/")
         content = response.content.decode()
         assert self.wendys_heroes_index_text in content
-        assert '<option value="1"' in content
+        self.assert_versions_present(
+            content,
+            "index_version",
+            self.wendys_notebook.get_page(path="heroes/index"),
+        )
 
     @UserMixin.as_user("wendy")
     def test_owner_sees_creation_form_on_empty_folder(self, client):
@@ -1308,28 +1347,23 @@ class TestNotebookPageView(NotebookMixin):
         )
 
     @UserMixin.as_user("wendy")
-    def test_view_page_shows_version_info(self, client):
+    def test_view_page_hides_version_select_when_single_version(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/notes")
+        content = response.content.decode()
+        self.assert_page_heading_present(content, "Notes")
+        self.assert_versions_absent(content, "version")
+
+    @UserMixin.as_user("wendy")
+    def test_view_page_shows_version_select_in_form(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/session-one")
         content = response.content.decode()
         self.assert_notebook_name_present(content, self.wendys_notebook)
-        page = self.wendys_notebook.get_page(path="session-one")
-        versions = page.history()
-        v1_date = versions[0].created_at.strftime("%-d %b %Y")
-        v2_date = versions[1].created_at.strftime("%-d %b %Y")
-        v3_date = versions[2].created_at.strftime("%-d %b %Y")
-        assert (
-            f'<option value="1">v1 by wendy on {v1_date}</option>'
-            in content
+        self.assert_page_heading_present(content, "Session One")
+        self.assert_versions_present(
+            content,
+            "version",
+            self.wendys_notebook.get_page(path="session-one"),
         )
-        assert (
-            f'<option value="2">v2 by susan on {v2_date}</option>'
-            in content
-        )
-        assert (
-            f'<option value="3" selected>v3 by wendy on {v3_date}</option>'
-            in content
-        )
-        assert "Version 3 of" not in content
 
     @UserMixin.as_user("wendy")
     def test_view_old_version(self, client):
@@ -1337,6 +1371,13 @@ class TestNotebookPageView(NotebookMixin):
         content = response.content.decode()
         assert "First draft" in content
         assert "Version 1 of" in content
+        page = self.wendys_notebook.get_page(path="session-one")
+        self.assert_versions_present(
+            content,
+            "version",
+            page,
+            current=page.version_set.get(number=1),
+        )
 
     @UserMixin.as_user("wendy")
     def test_view_invalid_version_returns_404(self, client):

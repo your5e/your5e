@@ -183,6 +183,14 @@ class Page(models.Model):
     def history(self):
         return list(self.version_set.order_by("number"))
 
+    def get_version(self, number=None):
+        if number is None:
+            return self.latest_version
+        try:
+            return self.version_set.get(number=int(number))
+        except (ValueError, Version.DoesNotExist) as err:
+            raise Page.DoesNotExist() from err
+
     def revert(self, *, version_number, reverted_by):
         try:
             version = self.version_set.get(number=version_number)
