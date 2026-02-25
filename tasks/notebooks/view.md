@@ -65,13 +65,15 @@ Edit a page -- upload new content, change the filename, delete.
         - redirects to new path
 - [X] delete shows confirmation
 - [X] upload file resets mime type and filename
+- [ ] restore deleted page
+        - redirects to notebook index
 
 
 # Notebook permissions check @phase
 
 Ensure the default is deny, override as stated:
 
-- [ ] ensure permissions are enforced
+- [X] ensure permissions are enforced
         - editors can see and modify pages in private notebooks (it overrides)
         - viewers can see pages in private notebooks (it overrides)
         - other site users cannot see pages private notebooks

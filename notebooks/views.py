@@ -35,7 +35,7 @@ class NotebookPermissions:
     def can_view(notebook, user):
         if notebook.visibility == Notebook.Visibility.PUBLIC:
             return True
-        if notebook.visibility == Notebook.Visibility.SITE:
+        if notebook.visibility == Notebook.Visibility.USERS:
             return user.is_authenticated
         if user.is_authenticated and user == notebook.owner:
             return True
@@ -49,14 +49,6 @@ class NotebookPermissions:
             NotebookPermissions.get_permission(notebook, user)
             == NotebookPermission.Role.EDITOR
         )
-
-    @staticmethod
-    def check_edit(notebook, user):
-        if not user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if not NotebookPermissions.can_edit(notebook, user):
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-        return None
 
     @staticmethod
     def view_required(method):
@@ -73,8 +65,10 @@ class NotebookPermissions:
     def edit_required(method):
         def wrapper(self, request, *args, **kwargs):
             self.object = self.get_object()
-            if error := NotebookPermissions.check_edit(self.object, request.user):
-                return error
+            if not request.user.is_authenticated:
+                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+            if not NotebookPermissions.can_edit(self.object, request.user):
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
             return method(self, request, *args, **kwargs)
         return wrapper
 
@@ -358,8 +352,10 @@ class NotebookPageView(NotebookReadMixin, View):
             )
 
         if "edit" in request.GET:
-            if error := NotebookPermissions.check_edit(self.object, request.user):
-                return error
+            if not request.user.is_authenticated:
+                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+            if not NotebookPermissions.can_edit(self.object, request.user):
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
 
             version = page.latest_version
             content = version.content.data

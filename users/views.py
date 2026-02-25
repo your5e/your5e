@@ -20,12 +20,16 @@ class ProfileObjectMixin(SingleObjectMixin):
     slug_field = "username"
     slug_url_kwarg = "username"
 
-    def check_owner(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if request.user != self.object:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-        return None
+    @staticmethod
+    def owner_required(method):
+        def wrapper(self, request, *args, **kwargs):
+            self.object = self.get_object()
+            if not request.user.is_authenticated:
+                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+            if request.user != self.object:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+            return method(self, request, *args, **kwargs)
+        return wrapper
 
 
 class UserLoginView(LoginView):
@@ -65,11 +69,8 @@ class ProfileView(ProfileObjectMixin, DetailView):
 
         return context
 
+    @ProfileObjectMixin.owner_required
     def post(self, request, username):
-        self.object = self.get_object()
-        if error := self.check_owner(request):
-            return error
-
         form = ProfileForm(request.POST, instance=self.object)
         if form.is_valid():
             form.save()
@@ -79,11 +80,8 @@ class ProfileView(ProfileObjectMixin, DetailView):
 
 
 class ProfileLinksView(ProfileObjectMixin, View):
+    @ProfileObjectMixin.owner_required
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if error := self.check_owner(request):
-            return error
-
         if "delete" in request.POST:
             ProfileLink.objects.filter(
                 id=request.POST["delete"],
@@ -100,11 +98,8 @@ class ProfileLinksView(ProfileObjectMixin, View):
 
 
 class ProfileVisibilityView(ProfileObjectMixin, View):
+    @ProfileObjectMixin.owner_required
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if error := self.check_owner(request):
-            return error
-
         self.object.is_public = request.POST.get("public") == "true"
         self.object.save()
 
@@ -112,11 +107,8 @@ class ProfileVisibilityView(ProfileObjectMixin, View):
 
 
 class ProfileNotebooksView(ProfileObjectMixin, View):
+    @ProfileObjectMixin.owner_required
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if error := self.check_owner(request):
-            return error
-
         name = request.POST.get("notebook_name")
         if name:
             Notebook.objects.create(name=name, owner=self.object)

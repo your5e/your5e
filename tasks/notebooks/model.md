@@ -7,7 +7,7 @@ Notebook model (inherits from Wiki):
 - name
 - slug (derived from name)
 - owner
-- visibility (private/site/public) -- restricts viewing of pages
+- visibility (private/users/public) -- restricts viewing of pages
 - copied_from (another Notebook)
 
 NotebookPermission model:

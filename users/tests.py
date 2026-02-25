@@ -166,16 +166,16 @@ class TestEmailOrUserBackend(UserMixin):
 
 @pytest.mark.django_db
 class TestProfileView(UserMixin):
-    def test_profile_redirect_when_logged_out(self, client):
-        response = client.get("/profile/")
-        assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/login?next=/profile/"
-
     @UserMixin.as_user("wendy")
     def test_profile_redirect_when_logged_in(self, client):
         response = client.get("/profile/")
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/profile/wendy/"
+
+    def test_profile_redirect_when_logged_out(self, client):
+        response = client.get("/profile/")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/login?next=/profile/"
 
     @UserMixin.as_user("wendy")
     def test_profile_shows_user_details(self, client):
@@ -184,29 +184,39 @@ class TestProfileView(UserMixin):
         assert "Wendy Testaburger" in response.content.decode()
 
     @UserMixin.as_user("wendy")
-    def test_own_profile_shows_edit_form(self, client):
+    def test_owner_sees_full_profile_even_when_not_public(self, client):
         response = client.get("/profile/wendy/")
-        assert response.status_code == HTTPStatus.OK
-        assert "Save</button>" in response.content.decode()
+        content = response.content.decode()
+        assert "Wendy Testaburger" in content
+        assert "Bio for Wendy" in content
 
     @UserMixin.as_user("wendy")
-    def test_other_profile_no_edit_form(self, client):
-        response = client.get("/profile/susan/")
-        assert response.status_code == HTTPStatus.OK
-        assert "Save</button>" not in response.content.decode()
-
-    @UserMixin.as_user("wendy")
-    def test_non_public_profile_hides_details(self, client):
+    def test_other_user_sees_only_username_for_non_public(self, client):
         response = client.get("/profile/mary/")
         content = response.content.decode()
         assert "mary" in content
         assert "Mary Test" not in content
         assert "Bio for Mary" not in content
 
+    def test_anonymous_sees_only_username_for_non_public(self, client):
+        response = client.get("/profile/mary/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "mary" in content
+        assert "Mary Test" not in content
+        assert "Bio for Mary" not in content
+
     @UserMixin.as_user("wendy")
-    def test_public_profile_shows_details(self, client):
+    def test_other_user_sees_public_profile_details(self, client):
         response = client.get("/profile/susan/")
         content = response.content.decode()
+        assert "Susan Test" in content
+        assert "Bio for Susan" in content
+
+    def test_anonymous_sees_public_profile(self, client):
+        response = client.get("/profile/susan/")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
         assert "Susan Test" in content
         assert "Bio for Susan" in content
 
@@ -223,11 +233,21 @@ class TestProfileView(UserMixin):
         ), "Expected anchor with href and rel='me'"
 
     @UserMixin.as_user("wendy")
-    def test_owner_sees_full_profile_even_when_not_public(self, client):
+    def test_own_profile_shows_edit_form(self, client):
         response = client.get("/profile/wendy/")
-        content = response.content.decode()
-        assert "Wendy Testaburger" in content
-        assert "Bio for Wendy" in content
+        assert response.status_code == HTTPStatus.OK
+        assert "Save</button>" in response.content.decode()
+
+    @UserMixin.as_user("wendy")
+    def test_other_profile_no_edit_form(self, client):
+        response = client.get("/profile/susan/")
+        assert response.status_code == HTTPStatus.OK
+        assert "Save</button>" not in response.content.decode()
+
+    def test_anonymous_no_edit_form(self, client):
+        response = client.get("/profile/susan/")
+        assert response.status_code == HTTPStatus.OK
+        assert "Save</button>" not in response.content.decode()
 
     @UserMixin.as_user("wendy")
     def test_profile_form_includes_description(self, client):
@@ -242,7 +262,7 @@ class TestProfileView(UserMixin):
         assert "Make profile public" in content
 
     @UserMixin.as_user("wendy")
-    def test_toggle_profile_visibility(self, client):
+    def test_owner_can_toggle_profile_visibility(self, client):
         assert self.wendy.is_public is False
         response = client.post(
             "/profile/wendy/visibility", {"public": "true"}
@@ -251,23 +271,27 @@ class TestProfileView(UserMixin):
         self.wendy.refresh_from_db()
         assert self.wendy.is_public is True
 
-    def test_anonymous_sees_public_profile(self, client):
-        response = client.get("/profile/susan/")
-        content = response.content.decode()
-        assert response.status_code == HTTPStatus.OK
-        assert "Susan Test" in content
-        assert "Bio for Susan" in content
+    @UserMixin.as_user("wendy")
+    def test_other_user_cannot_toggle_profile_visibility(self, client):
+        assert self.susan.is_public is True
+        response = client.post(
+            "/profile/susan/visibility", {"public": "false"}
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.susan.refresh_from_db()
+        assert self.susan.is_public is True
 
-    def test_anonymous_sees_only_username_for_non_public(self, client):
-        response = client.get("/profile/mary/")
-        content = response.content.decode()
-        assert response.status_code == HTTPStatus.OK
-        assert "mary" in content
-        assert "Mary Test" not in content
-        assert "Bio for Mary" not in content
+    def test_anonymous_cannot_toggle_profile_visibility(self, client):
+        assert self.susan.is_public is True
+        response = client.post(
+            "/profile/susan/visibility", {"public": "false"}
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        self.susan.refresh_from_db()
+        assert self.susan.is_public is True
 
     @UserMixin.as_user("wendy")
-    def test_add_profile_link(self, client):
+    def test_owner_can_add_profile_link(self, client):
         response = client.post(
             "/profile/wendy/links", {
                 "url": "https://example.com/@wendy",
@@ -281,7 +305,32 @@ class TestProfileView(UserMixin):
         assert link.label == "Website"
 
     @UserMixin.as_user("wendy")
-    def test_delete_profile_link(self, client):
+    def test_other_user_cannot_add_profile_link(self, client):
+        response = client.post(
+            "/profile/susan/links", {
+                "url": "https://example.com/@hacker",
+                "label": "Hacked",
+            }
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert ProfileLink.objects.filter(
+            user=self.susan, label="Hacked"
+        ).count() == 0
+
+    def test_anonymous_cannot_add_profile_link(self, client):
+        response = client.post(
+            "/profile/susan/links", {
+                "url": "https://example.com/@hacker",
+                "label": "Hacked",
+            }
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert ProfileLink.objects.filter(
+            user=self.susan, label="Hacked"
+        ).count() == 0
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_delete_profile_link(self, client):
         link = ProfileLink.objects.create(
             user=self.wendy,
             url="https://example.com/@wendy",
@@ -297,7 +346,26 @@ class TestProfileView(UserMixin):
         assert ProfileLink.objects.filter(user=self.wendy).count() == 0
 
     @UserMixin.as_user("wendy")
-    def test_update_own_profile(self, client):
+    def test_other_user_cannot_delete_profile_link(self, client):
+        response = client.post(
+            "/profile/susan/links", {
+                "delete": self.susan_link.id,
+            }
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert ProfileLink.objects.filter(id=self.susan_link.id).exists()
+
+    def test_anonymous_cannot_delete_profile_link(self, client):
+        response = client.post(
+            "/profile/susan/links", {
+                "delete": self.susan_link.id,
+            }
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert ProfileLink.objects.filter(id=self.susan_link.id).exists()
+
+    @UserMixin.as_user("wendy")
+    def test_owner_can_update_profile(self, client):
         response = client.post(
             "/profile/wendy/", {
                 "name": "Wendy Test",
@@ -310,7 +378,7 @@ class TestProfileView(UserMixin):
         assert self.wendy.short_name == "W"
 
     @UserMixin.as_user("wendy")
-    def test_cannot_update_other_profile(self, client):
+    def test_other_user_cannot_update_profile(self, client):
         response = client.post(
             "/profile/susan/", {
                 "name": "Hacked",

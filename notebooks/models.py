@@ -9,7 +9,7 @@ from wikis.models import Wiki
 class Notebook(Wiki):
     class Visibility(models.TextChoices):
         PRIVATE = "private"
-        SITE = "site"
+        USERS = "users"
         PUBLIC = "public"
 
     name = models.CharField(max_length=255)
