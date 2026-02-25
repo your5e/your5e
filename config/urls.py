@@ -3,6 +3,7 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path
 from django.views.generic import RedirectView
 
+from api.views import PingView
 from notebooks.views import (
     NotebookCollaboratorsView,
     NotebookPageDeleteView,
@@ -37,6 +38,12 @@ urlpatterns = [
         route="logout",
         name="logout",
         view=LogoutView.as_view(next_page="/"),
+    ),
+
+    path(
+        route="api/ping",
+        name="api_ping",
+        view=PingView.as_view(),
     ),
 
     path(
