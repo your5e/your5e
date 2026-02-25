@@ -1,9 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.urls import path
+from django.urls import path, re_path
 from django.views.generic import RedirectView
 
 from api.views import PingView
+from help.views import HelpPageView
 from notebooks.views import (
     NotebookCollaboratorsView,
     NotebookPageDeleteView,
@@ -44,6 +45,12 @@ urlpatterns = [
         route="api/ping",
         name="api_ping",
         view=PingView.as_view(),
+    ),
+
+    re_path(
+        route=r"^help/(?P<path>.*)$",
+        name="help",
+        view=HelpPageView.as_view(),
     ),
 
     path(

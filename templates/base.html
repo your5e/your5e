@@ -8,6 +8,7 @@
 <body>
   <nav>
     <ul>
+      <li><a href="{% url 'help' path='' %}">Help</a></li>
     {% if user.is_authenticated %}
       <li><a href="{% url 'profile' username=user.username %}">{{ user.username }}</a></li>
       <li>

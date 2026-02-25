@@ -92,6 +92,14 @@ class WikiMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        self.page_with_underscore = Page.objects.create(wiki=self.wiki)
+        self.page_with_underscore.update(
+            filename="getting_started.md",
+            mime_type="text/markdown",
+            data=b"# Getting Started",
+            created_by=self.wendy,
+        )
+
 
 @pytest.mark.django_db
 class TestContent(WikiMixin):
@@ -252,6 +260,17 @@ class TestVersion(WikiMixin):
             '<img src="/notebooks/wendy/notes/maps/world.png" width="640" '
             'height="480"></p>'
         )
+
+    def test_render_wikilink_matches_underscore_filename(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Linking Page.md",
+            mime_type="text/markdown",
+            data=b"[[Getting Started]]",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert 'href="/wiki/getting-started"' in html
 
 
 @pytest.mark.django_db
@@ -455,11 +474,12 @@ class TestWiki(WikiMixin):
             self.image_page.latest_version,
             self.page_with_links.latest_version,
             self.page_with_wikilinks.latest_version,
+            self.page_with_underscore.latest_version,
         ]
 
     def test_all_pages_excludes_deleted(self):
         self.page.soft_delete()
-        assert len(self.wiki.all_pages()) == 9
+        assert len(self.wiki.all_pages()) == 10
 
     def test_deleted_pages(self):
         self.page.soft_delete()
@@ -493,6 +513,7 @@ class TestWiki(WikiMixin):
         assert [f.display_name for f in contents["files"]] == [
             "Index",
             "document.txt",
+            "getting_started",
             "history.txt",
             "shared.txt",
         ]

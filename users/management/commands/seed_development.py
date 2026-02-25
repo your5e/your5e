@@ -1,6 +1,7 @@
 from pathlib import Path
 from textwrap import dedent
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from notebooks.models import Notebook, NotebookPermission
@@ -165,3 +166,5 @@ class Command(BaseCommand):
             user=norm,
             role=NotebookPermission.Role.VIEWER,
         )
+
+        call_command("sync_api_docs")
