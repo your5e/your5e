@@ -3,6 +3,7 @@ from collections import namedtuple
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from slugify import slugify
 
@@ -62,11 +63,21 @@ class Wiki(models.Model):
         ]
 
     def changes_since(self, timestamp):
-        return list(
-            self.page_set.filter(
-                models.Q(version__created_at__gte=timestamp)
-                | models.Q(deleted_at__gte=timestamp)
-            ).distinct()
+        return (
+            self.page_set
+                .filter(
+                    models.Q(version__created_at__gte=timestamp)
+                    | models.Q(deleted_at__gte=timestamp)
+                )
+                .annotate(
+                    latest_version_created=models.Max("version__created_at"),
+                    last_modified=Greatest(
+                        Coalesce("deleted_at", "latest_version_created"),
+                        "latest_version_created",
+                    ),
+                )
+                .distinct()
+                .order_by("-last_modified", "-pk")
         )
 
     def contents_in(self, directory):

@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
-from django.db.models import Q
+from django.db.models import Max, Q
+from django.db.models.functions import Coalesce, Greatest
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
@@ -14,9 +18,8 @@ from users.models import User
 PAGE_SIZE = 50
 
 
-class NotebookPagination(CursorPagination):
+class BasePagination(CursorPagination):
     page_size = PAGE_SIZE
-    ordering = ["-last_updated", "-pk"]
 
     def paginate_queryset(self, queryset, request, view=None):
         self.total_results = queryset.count()
@@ -43,6 +46,10 @@ class NotebookPagination(CursorPagination):
             parsed = urlparse(url)
             return parsed.path + "?" + parsed.query
         return None
+
+
+class NotebookPagination(BasePagination):
+    ordering = ["-last_updated", "-pk"]
 
 
 class NotebookSerializer(serializers.ModelSerializer):
@@ -152,4 +159,100 @@ class NotebookUserView(NotebookAPIView):
                 )
                 .select_related("owner")
                 .distinct()
+        )
+
+
+class PageSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="pk")
+    path = serializers.SerializerMethodField()
+    filename = serializers.SerializerMethodField()
+    mime_type = serializers.SerializerMethodField()
+    version = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+    updated_at = serializers.SerializerMethodField()
+    deleted_at = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+
+    def get_path(self, obj):
+        return obj.latest_version.path
+
+    def get_filename(self, obj):
+        return obj.latest_version.filename
+
+    def get_mime_type(self, obj):
+        return obj.latest_version.mime_type
+
+    def get_version(self, obj):
+        return obj.latest_version.number
+
+    def get_created_by(self, obj):
+        return obj.latest_version.created_by.username
+
+    def get_updated_at(self, obj):
+        if obj.deleted_at:
+            return None
+        return obj.latest_version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class PagePagination(BasePagination):
+    ordering = ["-last_modified", "-pk"]
+
+
+def parse_timestamp(value):
+    if value.isdigit():
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError as err:
+        raise ValidationError({"since": "Invalid timestamp format"}) from err
+
+
+class NotebookPagesView(AuthenticatedAPIView, ListAPIView):
+    serializer_class = PageSerializer
+    pagination_class = PagePagination
+
+    def get_notebook(self):
+        owner = get_object_or_404(User, username=self.kwargs["username"])
+        notebook = Notebook.objects.filter(
+            owner=owner,
+            slug=self.kwargs["slug"],
+        ).first()
+
+        if not notebook:
+            raise Http404
+
+        user = self.request.user
+        if notebook.owner == user:
+            return notebook
+
+        has_permission = NotebookPermission.objects.filter(
+            notebook=notebook,
+            user=user,
+        ).exists()
+        if has_permission:
+            return notebook
+
+        if notebook.visibility in (
+            Notebook.Visibility.INTERNAL,
+            Notebook.Visibility.PUBLIC,
+        ):
+            return notebook
+
+        raise Http404
+
+    def get_queryset(self):
+        notebook = self.get_notebook()
+
+        since = self.request.query_params.get("since")
+        if since:
+            return notebook.changes_since(parse_timestamp(since))
+
+        return (
+            notebook.page_set
+                .annotate(
+                    latest_version_created=Max("version__created_at"),
+                    last_modified=Greatest(
+                        Coalesce("deleted_at", "latest_version_created"),
+                        "latest_version_created",
+                    ),
+                )
         )

@@ -509,7 +509,7 @@ class TestWiki(WikiMixin):
             self.page_with_history.latest_version,
         ]
 
-    def test_changes_since_returns_pages_with_new_versions(self):
+    def test_changes_since(self):
         before = timezone.now()
         self.page.update(
             filename="document.txt",
@@ -517,16 +517,34 @@ class TestWiki(WikiMixin):
             data=b"Updated content",
             created_by=self.wendy,
         )
-        assert self.wiki.changes_since(before) == [self.page]
+        self.page_with_history.update(
+            filename="history.txt",
+            mime_type="text/plain",
+            data=b"Updated history",
+            created_by=self.wendy,
+        )
+        assert list(self.wiki.changes_since(before)) == [
+            self.page_with_history,
+            self.page,
+        ]
 
-    def test_changes_since_returns_deleted_pages(self):
+    def test_changes_since_includes_deleted_pages(self):
         before = timezone.now()
-        self.page.soft_delete()
-        assert self.wiki.changes_since(before) == [self.page]
+        self.page.update(
+            filename="document.txt",
+            mime_type="text/plain",
+            data=b"Updated content",
+            created_by=self.wendy,
+        )
+        self.page_with_history.soft_delete()
+        assert list(self.wiki.changes_since(before)) == [
+            self.page_with_history,
+            self.page,
+        ]
 
     def test_changes_since_excludes_unchanged_pages(self):
         after = timezone.now()
-        assert self.wiki.changes_since(after) == []
+        assert list(self.wiki.changes_since(after)) == []
 
     def test_contents_in_root(self):
         contents = self.wiki.contents_in("/")

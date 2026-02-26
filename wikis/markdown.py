@@ -58,7 +58,7 @@ def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
 
     text = re.sub(r"!\[\[([^\]]+)\]\]", replace_image_embed, text)
     text = re.sub(r"\[\[([^\]]+)\]\]", replace_wikilink, text)
-    html = markdown.markdown(text)
+    html = markdown.markdown(text, extensions=["fenced_code"])
     html = re.sub(r'(href|src)="([^"]+)"', replace_url, html)
 
     return html

@@ -1,12 +1,14 @@
 import html
+from datetime import timedelta
 from http import HTTPStatus
 from io import BytesIO
 
 import pytest
+from django.utils import timezone
 
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
-from wikis.models import Page
+from wikis.models import Page, Version
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
 
@@ -240,6 +242,11 @@ class NotebookMixin(UserMixin):
             user=self.susan,
             role=NotebookPermission.Role.VIEWER,
         )
+
+        # backdate fixture data for "since..." tests
+        past = timezone.now() - timedelta(hours=1)
+        Version.objects.update(created_at=past)
+        Page.objects.filter(deleted_at__isnull=False).update(deleted_at=past)
 
     def assert_notebook_name_present(self, content, notebook):
         assert html.escape(notebook.name) in content

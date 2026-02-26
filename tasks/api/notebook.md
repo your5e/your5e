@@ -22,11 +22,12 @@ REST endpoints for Notebooks.
 - [X] api/notebooks/{user}/
         - GET returns all notebooks owned by that user that you have access to
         - cursor pagination, ordered by last updated, fixed page size
+- [ ] change `url` to API URL, add `html_url` for website URL (fully qualified)
 
 
 # notebook content @phase
 
-- [ ] api/notebooks/{user}/{notebook}/
+- [X] api/notebooks/{user}/{notebook}/
         - GET returns list of pages with metadata (but no content),
           including deletions
         - cursor pagination, ordered by last updated, fixed page size

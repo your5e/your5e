@@ -1,4 +1,4 @@
-# Notebooks
+# Listing Notebooks
 
 List notebooks you have access to.
 
@@ -29,7 +29,13 @@ The response structure is:
 }
 ```
 
-## GET /api/notebooks
+Arguments:
+
+- `cursor` used when paginating results (links to prev/next results are
+  included in the response)
+
+
+## GET `/api/notebooks`
 
 Lists all notebooks you have access to:
 
@@ -39,23 +45,22 @@ Lists all notebooks you have access to:
 - public notebooks
 
 
-## GET /api/notebooks/public
+## GET `/api/notebooks/public`
 
 Lists all public notebooks.
 
 
-## GET /api/notebooks/internal
+## GET `/api/notebooks/internal`
 
 Lists all notebooks shared to all users but not public.
 
 
-## GET /api/notebooks/private
+## GET `/api/notebooks/private`
 
-Lists all private notebooks, either that you own or directly shared with you. .
+Lists all private notebooks, either that you own or are directly shared with
+you.
 
 
-## GET /api/notebooks/{username}/
+## GET `/api/notebooks/{username}/`
 
 Lists notebooks owned by that user that you have access to.
-
-Returns `404 Not Found` if the username does not exist.

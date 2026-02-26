@@ -6,6 +6,7 @@ from django.views.generic import RedirectView
 from api.notebooks.views import (
     NotebookInternalView,
     NotebookListView,
+    NotebookPagesView,
     NotebookPrivateView,
     NotebookPublicView,
     NotebookUserView,
@@ -77,6 +78,11 @@ urlpatterns = [
         route="api/notebooks/<str:username>/",
         name="api_notebooks_user",
         view=NotebookUserView.as_view(),
+    ),
+    path(
+        route="api/notebooks/<str:username>/<str:slug>/",
+        name="api_notebook_pages",
+        view=NotebookPagesView.as_view(),
     ),
 
     re_path(
