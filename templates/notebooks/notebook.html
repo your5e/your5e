@@ -85,7 +85,7 @@
   <input type="hidden" name="notebook" value="{{ notebook.pk }}">
   <select name="visibility">
     <option value="private"{% if notebook.visibility == "private" %} selected{% endif %}>Private</option>
-    <option value="users"{% if notebook.visibility == "users" %} selected{% endif %}>Users</option>
+    <option value="internal"{% if notebook.visibility == "internal" %} selected{% endif %}>Internal</option>
     <option value="public"{% if notebook.visibility == "public" %} selected{% endif %}>Public</option>
   </select>
   <button type="submit">Change visibility</button>

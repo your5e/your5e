@@ -35,7 +35,7 @@ class NotebookPermissions:
     def can_view(notebook, user):
         if notebook.visibility == Notebook.Visibility.PUBLIC:
             return True
-        if notebook.visibility == Notebook.Visibility.USERS:
+        if notebook.visibility == Notebook.Visibility.INTERNAL:
             return user.is_authenticated
         if user.is_authenticated and user == notebook.owner:
             return True

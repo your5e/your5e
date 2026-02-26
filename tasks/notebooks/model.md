@@ -7,7 +7,7 @@ Notebook model (inherits from Wiki):
 - name
 - slug (derived from name)
 - owner
-- visibility (private/users/public) -- restricts viewing of pages
+- visibility (private/internal/public) -- restricts viewing of pages
 - copied_from (another Notebook)
 
 NotebookPermission model:
@@ -20,4 +20,4 @@ NotebookPermission model:
         - names are not unique
         - slug is unique per owner, 'notes-2' enforced for clashing names
         - names can be updated, generating a new slug
-- [ ] rename middle visibility to 'internal'
+- [X] rename middle visibility to 'internal'

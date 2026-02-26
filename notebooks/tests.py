@@ -14,7 +14,7 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
 class NotebookMixin(UserMixin):
     # Permission matrix:
     #   wendy's notebook (private): susan=editor, mary=viewer
-    #   mary's notebook (site):     wendy=editor, susan=viewer
+    #   mary's notebook (internal): wendy=editor, susan=viewer
     #   susan's notebook (public):  mary=editor, wendy=viewer
     #   hugh has no permissions
 
@@ -32,7 +32,7 @@ class NotebookMixin(UserMixin):
         self.marys_notebook = Notebook.objects.create(
             name="World Lore",
             owner=self.mary,
-            visibility=Notebook.Visibility.USERS,
+            visibility=Notebook.Visibility.INTERNAL,
         )
         self.susans_permission = NotebookPermission.objects.create(
             notebook=self.wendys_notebook,
@@ -919,7 +919,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert self.wendys_heroes_index_text not in content
 
     @UserMixin.as_user("mary")
-    def test_owner_sees_users_restricted_notebook_index(self, client):
+    def test_owner_sees_internal_restricted_notebook_index(self, client):
         response = client.get("/notebooks/mary/world-lore/regions/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
@@ -928,7 +928,7 @@ class TestNotebookIndexPage(NotebookMixin):
         self.assert_edit_controls_present(content)
 
     @UserMixin.as_user("wendy")
-    def test_editor_sees_users_restricted_notebook_index(self, client):
+    def test_editor_sees_internal_restricted_notebook_index(self, client):
         response = client.get("/notebooks/mary/world-lore/regions/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
@@ -937,7 +937,7 @@ class TestNotebookIndexPage(NotebookMixin):
         self.assert_edit_controls_present(content)
 
     @UserMixin.as_user("susan")
-    def test_viewer_sees_users_restricted_notebook_index(self, client):
+    def test_viewer_sees_internal_restricted_notebook_index(self, client):
         response = client.get("/notebooks/mary/world-lore/regions/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
@@ -946,7 +946,7 @@ class TestNotebookIndexPage(NotebookMixin):
         self.assert_edit_controls_absent(content)
 
     @UserMixin.as_user("hugh")
-    def test_non_collaborator_sees_users_restricted_notebook_index(self, client):
+    def test_non_collaborator_sees_internal_restricted_notebook_index(self, client):
         response = client.get("/notebooks/mary/world-lore/regions/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
@@ -954,7 +954,7 @@ class TestNotebookIndexPage(NotebookMixin):
         assert self.marys_regions_index_text in content
         self.assert_edit_controls_absent(content)
 
-    def test_anonymous_cannot_see_users_restricted_notebook_index(self, client):
+    def test_anonymous_cannot_see_internal_restricted_notebook_index(self, client):
         response = client.get("/notebooks/mary/world-lore/regions/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.UNAUTHORIZED
@@ -1650,19 +1650,19 @@ class TestNotebookPageView(NotebookMixin):
         assert Page.objects.filter(wiki=self.susans_notebook).count() == initial_count
 
     @UserMixin.as_user("mary")
-    def test_owner_can_view_users_restricted_notebook(self, client):
+    def test_owner_can_view_internal_restricted_notebook(self, client):
         response = client.get("/notebooks/mary/world-lore/history")
         assert response.status_code == HTTPStatus.OK
         assert "The world began" in response.content.decode()
 
     @UserMixin.as_user("wendy")
-    def test_editor_can_view_users_restricted_notebook(self, client):
+    def test_editor_can_view_internal_restricted_notebook(self, client):
         response = client.get("/notebooks/mary/world-lore/history")
         assert response.status_code == HTTPStatus.OK
         assert "The world began" in response.content.decode()
 
     @UserMixin.as_user("wendy")
-    def test_editor_can_edit_users_restricted_notebook(self, client):
+    def test_editor_can_edit_internal_restricted_notebook(self, client):
         page = self.marys_notebook.get_page(path="history")
         response = client.post("/notebooks/mary/world-lore/history", {
             "filename": "history",
@@ -1674,7 +1674,7 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.created_by == self.wendy
 
     @UserMixin.as_user("wendy")
-    def test_editor_can_create_page_in_users_restricted_notebook(self, client):
+    def test_editor_can_create_page_in_internal_restricted_notebook(self, client):
         response = client.post("/notebooks/mary/world-lore/geography", {
             "filename": "Geography",
             "content": "# Geography\n\nMountains and rivers.",
@@ -1684,25 +1684,25 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.created_by == self.wendy
 
     @UserMixin.as_user("susan")
-    def test_viewer_can_view_users_restricted_notebook(self, client):
+    def test_viewer_can_view_internal_restricted_notebook(self, client):
         response = client.get("/notebooks/mary/world-lore/history")
         assert response.status_code == HTTPStatus.OK
         assert "The world began" in response.content.decode()
 
     @UserMixin.as_user("hugh")
-    def test_non_collaborator_can_view_users_restricted_notebook(self, client):
+    def test_non_collaborator_can_view_internal_restricted_notebook(self, client):
         response = client.get("/notebooks/mary/world-lore/history")
         assert response.status_code == HTTPStatus.OK
 
     @UserMixin.as_user("hugh")
-    def test_non_collaborator_cannot_edit_users_restricted_notebook(self, client):
+    def test_non_collaborator_cannot_edit_internal_restricted_notebook(self, client):
         response = client.post("/notebooks/mary/world-lore/history", {
             "filename": "history",
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
 
-    def test_anonymous_cannot_view_users_restricted_notebook(self, client):
+    def test_anonymous_cannot_view_internal_restricted_notebook(self, client):
         response = client.get("/notebooks/mary/world-lore/history")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.assert_notebook_name_absent(
@@ -1711,7 +1711,7 @@ class TestNotebookPageView(NotebookMixin):
         )
 
     @UserMixin.as_user("mary")
-    def test_owner_can_edit_users_restricted_notebook(self, client):
+    def test_owner_can_edit_internal_restricted_notebook(self, client):
         page = self.marys_notebook.get_page(path="history")
         response = client.post("/notebooks/mary/world-lore/history", {
             "filename": "history",
@@ -1723,7 +1723,7 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.created_by == self.mary
 
     @UserMixin.as_user("susan")
-    def test_viewer_cannot_edit_users_restricted_notebook(self, client):
+    def test_viewer_cannot_edit_internal_restricted_notebook(self, client):
         page = self.marys_notebook.get_page(path="history")
         initial_data = page.latest_version.content.data
         response = client.post("/notebooks/mary/world-lore/history", {
@@ -1734,7 +1734,7 @@ class TestNotebookPageView(NotebookMixin):
         page.refresh_from_db()
         assert page.latest_version.content.data == initial_data
 
-    def test_anonymous_cannot_edit_users_restricted_notebook(self, client):
+    def test_anonymous_cannot_edit_internal_restricted_notebook(self, client):
         page = self.marys_notebook.get_page(path="history")
         initial_data = page.latest_version.content.data
         response = client.post("/notebooks/mary/world-lore/history", {
@@ -1746,7 +1746,7 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.content.data == initial_data
 
     @UserMixin.as_user("mary")
-    def test_owner_can_create_page_in_users_restricted_notebook(self, client):
+    def test_owner_can_create_page_in_internal_restricted_notebook(self, client):
         response = client.post("/notebooks/mary/world-lore/cultures", {
             "filename": "Cultures",
             "content": "# Cultures\n\nThe elves and dwarves.",
@@ -1756,7 +1756,7 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.created_by == self.mary
 
     @UserMixin.as_user("susan")
-    def test_viewer_cannot_create_page_in_users_restricted_notebook(self, client):
+    def test_viewer_cannot_create_page_in_internal_restricted_notebook(self, client):
         initial_count = Page.objects.filter(wiki=self.marys_notebook).count()
         response = client.post("/notebooks/mary/world-lore/religions", {
             "filename": "Religions",
@@ -1766,7 +1766,7 @@ class TestNotebookPageView(NotebookMixin):
         assert Page.objects.filter(wiki=self.marys_notebook).count() == initial_count
 
     @UserMixin.as_user("hugh")
-    def test_non_collaborator_cannot_create_page_in_users_restricted_notebook(self, client):  # noqa: E501
+    def test_non_collaborator_cannot_create_page_in_internal_restricted_notebook(self, client):  # noqa: E501
         initial_count = Page.objects.filter(wiki=self.marys_notebook).count()
         response = client.post("/notebooks/mary/world-lore/religions", {
             "filename": "Religions",
@@ -1775,7 +1775,7 @@ class TestNotebookPageView(NotebookMixin):
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert Page.objects.filter(wiki=self.marys_notebook).count() == initial_count
 
-    def test_anonymous_cannot_create_page_in_users_restricted_notebook(self, client):
+    def test_anonymous_cannot_create_page_in_internal_restricted_notebook(self, client):
         initial_count = Page.objects.filter(wiki=self.marys_notebook).count()
         response = client.post("/notebooks/mary/world-lore/religions", {
             "filename": "Religions",
