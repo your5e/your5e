@@ -82,6 +82,7 @@ class TestNotebooksList(NotebookApiMixin):
             "html_url": "http://testserver/notebooks/wendy/heros-legendes/",
             "last_updated": notebook["last_updated"],
             "copied_from": None,
+            "editable": True,
         }
 
     @ApiMixin.as_api_user("wendy")
@@ -356,6 +357,7 @@ class TestNotebookPages(NotebookApiMixin):
         assert set(response.json().keys()) == {
             "next",
             "previous",
+            "editable",
             "results",
             "total_results",
         }
@@ -531,3 +533,108 @@ class TestNotebookPages(NotebookApiMixin):
         second_page = api_client.get(first_page.json()["next"])
         assert len(second_page.json()["results"]) == 2
         assert second_page.json()["previous"] is not None
+
+
+@pytest.mark.django_db
+class TestPageContent(NotebookApiMixin):
+    def get_page_uuid(self, path):
+        page = self.wendys_notebook.get_page(path=path)
+        return str(page.uuid)
+
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
+        assert response["Content-Type"] == "text/markdown"
+        assert response.content == b"# Welcome\n\nThis is the index page."
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        from notebooks.tests import PNG_BYTES
+        uuid = self.get_page_uuid("heroes/shield.png")
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
+        assert response["Content-Type"] == "image/png"
+        assert response.content == PNG_BYTES
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_returns_not_found(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_uuid_returns_not_found(self, api_client):
+        response = api_client.get(
+            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_uuid_returns_not_found(self, api_client):
+        response = api_client.get("/api/notebooks/wendy/heros-legendes/not-a-uuid")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_version_parameter(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            {"version": "1"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.content == b"# Session One\n\nFirst draft."
+
+    @ApiMixin.as_api_user("wendy")
+    def test_version_parameter_invalid(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            {"version": "999"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.get(f"/api/notebooks/nobody/some-notebook/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_uuid_from_different_notebook(self, api_client):
+        from wikis.models import Page
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Test",
+            created_by=self.susan,
+        )
+        response = api_client.get(
+            f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND

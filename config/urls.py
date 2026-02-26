@@ -10,6 +10,7 @@ from api.notebooks.views import (
     NotebookPrivateView,
     NotebookPublicView,
     NotebookUserView,
+    PageContentView,
 )
 from api.views import PingView
 from help.views import HelpPageView
@@ -83,6 +84,11 @@ urlpatterns = [
         route="api/notebooks/<str:username>/<str:slug>/",
         name="api_notebook_pages",
         view=NotebookPagesView.as_view(),
+    ),
+    path(
+        route="api/notebooks/<str:username>/<str:slug>/<str:uuid>",
+        name="api_page_content",
+        view=PageContentView.as_view(),
     ),
 
     re_path(

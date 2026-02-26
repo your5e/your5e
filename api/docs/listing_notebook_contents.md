@@ -17,6 +17,7 @@ The response structure is:
 {
   "next": null,
   "previous": null,
+  "editable": true,
   "results": [
     {
       "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -53,3 +54,13 @@ Arguments:
   seconds (`?since=1705312200`)
 - `cursor` used when paginating results (links to prev/next results are
   included in the response)
+
+
+## GET `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+
+Returns the current content of a page, with the appropriate `Content-Type`
+header.
+
+Arguments:
+
+- `version` returns a specific version of the page instead of the latest

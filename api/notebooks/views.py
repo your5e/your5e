@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 from django.db.models import Max, Q
 from django.db.models.functions import Coalesce, Greatest
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from rest_framework import serializers
@@ -14,6 +14,7 @@ from rest_framework.response import Response
 
 from api.views import AuthenticatedAPIView
 from notebooks.models import Notebook, NotebookPermission
+from notebooks.views import NotebookPermissions
 from users.models import User
 
 PAGE_SIZE = 50
@@ -59,6 +60,7 @@ class NotebookSerializer(serializers.ModelSerializer):
     html_url = serializers.SerializerMethodField()
     last_updated = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
     copied_from = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
 
     class Meta:
         model = Notebook
@@ -71,6 +73,7 @@ class NotebookSerializer(serializers.ModelSerializer):
             "html_url",
             "last_updated",
             "copied_from",
+            "editable",
         ]
 
     def get_url(self, obj):
@@ -87,6 +90,9 @@ class NotebookSerializer(serializers.ModelSerializer):
         if obj.copied_from:
             return obj.copied_from.slug
         return None
+
+    def get_editable(self, obj):
+        return NotebookPermissions.can_edit(obj, self.context["request"].user)
 
 
 class NotebookAPIView(AuthenticatedAPIView, ListAPIView):
@@ -219,10 +225,7 @@ def parse_timestamp(value):
         raise ValidationError({"since": "Invalid timestamp format"}) from err
 
 
-class NotebookPagesView(AuthenticatedAPIView, ListAPIView):
-    serializer_class = PageSerializer
-    pagination_class = PagePagination
-
+class NotebookAccessMixin:
     def get_notebook(self):
         owner = get_object_or_404(User, username=self.kwargs["username"])
         notebook = Notebook.objects.filter(
@@ -233,27 +236,27 @@ class NotebookPagesView(AuthenticatedAPIView, ListAPIView):
         if not notebook:
             raise Http404
 
-        user = self.request.user
-        if notebook.owner == user:
-            return notebook
+        if not NotebookPermissions.can_view(notebook, self.request.user):
+            raise Http404
 
-        has_permission = NotebookPermission.objects.filter(
-            notebook=notebook,
-            user=user,
-        ).exists()
-        if has_permission:
-            return notebook
+        return notebook
 
-        if notebook.visibility in (
-            Notebook.Visibility.INTERNAL,
-            Notebook.Visibility.PUBLIC,
-        ):
-            return notebook
 
-        raise Http404
+class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
+    serializer_class = PageSerializer
+    pagination_class = PagePagination
+    notebook = None
+
+    def list(self, request, *args, **kwargs):
+        self.notebook = self.get_notebook()
+        response = super().list(request, *args, **kwargs)
+        response.data["editable"] = NotebookPermissions.can_edit(
+            self.notebook, request.user
+        )
+        return response
 
     def get_queryset(self):
-        notebook = self.get_notebook()
+        notebook = self.notebook
 
         since = self.request.query_params.get("since")
         if since:
@@ -268,4 +271,34 @@ class NotebookPagesView(AuthenticatedAPIView, ListAPIView):
                         "latest_version_created",
                     ),
                 )
+        )
+
+
+class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
+    def get(self, request, username, slug, uuid):
+        notebook = self.get_notebook()
+
+        try:
+            from uuid import UUID
+            page_uuid = UUID(uuid)
+        except ValueError:
+            raise Http404 from None
+
+        page = notebook.page_set.filter(
+            uuid=page_uuid,
+            deleted_at__isnull=True,
+        ).first()
+
+        if not page:
+            raise Http404
+
+        version_number = request.query_params.get("version")
+        try:
+            version = page.get_version(version_number)
+        except page.DoesNotExist:
+            raise Http404 from None
+
+        return HttpResponse(
+            version.content.data,
+            content_type=version.mime_type,
         )

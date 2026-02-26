@@ -23,7 +23,7 @@ REST endpoints for Notebooks.
         - GET returns all notebooks owned by that user that you have access to
         - cursor pagination, ordered by last updated, fixed page size
 - [X] change `url` to API URL, add `html_url` for website URL (fully qualified)
-- [ ] add `editable` boolean to notebook representation
+- [X] add `editable` boolean to notebook representation
 
 
 # notebook content @phase
@@ -34,12 +34,12 @@ REST endpoints for Notebooks.
         - cursor pagination, ordered by last updated, fixed page size
         - ?since=_timestamp_ only pages updated after that point, including
           deletions
-- [ ] include `editable` boolean in notebook metadata
+- [X] include `editable` boolean in notebook metadata
 
 
 # page content @phase
 
-- [ ] api/notebooks/{user}/{notebook}/{uuid}
+- [X] api/notebooks/{user}/{notebook}/{uuid}
         - GET returns raw content with Content-Type header
         - ?version=_ver_ for older versions
 - [ ] PUT to update the page's content, creating a new version
