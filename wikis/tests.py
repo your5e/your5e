@@ -100,6 +100,9 @@ class WikiMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        self.wiki.refresh_from_db()
+        self.last_updated_after_setup = self.wiki.last_updated
+
 
 @pytest.mark.django_db
 class TestContent(WikiMixin):
@@ -288,6 +291,8 @@ class TestPage(WikiMixin):
         assert versions[0].path == "document.txt"
         assert versions[1].number == 2
         assert versions[1].path == "renamed.txt"
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > self.last_updated_after_setup
 
     def test_update_with_no_changes_does_not_create_version(self):
         self.page.update(
@@ -297,6 +302,8 @@ class TestPage(WikiMixin):
             created_by=self.wendy,
         )
         assert self.page.version_set.count() == 1
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated == self.last_updated_after_setup
 
     def test_rename_with_identical_content_creates_version(self):
         count_before = Content.objects.count()
@@ -325,12 +332,19 @@ class TestPage(WikiMixin):
         self.page.soft_delete()
         assert self.page.deleted_at is not None
         assert Page.objects.filter(pk=self.page.pk).exists()
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > self.last_updated_after_setup
 
     def test_restore_clears_deleted_at(self):
         self.page.soft_delete()
         assert self.page.deleted_at is not None
+        self.wiki.refresh_from_db()
+        before_restore = self.wiki.last_updated
+
         self.page.restore()
         assert self.page.deleted_at is None
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > before_restore
 
     def test_version_reassigned_to_sentinel_on_user_delete(self):
         self.wendy.delete()
@@ -381,6 +395,8 @@ class TestPage(WikiMixin):
         content_hash = self.page_with_history.version_set.get(number=1).content.hash
         self.page_with_history.delete()
         assert not Content.objects.filter(hash=content_hash).exists()
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > self.last_updated_after_setup
 
     def test_delete_keeps_shared_content(self):
         content_hash = self.version.content.hash
@@ -390,6 +406,8 @@ class TestPage(WikiMixin):
     def test_delete_version_does_not_break_history(self):
         self.page_with_history.delete_version(2)
         assert [v.number for v in self.page_with_history.history()] == [1, 3]
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > self.last_updated_after_setup
 
     def test_delete_version_nonexistent_raises(self):
         with pytest.raises(ValueError):
@@ -419,6 +437,8 @@ class TestPage(WikiMixin):
         page_id = self.page.pk
         self.page.delete_version(1)
         assert not Page.objects.filter(pk=page_id).exists()
+        self.wiki.refresh_from_db()
+        assert self.wiki.last_updated > self.last_updated_after_setup
 
     def test_get_version_returns_latest_when_no_number(self):
         version = self.page_with_history.get_version()

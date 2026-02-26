@@ -10,6 +10,7 @@ is, both Wiki and the implementation of a notebook have their own linked
 tables. `notebook.page_set` should work.
 
 `Wiki` only provides helper methods as the bridge to pages.
+- last_updated (timestamp, updated when pages change)
 
 `Page` represents a "file" in a wiki. It provides versions.
 - wiki
@@ -78,3 +79,8 @@ Pages are not immediately purged from the database, so they can be recovered.
 - [X] wiki "purge deleted" deletes anything older than cutoff
 - [X] management command for "purge deleted"
 - [X] deleting the only version in a page removes the page
+
+Wikis track modifications.
+
+- [X] last_updated on Wiki
+        - updated when pages are created, updated, or deleted

@@ -15,6 +15,12 @@ FORBIDDEN_FILENAME_CHARS = r'[]#^|\\:*"<>?'
 
 
 class Wiki(models.Model):
+    last_updated = models.DateTimeField(default=timezone.now)
+
+    def updated(self):
+        self.last_updated = timezone.now()
+        self.save(update_fields=["last_updated"])
+
     def __str__(self):
         if hasattr(self, "notebook"):
             return str(self.notebook)
@@ -170,15 +176,18 @@ class Page(models.Model):
         version.path = version.generate_path()
         version.full_clean()
         version.save()
+        self.wiki.updated()
         return version
 
     def soft_delete(self):
         self.deleted_at = timezone.now()
         self.save()
+        self.wiki.updated()
 
     def restore(self):
         self.deleted_at = None
         self.save()
+        self.wiki.updated()
 
     def history(self):
         return list(self.version_set.order_by("number"))
@@ -211,15 +220,19 @@ class Page(models.Model):
         content_hash = version.content_id
         version.delete()
         Content.purge_orphaned([content_hash])
-        if not self.version_set.exists():
+        if self.version_set.exists():
+            self.wiki.updated()
+        else:
             self.delete()
 
     def delete(self, *args, **kwargs):
+        wiki = self.wiki
         content_hashes = set(
             self.version_set.values_list("content_id", flat=True)
         )
         super().delete(*args, **kwargs)
         Content.purge_orphaned(content_hashes)
+        wiki.updated()
 
     def __str__(self):
         latest = self.latest_version

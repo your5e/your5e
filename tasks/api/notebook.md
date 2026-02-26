@@ -2,24 +2,45 @@
 
 REST endpoints for Notebooks.
 
-# notebook @phase
+# notebooks listing @phase
 
-- [ ] notebook/all
+- [ ] api/notebooks/
+        - GET returns all notebooks you have access to, yours, those explicitly
+          shared with you, those shared with all site users, and those that are
+          completely public
+        - cursor pagination, ordered by last updated, fixed page size
+- [ ] api/notebooks/public
+        - GET returns all public notebooks
+        - cursor pagination, ordered by last updated, fixed page size
+- [ ] api/notebooks/internal
+        - GET returns all internal notebooks
+        - cursor pagination, ordered by last updated, fixed page size
+- [ ] api/notebooks/private
+        - GET returns all private notebooks you own or are explicitly shared
+          with you
+        - cursor pagination, ordered by last updated, fixed page size
+- [ ] api/notebooks/{user}/
+        - GET returns all notebooks owned by that user that you have access to
+        - cursor pagination, ordered by last updated, fixed page size
+
+
+# notebook content @phase
+
+- [ ] api/notebooks/{user}/{notebook}/
         - GET returns list of pages with metadata (but no content),
           including deletions
-- [ ] notebook/path **PATH**
-        - GET returns list of pages _under that point_
-- [ ] notebook/changes **TIMESTAMP**
-        - GET returns list of pages that have an updated date after that point,
-          including deletions
+        - cursor pagination, ordered by last updated, fixed page size
+        - ?since=_timestamp_ only pages updated after that point, including
+          deletions
 
-# page @phase
 
-- [ ] notebook/page _id/path_, _version_
+# page content @phase
+
+- [ ] api/notebooks/{user}/{notebook}/{path}
+      api/notebooks/{user}/{notebook}/{uuid}
         - addressing by ID survives the file being renamed, path does not
         - OPTIONS shows your permission to view or update
-        - GET returns metadata and content, optionally specifing
-          an earlier version
+        - GET returns metadata and content, ?version=_ver_ for older
         - POST updates the page content and/or metadata, _cannot create_
         - PUT creates a new page, _cannot update_
         - DELETE deletes the page

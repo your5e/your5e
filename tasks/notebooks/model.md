@@ -20,3 +20,4 @@ NotebookPermission model:
         - names are not unique
         - slug is unique per owner, 'notes-2' enforced for clashing names
         - names can be updated, generating a new slug
+- [ ] rename middle visibility to 'internal'
