@@ -1,3 +1,4 @@
+import functools
 from http import HTTPStatus
 
 import pytest
@@ -11,6 +12,17 @@ class ApiMixin(UserMixin):
     @pytest.fixture
     def api_client(self):
         return APIClient()
+
+    @classmethod
+    def as_api_user(cls, attr_name):
+        def decorator(test_method):
+            @functools.wraps(test_method)
+            def wrapper(self, api_client, *args, **kwargs):
+                _, token = AuthToken.objects.create(user=getattr(self, attr_name))
+                api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+                return test_method(self, api_client, *args, **kwargs)
+            return wrapper
+        return decorator
 
 
 @pytest.mark.django_db

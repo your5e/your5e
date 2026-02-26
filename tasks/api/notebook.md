@@ -4,22 +4,22 @@ REST endpoints for Notebooks.
 
 # notebooks listing @phase
 
-- [ ] api/notebooks/
+- [X] api/notebooks/
         - GET returns all notebooks you have access to, yours, those explicitly
           shared with you, those shared with all site users, and those that are
           completely public
         - cursor pagination, ordered by last updated, fixed page size
-- [ ] api/notebooks/public
+- [X] api/notebooks/public
         - GET returns all public notebooks
         - cursor pagination, ordered by last updated, fixed page size
-- [ ] api/notebooks/internal
+- [X] api/notebooks/internal
         - GET returns all internal notebooks
         - cursor pagination, ordered by last updated, fixed page size
-- [ ] api/notebooks/private
+- [X] api/notebooks/private
         - GET returns all private notebooks you own or are explicitly shared
           with you
         - cursor pagination, ordered by last updated, fixed page size
-- [ ] api/notebooks/{user}/
+- [X] api/notebooks/{user}/
         - GET returns all notebooks owned by that user that you have access to
         - cursor pagination, ordered by last updated, fixed page size
 

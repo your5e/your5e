@@ -3,6 +3,13 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, re_path
 from django.views.generic import RedirectView
 
+from api.notebooks.views import (
+    NotebookInternalView,
+    NotebookListView,
+    NotebookPrivateView,
+    NotebookPublicView,
+    NotebookUserView,
+)
 from api.views import PingView
 from help.views import HelpPageView
 from notebooks.views import (
@@ -45,6 +52,31 @@ urlpatterns = [
         route="api/ping",
         name="api_ping",
         view=PingView.as_view(),
+    ),
+    path(
+        route="api/notebooks/",
+        name="api_notebooks",
+        view=NotebookListView.as_view(),
+    ),
+    path(
+        route="api/notebooks/public",
+        name="api_notebooks_public",
+        view=NotebookPublicView.as_view(),
+    ),
+    path(
+        route="api/notebooks/internal",
+        name="api_notebooks_internal",
+        view=NotebookInternalView.as_view(),
+    ),
+    path(
+        route="api/notebooks/private",
+        name="api_notebooks_private",
+        view=NotebookPrivateView.as_view(),
+    ),
+    path(
+        route="api/notebooks/<str:username>/",
+        name="api_notebooks_user",
+        view=NotebookUserView.as_view(),
     ),
 
     re_path(
