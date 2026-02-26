@@ -22,6 +22,8 @@ class Wiki(models.Model):
         self.save(update_fields=["last_updated"])
 
     def __str__(self):
+        if hasattr(self, "helpwiki"):
+            return str(self.helpwiki)
         if hasattr(self, "notebook"):
             return str(self.notebook)
         return f"Wiki {self.pk}"
