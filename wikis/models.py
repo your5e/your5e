@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from collections import namedtuple
 
 from django.core.exceptions import ValidationError
@@ -155,6 +156,7 @@ class Wiki(models.Model):
 
 
 class Page(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     wiki = models.ForeignKey(Wiki, on_delete=models.CASCADE)
     deleted_at = models.DateTimeField(null=True, blank=True)
 

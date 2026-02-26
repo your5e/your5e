@@ -19,7 +19,7 @@ The response structure is:
   "previous": null,
   "results": [
     {
-      "id": 123,
+      "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "path": "session-one",
       "filename": "Session One.md",
       "mime_type": "text/markdown",
@@ -29,7 +29,7 @@ The response structure is:
       "deleted_at": null
     },
     {
-      "id": 456,
+      "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
       "path": "old-draft",
       "filename": "old-draft.md",
       "mime_type": "text/markdown",

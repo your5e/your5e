@@ -368,7 +368,7 @@ class TestNotebookPages(NotebookApiMixin):
         page = results[8]
         assert TIMESTAMP_PATTERN.match(page["updated_at"])
         assert page == {
-            "id": page["id"],
+            "uuid": page["uuid"],
             "path": "index",
             "filename": "index.md",
             "mime_type": "text/markdown",
@@ -381,7 +381,7 @@ class TestNotebookPages(NotebookApiMixin):
         deleted = results[5]
         assert TIMESTAMP_PATTERN.match(deleted["deleted_at"])
         assert deleted == {
-            "id": deleted["id"],
+            "uuid": deleted["uuid"],
             "path": "old-draft",
             "filename": "old-draft.md",
             "mime_type": "text/markdown",

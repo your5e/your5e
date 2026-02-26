@@ -13,6 +13,7 @@ tables. `notebook.page_set` should work.
 - last_updated (timestamp, updated when pages change)
 
 `Page` represents a "file" in a wiki. It provides versions.
+- uuid (stable identifier that survives renames)
 - wiki
 - deleted_at (soft deletes)
 
@@ -41,6 +42,7 @@ duplicate pages in multiple wikis don't take up extra storage.
           near duplicate filenames cannot be created
         - updating a page with identical content does not create a new version
 - [X] versions are kept when user is deleted, reassigned to sentinel
+- [X] add UUID to Page
 
 Convenience methods.
 

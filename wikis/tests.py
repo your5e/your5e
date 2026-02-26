@@ -278,7 +278,12 @@ class TestVersion(WikiMixin):
 
 @pytest.mark.django_db
 class TestPage(WikiMixin):
+    def test_uuid_is_assigned_on_creation(self):
+        page = Page.objects.create(wiki=self.wiki)
+        assert page.uuid is not None
+
     def test_update(self):
+        original_uuid = self.page.uuid
         self.page.update(
             filename="renamed.txt",
             mime_type="text/plain",
@@ -291,6 +296,8 @@ class TestPage(WikiMixin):
         assert versions[0].path == "document.txt"
         assert versions[1].number == 2
         assert versions[1].path == "renamed.txt"
+        self.page.refresh_from_db()
+        assert self.page.uuid == original_uuid
         self.wiki.refresh_from_db()
         assert self.wiki.last_updated > self.last_updated_after_setup
 

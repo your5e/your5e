@@ -176,7 +176,7 @@ class NotebookUserView(NotebookAPIView):
 
 
 class PageSerializer(serializers.Serializer):
-    id = serializers.IntegerField(source="pk")
+    uuid = serializers.UUIDField()
     path = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()
     mime_type = serializers.SerializerMethodField()
