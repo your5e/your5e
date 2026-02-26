@@ -5,6 +5,7 @@ from django.db.models import Max, Q
 from django.db.models.functions import Coalesce, Greatest
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
@@ -54,7 +55,8 @@ class NotebookPagination(BasePagination):
 
 class NotebookSerializer(serializers.ModelSerializer):
     owner = serializers.CharField(source="owner.username")
-    url = serializers.CharField(source="get_absolute_url")
+    url = serializers.SerializerMethodField()
+    html_url = serializers.SerializerMethodField()
     last_updated = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
     copied_from = serializers.SerializerMethodField()
 
@@ -66,9 +68,20 @@ class NotebookSerializer(serializers.ModelSerializer):
             "owner",
             "visibility",
             "url",
+            "html_url",
             "last_updated",
             "copied_from",
         ]
+
+    def get_url(self, obj):
+        return reverse("api_notebook_pages", kwargs={
+            "username": obj.owner.username,
+            "slug": obj.slug,
+        })
+
+    def get_html_url(self, obj):
+        request = self.context["request"]
+        return request.build_absolute_uri(obj.get_absolute_url())
 
     def get_copied_from(self, obj):
         if obj.copied_from:

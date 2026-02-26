@@ -78,7 +78,8 @@ class TestNotebooksList(NotebookApiMixin):
             "slug": "heros-legendes",
             "owner": "wendy",
             "visibility": "private",
-            "url": "/notebooks/wendy/heros-legendes/",
+            "url": "/api/notebooks/wendy/heros-legendes/",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/",
             "last_updated": notebook["last_updated"],
             "copied_from": None,
         }

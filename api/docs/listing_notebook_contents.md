@@ -37,9 +37,12 @@ The response structure is:
       "created_by": "norm",
       "updated_at": null,
       "deleted_at": "2024-01-15T08:00:00Z"
+    },
+    {
+      ...
     }
   ],
-  "total_results": 2
+  "total_results": 8
 }
 ```
 

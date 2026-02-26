@@ -17,7 +17,8 @@ The response structure is:
       "slug": "campaign-notes",
       "owner": "norm",
       "visibility": "public",
-      "url": "/notebooks/norm/campaign-notes/",
+      "url": "/api/notebooks/norm/campaign-notes/",
+      "html_url": "https://your5e.com/notebooks/norm/campaign-notes/",
       "last_updated": "2024-01-15T10:30:00Z",
       "copied_from": null
     },
