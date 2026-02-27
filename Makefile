@@ -1,28 +1,35 @@
+.PHONY: clean dev lint-python makemigrations migrate reset setup test test-python test-integration
+
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
 
-.PHONY: dev lint-python makemigrations migrate reset test test-python test-integration
+EXEC_FLAGS ?=
 
 dev:
 	docker compose up --build
 
 lint-python:
-	docker compose exec web ruff check .
+	docker compose exec $(EXEC_FLAGS) web ruff check .
 
 makemigrations:
-	docker compose exec web python manage.py makemigrations
+	docker compose exec $(EXEC_FLAGS) web python manage.py makemigrations
 
 migrate:
-	docker compose run --rm web python manage.py migrate
+	docker compose exec $(EXEC_FLAGS) web python manage.py migrate
 
-reset:
+setup:
+	docker compose up -d --build
+	docker compose exec $(EXEC_FLAGS) web python manage.py migrate
+	docker compose exec $(EXEC_FLAGS) web python manage.py seed_development
+
+clean:
 	docker compose down -v
-	docker compose build web
-	docker compose run --rm web python manage.py migrate
-	docker compose run --rm web python manage.py seed_development
+
+reset: clean setup
+	docker compose down
 
 test-python: lint-python
-	docker compose exec web pytest
+	docker compose exec $(EXEC_FLAGS) web pytest
 
 test-integration:
 	bats tests/*.bats

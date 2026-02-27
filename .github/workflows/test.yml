@@ -1,0 +1,26 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start services
+        run: make setup EXEC_FLAGS=-T
+
+      - name: Run Python tests
+        run: make test-python EXEC_FLAGS=-T
+
+      - name: Install bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Run integration tests
+        run: bats tests/*.bats

@@ -10,6 +10,9 @@ Development is done with docker, spinning up the stack is:
 ```
 # makes the site available at http://localhost:5843/
 (computer)% make dev
+
+# and in another terminal...
+(computer)% make test
 ```
 
 Test data includes [a map](users/management/commands/random-hexmap-7.png) by
