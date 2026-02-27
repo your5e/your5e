@@ -37,6 +37,8 @@ class Command(BaseCommand):
         _, token = AuthToken.objects.create(user=norm, name="Development")
         self.stdout.write(f"API token for norm: {token}")
 
+        Path("tests/api.token").write_text(token)
+
         wendy = User.objects.create_user(
             username="wendy",
             email="wendy@localhost",

@@ -35,6 +35,7 @@ REST endpoints for Notebooks.
         - ?since=_timestamp_ only pages updated after that point, including
           deletions
 - [X] include `editable` boolean in notebook metadata
+- [ ] include content hash
 
 
 # page content @phase
@@ -44,6 +45,7 @@ REST endpoints for Notebooks.
         - ?version=_ver_ for older versions
 - [ ] PUT to update the page's content, creating a new version
         - raw body with Content-Type header
+        - response includes previous hash for conflict detection
 - [ ] PATCH to update the page's metadata (path)
 - [ ] DELETE to soft-delete the page
 - [ ] POST api/notebooks/{user}/{notebook}/
