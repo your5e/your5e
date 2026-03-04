@@ -46,10 +46,18 @@ REST endpoints for Notebooks.
 - [X] PUT to update the page's content, creating a new version
         - raw body with Content-Type header
         - response includes previous hash for conflict detection
-- [ ] PATCH to update the page's metadata (path)
+- [X] PATCH to update the page's metadata (path)
+- [ ] PATCH to revert to older version
 - [ ] DELETE to soft-delete the page
 - [ ] POST api/notebooks/{user}/{notebook}/
         - multipart, file (required), path (optional, overrides same as
           website)
 - [ ] reject uploads without file extension
         - prevents path conflicts between files and directories
+
+
+# test coverage @phase
+
+- [ ] test that `url` fields in API responses can be followed all the way down
+- [ ] assert error response bodies in tests, not just status codes
+- [ ] ensure API docs accurately describe error response structure

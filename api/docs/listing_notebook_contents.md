@@ -21,7 +21,8 @@ The response structure is:
   "results": [
     {
       "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "path": "session-one",
+      "url": "/api/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "html_url": "https://your5e.com/notebooks/norm/campaign-notes/session-one",
       "filename": "Session One.md",
       "mime_type": "text/markdown",
       "version": 3,
@@ -32,7 +33,8 @@ The response structure is:
     },
     {
       "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "path": "old-draft",
+      "url": "/api/notebooks/norm/campaign-notes/b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "html_url": "https://your5e.com/notebooks/norm/campaign-notes/old-draft",
       "filename": "old-draft.md",
       "mime_type": "text/markdown",
       "version": 1,

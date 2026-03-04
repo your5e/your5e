@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Max, Q
 from django.db.models.functions import Coalesce, Greatest
 from django.http import Http404, HttpResponse
@@ -11,6 +12,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
+from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 
 from api.views import AuthenticatedAPIView
@@ -184,7 +186,8 @@ class NotebookUserView(NotebookAPIView):
 
 class PageSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
-    path = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
+    html_url = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()
     mime_type = serializers.SerializerMethodField()
     version = serializers.SerializerMethodField()
@@ -193,8 +196,23 @@ class PageSerializer(serializers.Serializer):
     deleted_at = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
     content_hash = serializers.SerializerMethodField()
 
-    def get_path(self, obj):
-        return obj.latest_version.path
+    def get_url(self, obj):
+        notebook = self.context["notebook"]
+        return reverse("api_page_content", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+            "uuid": str(obj.uuid),
+        })
+
+    def get_html_url(self, obj):
+        notebook = self.context["notebook"]
+        request = self.context["request"]
+        path = reverse("notebook_page", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+            "path": obj.latest_version.path,
+        })
+        return request.build_absolute_uri(path)
 
     def get_filename(self, obj):
         return obj.latest_version.filename
@@ -259,6 +277,11 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             self.notebook, request.user
         )
         return response
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["notebook"] = self.notebook
+        return context
 
     def get_queryset(self):
         notebook = self.notebook
@@ -335,14 +358,69 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             created_by=request.user,
         )
 
-        return Response({
+        return self.version_response(request, notebook, page, version, previous_hash)
+
+    def patch(self, request, username, slug, uuid):
+        notebook = self.get_notebook()
+
+        if not NotebookPermissions.can_edit(notebook, request.user):
+            return Response(status=403)
+
+        try:
+            page_uuid = UUID(uuid)
+        except ValueError:
+            raise Http404 from None
+
+        page = notebook.page_set.filter(
+            uuid=page_uuid,
+            deleted_at__isnull=True,
+        ).first()
+
+        if not page:
+            raise Http404
+
+        data = JSONParser().parse(request)
+        filename = data.get("filename")
+
+        if not filename:
+            raise ValidationError({"filename": "This field is required."})
+
+        latest = page.latest_version
+
+        try:
+            version = page.update(
+                filename=filename,
+                mime_type=latest.mime_type,
+                data=latest.content.data,
+                created_by=request.user,
+            )
+        except DjangoValidationError as err:
+            raise ValidationError(err.message_dict) from err
+
+        return self.version_response(request, notebook, page, version)
+
+    def version_response(self, request, notebook, page, version, previous_hash=None):
+        api_url = reverse("api_page_content", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
             "uuid": str(page.uuid),
+        })
+        html_path = reverse("notebook_page", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
             "path": version.path,
+        })
+        data = {
+            "uuid": str(page.uuid),
+            "url": api_url,
+            "html_url": request.build_absolute_uri(html_path),
             "filename": version.filename,
             "mime_type": version.mime_type,
             "version": version.number,
             "created_by": version.created_by.username,
             "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "content_hash": version.content.hash,
-            "previous_hash": previous_hash,
-        })
+        }
+        if previous_hash is not None:
+            data["previous_hash"] = previous_hash
+        return Response(data)

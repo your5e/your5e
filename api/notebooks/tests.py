@@ -318,20 +318,20 @@ class TestNotebooksUser(NotebookApiMixin):
 class TestNotebookPages(NotebookApiMixin):
     def assert_wendys_notebook_pages(self, response):
         assert response.status_code == HTTPStatus.OK
-        paths = [
-            p["path"]
+        filenames = [
+            p["filename"]
                 for p in response.json()["results"]
         ]
-        assert paths == [
-            "session-one",
-            "links",
-            "villains/necromancer",
-            "heroes/index",
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "villains/necromancer.md",
+            "heroes/index.md",
             "heroes/shield.png",
-            "old-draft",
-            "notes",
-            "heroes/theron",
-            "index",
+            "old-draft.md",
+            "notes.md",
+            "heroes/theron.md",
+            "index.md",
         ]
 
     def test_unauthenticated(self, api_client):
@@ -378,7 +378,8 @@ class TestNotebookPages(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(page["updated_at"])
         assert page == {
             "uuid": page["uuid"],
-            "path": "index",
+            "url": f"/api/notebooks/wendy/heros-legendes/{page['uuid']}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -392,7 +393,8 @@ class TestNotebookPages(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(deleted["deleted_at"])
         assert deleted == {
             "uuid": deleted["uuid"],
-            "path": "old-draft",
+            "url": f"/api/notebooks/wendy/heros-legendes/{deleted['uuid']}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/old-draft",
             "filename": "old-draft.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -434,11 +436,11 @@ class TestNotebookPages(NotebookApiMixin):
             {"since": cutoff},
         )
         assert response.status_code == HTTPStatus.OK
-        paths = {
-            p["path"]
+        filenames = {
+            p["filename"]
                 for p in response.json()["results"]
         }
-        assert paths == {"notes", "links"}
+        assert filenames == {"notes.md", "links.md"}
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_no_updates(self, api_client):
@@ -472,11 +474,11 @@ class TestNotebookPages(NotebookApiMixin):
             {"since": str(cutoff)},
         )
         assert response.status_code == HTTPStatus.OK
-        paths = [
-            p["path"]
+        filenames = [
+            p["filename"]
                 for p in response.json()["results"]
         ]
-        assert paths == ["notes"]
+        assert filenames == ["notes.md"]
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_invalid(self, api_client):
@@ -711,7 +713,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "path": "index",
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 2,
@@ -738,7 +741,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "path": "old-draft",
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/old-draft",
             "filename": "old-draft.md",
             "mime_type": "text/markdown",
             "version": 2,
@@ -808,7 +812,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "path": "index",
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -817,3 +822,208 @@ class TestPageContentPut(NotebookApiMixin):
             "content_hash": original_hash,
             "previous_hash": original_hash,
         }
+
+
+@pytest.mark.django_db
+class TestPageContentPatch(NotebookApiMixin):
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_response_fields(self, api_client):
+        uuid = self.get_page_uuid("index")
+        original_hash = self.get_page_hash("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        data = response.json()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/welcome",
+            "filename": "welcome.md",
+            "mime_type": "text/markdown",
+            "version": 2,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": original_hash,
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_content_preserved(self, api_client):
+        uuid = self.get_page_uuid("index")
+        api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.content == b"# Welcome\n\nThis is the index page."
+
+    @ApiMixin.as_api_user("wendy")
+    def test_html_url_with_directory(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "pages/welcome.md"},
+            format="json",
+        )
+        data = response.json()
+        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/pages/welcome"
+        assert data["filename"] == "pages/welcome.md"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_identical_filename_no_new_version(self, api_client):
+        uuid = self.get_page_uuid("index")
+        original_hash = self.get_page_hash("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "index.md"},
+            format="json",
+        )
+        data = response.json()
+        assert data == {
+            "uuid": uuid,
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 1,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": original_hash,
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_uuid_returns_not_found(self, api_client):
+        response = api_client.patch(
+            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_uuid_returns_not_found(self, api_client):
+        response = api_client.patch(
+            "/api/notebooks/wendy/heros-legendes/not-a-uuid",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/no-such-notebook/{uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_uuid_from_different_notebook(self, api_client):
+        from wikis.models import Page
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Test",
+            created_by=self.susan,
+        )
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{page.uuid}",
+            data={"filename": "welcome.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_returns_not_found(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "revived.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_filename(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "invalid[name].md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_path_conflict(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "notes.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_missing_filename(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
