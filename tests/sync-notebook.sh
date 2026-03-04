@@ -49,7 +49,7 @@ function sync_notebook {
 
     fetch_notebook_data "$notebook"
     handle_deletions "$output_dir"
-    handle_updates "$notebook" "$output_dir"
+    handle_updates "$notebook" "$output_dir" "" "${all_pages[@]:+"${all_pages[@]}"}"
     report_stale_files "$output_dir"
 
     [[ -t 1 ]] \
@@ -128,106 +128,118 @@ function handle_deletions {
 function handle_updates {
     local notebook="$1"
     local output_dir="$2"
+    local vacating="$3"
+    shift 3
 
-    for page in "${all_pages[@]:+"${all_pages[@]}"}"; do
-        IFS=$'\t' read -r uuid dest_file hash <<< "$page"
-        local dest_path="${output_dir}/${dest_file}"
+    # In order to handle rename cycles (file a renamed to b, b renamed c, c renamed a),
+    # handle_updates is a recursive function that can call itself with the current
+    # argument removed. So two things are unintuitive about this function, that it will
+    # process its arguments in reverse order (see below), and that it will return
+    # success early when there are no arguments to signal a cycle can be broken:
+    [[ $# -eq 0 ]] \
+        && return 0
 
-        [[ -t 1 ]] \
-            && printf "\e[2K%s\r" "$dest_file"
+    local uuid dest_file hash
+    IFS=$'\t' read -r uuid dest_file hash <<< "$1"
+    shift
 
-        local cached_uuid
-        cached_uuid=$(get_cached_uuid "$dest_file")
+    local src_file
+    src_file=$(get_cached_filename "$uuid")
+    local src_path="${output_dir}/${src_file}"
 
-        if is_cached_uuid_stale "$cached_uuid" "$uuid"; then
-            seen_uuids["$cached_uuid"]=1
+    # To break rename cycles, we need to know which paths will be vacated by other
+    # renames (when we get to processing c->a last, we need to know that a is trying
+    # to move away to know we can rename it successfully). If any intervening part
+    # of the cycle produces a complication, a would not be in $vacating,
+    # and the rename is therefore blocked.
+    local new_vacating="$vacating"
+    is_being_renamed "$uuid" "$dest_file" \
+        && ! source_deleted "$src_path" \
+        && ! has_local_changes "$uuid" "$src_path" \
+        && new_vacating="${vacating:+$vacating:}$src_file"
 
-            if [[ -f "$dest_path" ]]; then
-                printf "   %s deleted from server, keeping\n" "$dest_file"
+    # Deal with any remaining arguments.
+    handle_updates "$notebook" "$output_dir" "$new_vacating" "$@"
 
-                if has_local_changes "$cached_uuid" "$dest_path"; then
-                    printf "   %s has local modifications, skipped\n" "$dest_file"
-                else
-                    printf "   %s has new remote content, skipped\n" "$dest_file"
-                fi
-                continue
+    # Now everything else has been dealt with, we can process the current update.
+    local dest_path="${output_dir}/${dest_file}"
+
+    [[ -t 1 ]] \
+        && printf "\e[2K%s\r" "$dest_file"
+
+    local cached_uuid
+    cached_uuid=$(get_cached_uuid "$dest_file")
+
+    if is_cached_uuid_stale "$cached_uuid" "$uuid"; then
+        seen_uuids["$cached_uuid"]=1
+
+        if [[ -f "$dest_path" ]]; then
+            printf "   %s deleted from server, keeping\n" "$dest_file"
+
+            if has_local_changes "$cached_uuid" "$dest_path"; then
+                printf "   %s has local modifications, skipped\n" "$dest_file"
+            else
+                printf "   %s has new remote content, skipped\n" "$dest_file"
             fi
-
-            del_cached "$cached_uuid"
+            return 0
         fi
 
-        if [[ -d "$dest_path" ]] && ! is_being_renamed "$uuid" "$dest_file"; then
-            printf "   %s blocked by local directory, skipped\n" "$dest_file"
+        del_cached "$cached_uuid"
+    fi
 
-        elif parent_blocked_by_file "$output_dir" "$dest_file"; then
-            printf "   %s blocked by local file, skipped\n" "$dest_file"
+    if file_blocked_by_directory "$dest_path" "$uuid" "$dest_file"; then
+        printf "   %s blocked by local directory, skipped\n" "$dest_file"
 
-        elif file_exists_with_different_case "$dest_path" "$dest_file"; then
-            printf "   %s blocked by local file with different case, skipped\n" \
-                "$dest_file"
+    elif parent_blocked_by_file "$output_dir" "$dest_file"; then
+        printf "   %s blocked by local file, skipped\n" "$dest_file"
 
-        elif file_matches_hash "$dest_path" "$hash" && is_untracked "$uuid"; then
-            printf "   %s matches remote, tracking\n" "$dest_file"
-            set_cached "$uuid" "$dest_file" "$hash"
+    elif file_exists_with_different_case "$dest_path" "$dest_file"; then
+        printf "   %s blocked by local file with different case, skipped\n" \
+            "$dest_file"
 
-        elif is_being_renamed "$uuid" "$dest_file"; then
-            local src_file src_path
-            src_file=$(get_cached_filename "$uuid")
-            src_path="${output_dir}/${src_file}"
+    elif file_matches_hash "$dest_path" "$hash" && is_untracked "$uuid"; then
+        printf "   %s matches remote, tracking\n" "$dest_file"
+        set_cached "$uuid" "$dest_file" "$hash"
 
-            if destination_occupied "$dest_path"; then
-                printf "   %s -> %s blocked by local file\n" "$src_file" "$dest_file"
+    elif is_being_renamed "$uuid" "$dest_file"; then
+        # To break a rename cycle, the last in the chain is put in a temporary location.
+        [[ -e "${src_path}.vacated" ]] \
+            && src_path="${src_path}.vacated"
 
-            elif [[ -d "$dest_path" ]]; then
-                printf "   %s -> %s blocked by local directory, skipped\n" \
-                    "$src_file" "$dest_file"
+        if has_local_changes "$uuid" "$src_path"; then
+            printf "   %s has local modifications, skipped\n" "$src_file"
 
-            elif source_deleted "$src_path"; then
-                if has_remote_changes "$uuid" "$hash"; then
-                    download_file \
-                        "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
-                    printf "++ %s\n" "$dest_file"
-                else
-                    printf "   %s deleted locally, skipped\n" "$src_file"
-                fi
-
-            elif has_local_changes "$uuid" "$src_path"; then
-                printf "   %s has local modifications, skipped\n" "$src_file"
-
-            else
+        elif destination_occupied "$dest_path"; then
+            if [[ ":$vacating:" == *":$dest_file:"* ]]; then
+                # Here is where the rename cycle is broken. The desired destination
+                # is going to be vacated, so this can be renamed, but needs to be
+                # moved aside temporarily.
+                mv "$dest_path" "${dest_path}.vacated"
                 rename_file "$src_path" "$dest_path"
                 printf "   %s -> %s\n" "$src_file" "$dest_file"
 
-                if file_matches_hash "$dest_path" "$hash"; then
-                    set_cached "$uuid" "$dest_file" "$hash"
-                else
-                    download_file \
-                        "$notebook" \
-                        "$output_dir" \
-                        "$uuid" \
-                        "$dest_file" \
-                        "$hash"
-                    printf "++ %s\n" "$dest_file"
-                fi
+            else
+                printf "   %s -> %s blocked by local file\n" \
+                    "$src_file" "$dest_file"
             fi
 
-        elif has_local_changes "$uuid" "$dest_path"; then
-            if is_untracked "$uuid"; then
-                printf "   %s has local modifications, skipped\n" "$dest_file"
+        elif [[ -d "$dest_path" ]]; then
+            printf "   %s -> %s blocked by local directory, skipped\n" \
+                "$src_file" "$dest_file"
 
-            elif has_remote_changes "$uuid" "$hash"; then
-                printf "   %s has local modifications, skipped\n" "$dest_file"
+        elif source_deleted "$src_path"; then
+            if has_remote_changes "$uuid" "$hash"; then
+                download_file \
+                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
+                printf "++ %s\n" "$dest_file"
+            else
+                printf "   %s deleted locally, skipped\n" "$src_file"
             fi
-
-        elif deleted_locally_no_new_content \
-                "$uuid" \
-                "$dest_file" \
-                "$dest_path" \
-                "$hash"
-        then
-            printf "   %s deleted locally, skipped\n" "$dest_file"
 
         else
+            rename_file "$src_path" "$dest_path"
+            printf "   %s -> %s\n" "$src_file" "$dest_file"
+
             if file_matches_hash "$dest_path" "$hash"; then
                 set_cached "$uuid" "$dest_file" "$hash"
             else
@@ -235,7 +247,26 @@ function handle_updates {
                 printf "++ %s\n" "$dest_file"
             fi
         fi
-    done
+
+    elif has_local_changes "$uuid" "$dest_path"; then
+        if is_untracked "$uuid"; then
+            printf "   %s has local modifications, skipped\n" "$dest_file"
+
+        elif has_remote_changes "$uuid" "$hash"; then
+            printf "   %s has local modifications, skipped\n" "$dest_file"
+        fi
+
+    elif deleted_locally_no_new_content "$uuid" "$dest_file" "$dest_path" "$hash"; then
+        printf "   %s deleted locally, skipped\n" "$dest_file"
+
+    else
+        if file_matches_hash "$dest_path" "$hash"; then
+            set_cached "$uuid" "$dest_file" "$hash"
+        else
+            download_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
+            printf "++ %s\n" "$dest_file"
+        fi
+    fi
 }
 
 function report_stale_files {
@@ -444,6 +475,15 @@ function has_remote_changes {
     [[ "$(get_cached_hash "$uuid")" != "$hash" ]]
 }
 
+function file_blocked_by_directory {
+    local filepath="$1"
+    local uuid="$2"
+    local dest_file="$3"
+
+    [[ -d "$filepath" ]] \
+        &&  ! is_being_renamed "$uuid" "$dest_file"
+}
+
 function parent_blocked_by_file {
     local output_dir="$1"
     local file="$2"
@@ -516,4 +556,4 @@ function destination_occupied {
     [[ -f "$filepath" ]]
 }
 
-main "$@"
+[[ "${BASH_SOURCE[0]}" != "$0" ]] || main "$@"

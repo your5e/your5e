@@ -72,7 +72,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     [ -d "$output_dir/Bestiary.md" ]
-    [ "$(cat "$output_dir/Bestiary.md/notes.txt")" = "local notes" ]
+    diff -u <(echo "local notes") <(cat "$output_dir/Bestiary.md/notes.txt")
     [ $status -eq 0 ]
 }
 
@@ -88,7 +88,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Home.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/Home.md")
     [ $status -eq 0 ]
 }
 
@@ -105,7 +105,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     [ -f "$output_dir/NPCs.md" ]
-    [ "$(cat "$output_dir/characters/NPCs.md")" = "local content" ]
+    diff -u <(echo "local content") <(cat "$output_dir/characters/NPCs.md")
     [ $status -eq 0 ]
 }
 
@@ -121,7 +121,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Home.md")" = "local content" ]
+    diff -u <(echo "local content") <(cat "$output_dir/Home.md")
     [ -f "$output_dir/Welcome.md" ]
     [ $status -eq 0 ]
 }
@@ -142,18 +142,18 @@ setup() {
 }
 
 @test "filename update" {
-    move_cached_file "characters/NPCs.md" "NPCs.md"
+    move_cached_file "The Old Café.md" "café.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           NPCs.md -> characters/NPCs.md
+           café.md -> The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
-    [ ! -f "$output_dir/NPCs.md" ]
+    diff -u "$fixtures/campaign-notes/The Old Café.md" "$output_dir/The Old Café.md"
+    [ ! -f "$output_dir/café.md" ]
     [ $status -eq 0 ]
 }
 
@@ -171,7 +171,7 @@ setup() {
 
     [ -f "$output_dir/NPCs.md" ]
     [ -d "$output_dir/characters/NPCs.md" ]
-    [ "$(cat "$output_dir/characters/NPCs.md/notes.txt")" = "local notes" ]
+    diff -u <(echo "local notes") <(cat "$output_dir/characters/NPCs.md/notes.txt")
     [ $status -eq 0 ]
 }
 
@@ -192,9 +192,7 @@ setup() {
     [ $status -eq 0 ]
 }
 
-# TODO: rethink swap/cycle handling
 @test "filename update swapped" {
-    skip "swap handling needs rethinking"
     move_cached_file "characters/NPCs.md" "temp.md"
     move_cached_file "sessions/session-01.md" "characters/NPCs.md"
     move_cached_file "temp.md" "sessions/session-01.md"
@@ -202,7 +200,8 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           sessions/session-01.md <-> characters/NPCs.md
+           characters/NPCs.md -> sessions/session-01.md
+           sessions/session-01.md -> characters/NPCs.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -212,10 +211,45 @@ setup() {
     [ $status -eq 0 ]
 }
 
-# TODO: implement cycle detection
+@test "filename update chain" {
+    move_cached_file "sessions/session-01.md" "old.md"
+    move_cached_file "characters/NPCs.md" "sessions/session-01.md"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+           old.md -> sessions/session-01.md
+           sessions/session-01.md -> characters/NPCs.md
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
+    diff -u "$fixtures/campaign-notes/sessions/session-01.md" "$output_dir/sessions/session-01.md"
+    [ ! -f "$output_dir/old.md" ]
+    [ $status -eq 0 ]
+}
+
+@test "filename update chain, reversed" {
+    move_cached_file "characters/NPCs.md" "old.md"
+    move_cached_file "sessions/session-01.md" "characters/NPCs.md"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+           characters/NPCs.md -> sessions/session-01.md
+           old.md -> characters/NPCs.md
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
+    diff -u "$fixtures/campaign-notes/sessions/session-01.md" "$output_dir/sessions/session-01.md"
+    [ ! -f "$output_dir/old.md" ]
+    [ $status -eq 0 ]
+}
+
 @test "filename update cycle" {
-    skip "cycle detection not yet implemented"
-    # Bestiary.md -> Home.md -> index.md -> Bestiary.md
     move_cached_file "Bestiary.md" "temp.md"
     move_cached_file "Home.md" "Bestiary.md"
     move_cached_file "index.md" "Home.md"
@@ -224,7 +258,9 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Bestiary.md -> Home.md -> index.md -> Bestiary.md
+           Home.md -> index.md
+           Bestiary.md -> Home.md
+           index.md -> Bestiary.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -232,6 +268,48 @@ setup() {
     diff -u "$fixtures/campaign-notes/Bestiary.md" "$output_dir/Bestiary.md"
     diff -u "$fixtures/campaign-notes/Home.md" "$output_dir/Home.md"
     diff -u "$fixtures/campaign-notes/index.md" "$output_dir/index.md"
+    [ $status -eq 0 ]
+}
+
+@test "filename update cycle, local modification blocks cycle" {
+    move_cached_file "Bestiary.md" "temp.md"
+    move_cached_file "Home.md" "Bestiary.md"
+    move_cached_file "index.md" "Home.md"
+    move_cached_file "temp.md" "index.md"
+    modify_file "Home.md"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+           Home.md has local modifications, skipped
+           Bestiary.md -> Home.md blocked by local file
+           index.md -> Bestiary.md blocked by local file
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    diff -u <(echo "local modifications") <(cat "$output_dir/Home.md")
+    [ $status -eq 0 ]
+}
+
+@test "filename update cycle, untracked file blocks cycle" {
+    move_cached_file "Bestiary.md" "temp.md"
+    move_cached_file "Home.md" "Bestiary.md"
+    move_cached_file "index.md" "Home.md"
+    move_cached_file "temp.md" "index.md"
+    untrack_file "Home.md"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+           index.md has local modifications, skipped
+           Bestiary.md -> Home.md blocked by local file
+           index.md -> Bestiary.md blocked by local file
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    diff -u "$fixtures/campaign-notes/index.md" "$output_dir/Home.md"
     [ $status -eq 0 ]
 }
 
@@ -243,7 +321,7 @@ setup() {
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/index.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/index.md")
     [ $status -eq 0 ]
 }
 
@@ -259,7 +337,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Bestiary.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/Bestiary.md")
     [ $status -eq 0 ]
 }
 
@@ -275,7 +353,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/NPCs.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/NPCs.md")
     [ ! -f "$output_dir/characters/NPCs.md" ]
     [ $status -eq 0 ]
 }
@@ -292,7 +370,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Welcome.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/Welcome.md")
     [ ! -f "$output_dir/Home.md" ]
     [ $status -eq 0 ]
 }
@@ -325,7 +403,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Old Notes.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/Old Notes.md")
     [ $status -eq 0 ]
 }
 
@@ -375,7 +453,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/index.md")" = "local modifications" ]
+    diff -u <(echo "local modifications") <(cat "$output_dir/index.md")
     [ $status -eq 0 ]
 }
 
@@ -489,7 +567,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ "$(cat "$output_dir/Home.md")" = "local content" ]
+    diff -u <(echo "local content") <(cat "$output_dir/Home.md")
     [ ! -f "$output_dir/Welcome.md" ]
     [ $status -eq 0 ]
 }

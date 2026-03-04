@@ -167,6 +167,18 @@ class Command(BaseCommand):
             created_by=norm,
         )
 
+        cafe_page = Page.objects.create(wiki=notebook)
+        cafe_page.update(
+            filename="The Old Café.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # The Old Café
+
+                A cosy establishment frequented by adventurers.
+            """).encode(),
+            created_by=norm,
+        )
+
         deleted_page = Page.objects.create(wiki=notebook)
         deleted_page.update(
             filename="Old Notes.md",

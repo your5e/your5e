@@ -26,12 +26,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-        ++ sessions/session-01.md
-        ++ Home.md
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+        ++ Home.md
+        ++ sessions/session-01.md
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -46,6 +47,7 @@ setup() {
     expected_state=$(sed -e 's/^        //' <<-EOF
         Bestiary.md	53ff06a20c413033e4df6a193154b33add649a8dbb9275fc0f0aef885dca0307
         Home.md	eae6d1cae46f87787001ff65f70edf4820c996a21a595d5a7b3e0b3780a75ae6
+        The Old Café.md	c2e122ed35f55372deff37e435d6f0c5651dcf3f5b13dbf731f0eb4a558b13b3
         characters/NPCs.md	d4bfe27b0485dd98beaacffd5953ae0eabf4ab44b72244a898f5b0db6bb4efe8
         index.md	698f2e61564436ed84ce8e72be283dad46f6b48967c491f1f2d49b8c2df31549
         random-hexmap-7.png	7c31741747c5e948ef888893889db97b5e15388479b2a1ee730a01ef9c0d9c59
@@ -67,12 +69,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-        ++ sessions/session-01.md
-           Home.md has local modifications, skipped
-           index.md has local modifications, skipped
         ++ random-hexmap-7.png
+           index.md has local modifications, skipped
+           Home.md has local modifications, skipped
+        ++ sessions/session-01.md
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -91,12 +94,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-        ++ sessions/session-01.md
-           Home.md matches remote, tracking
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+           Home.md matches remote, tracking
+        ++ sessions/session-01.md
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -113,12 +117,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-           sessions/session-01.md blocked by local file, skipped
-        ++ Home.md
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+        ++ Home.md
+           sessions/session-01.md blocked by local file, skipped
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -135,12 +140,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-           Bestiary.md blocked by local directory, skipped
-        ++ sessions/session-01.md
-        ++ Home.md
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+        ++ Home.md
+        ++ sessions/session-01.md
+           Bestiary.md blocked by local directory, skipped
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -157,12 +163,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-        ++ sessions/session-01.md
-           Home.md blocked by local file with different case, skipped
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+           Home.md blocked by local file with different case, skipped
+        ++ sessions/session-01.md
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -178,12 +185,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ characters/NPCs.md
-        ++ Bestiary.md
-        ++ sessions/session-01.md
-           Home.md blocked by local file with different case, skipped
-        ++ index.md
         ++ random-hexmap-7.png
+        ++ index.md
+           Home.md blocked by local file with different case, skipped
+        ++ sessions/session-01.md
+        ++ Bestiary.md
+        ++ characters/NPCs.md
+        ++ The Old Café.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")

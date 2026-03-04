@@ -7,4 +7,5 @@ See [the algorithm](../../tests/sync.md).
         - integration tests against dev seed
 - [X] don't request unchanged files
         - cache sync state and compare hashes
+- [X] ensure rename cycles are broken
 - [ ] implement full two-way sync
