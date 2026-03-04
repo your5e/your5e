@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from urllib.parse import urlparse
+from uuid import UUID
 
 from django.db.models import Max, Q
 from django.db.models.functions import Coalesce, Greatest
@@ -283,7 +284,6 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         notebook = self.get_notebook()
 
         try:
-            from uuid import UUID
             page_uuid = UUID(uuid)
         except ValueError:
             raise Http404 from None
@@ -306,3 +306,43 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             version.content.data,
             content_type=version.mime_type,
         )
+
+    def put(self, request, username, slug, uuid):
+        notebook = self.get_notebook()
+
+        if not NotebookPermissions.can_edit(notebook, request.user):
+            return Response(status=403)
+
+        try:
+            page_uuid = UUID(uuid)
+        except ValueError:
+            raise Http404 from None
+
+        page = notebook.page_set.filter(uuid=page_uuid).first()
+
+        if not page:
+            raise Http404
+
+        previous_hash = page.latest_version.content.hash
+
+        if page.deleted_at:
+            page.restore()
+
+        version = page.update(
+            filename=page.latest_version.filename,
+            mime_type=request.content_type,
+            data=request.body,
+            created_by=request.user,
+        )
+
+        return Response({
+            "uuid": str(page.uuid),
+            "path": version.path,
+            "filename": version.filename,
+            "mime_type": version.mime_type,
+            "version": version.number,
+            "created_by": version.created_by.username,
+            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "content_hash": version.content.hash,
+            "previous_hash": previous_hash,
+        })

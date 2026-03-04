@@ -1,3 +1,4 @@
+import hashlib
 import re
 from http import HTTPStatus
 
@@ -11,7 +12,13 @@ TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 class NotebookApiMixin(ApiMixin, NotebookMixin):
-    pass
+    def get_page_uuid(self, path):
+        page = self.wendys_notebook.get_page(path=path)
+        return str(page.uuid)
+
+    def get_page_hash(self, path):
+        page = self.wendys_notebook.get_page(path=path)
+        return page.latest_version.content.hash
 
 
 @pytest.mark.django_db
@@ -539,10 +546,6 @@ class TestNotebookPages(NotebookApiMixin):
 
 @pytest.mark.django_db
 class TestPageContent(NotebookApiMixin):
-    def get_page_uuid(self, path):
-        page = self.wendys_notebook.get_page(path=path)
-        return str(page.uuid)
-
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
@@ -640,3 +643,177 @@ class TestPageContent(NotebookApiMixin):
             f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestPageContentPut(NotebookApiMixin):
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Updated Welcome\n\nNew content.",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Editor Update\n\nEdited by susan.",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Viewer Update",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# User Update",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Unauthenticated Update",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_response_fields(self, api_client):
+        uuid = self.get_page_uuid("index")
+        previous_hash = self.get_page_hash("index")
+        new_content = b"# Response Test"
+        new_hash = hashlib.sha256(new_content).hexdigest()
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=new_content,
+            content_type="text/markdown",
+        )
+        data = response.json()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "path": "index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 2,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": new_hash,
+            "previous_hash": previous_hash,
+        }
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.content == new_content
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_is_undeleted(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        previous_hash = self.deleted_page.latest_version.content.hash
+        new_content = b"# Revived"
+        new_hash = hashlib.sha256(new_content).hexdigest()
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=new_content,
+            content_type="text/markdown",
+        )
+        data = response.json()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "path": "old-draft",
+            "filename": "old-draft.md",
+            "mime_type": "text/markdown",
+            "version": 2,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": new_hash,
+            "previous_hash": previous_hash,
+        }
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.content == new_content
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_uuid_returns_not_found(self, api_client):
+        response = api_client.put(
+            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
+            data=b"# Nonexistent",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_uuid_returns_not_found(self, api_client):
+        response = api_client.put(
+            "/api/notebooks/wendy/heros-legendes/not-a-uuid",
+            data=b"# Invalid UUID",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/no-such-notebook/{uuid}",
+            data=b"# Nonexistent Notebook",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_uuid_from_different_notebook(self, api_client):
+        from wikis.models import Page
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Test",
+            created_by=self.susan,
+        )
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{page.uuid}",
+            data=b"# Wrong Notebook",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_identical_content_no_new_version(self, api_client):
+        uuid = self.get_page_uuid("index")
+        original_hash = self.get_page_hash("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Welcome\n\nThis is the index page.",
+            content_type="text/markdown",
+        )
+        data = response.json()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "path": "index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 1,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": original_hash,
+            "previous_hash": original_hash,
+        }

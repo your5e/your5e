@@ -43,7 +43,7 @@ REST endpoints for Notebooks.
 - [X] api/notebooks/{user}/{notebook}/{uuid}
         - GET returns raw content with Content-Type header
         - ?version=_ver_ for older versions
-- [ ] PUT to update the page's content, creating a new version
+- [X] PUT to update the page's content, creating a new version
         - raw body with Content-Type header
         - response includes previous hash for conflict detection
 - [ ] PATCH to update the page's metadata (path)
