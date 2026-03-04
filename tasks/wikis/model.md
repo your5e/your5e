@@ -41,6 +41,8 @@ duplicate pages in multiple wikis don't take up extra storage.
         - enforce path slugs are unique within the wiki,
           near duplicate filenames cannot be created
         - updating a page with identical content does not create a new version
+- [ ] require file extension in filename
+        - prevents path conflicts between files and directories
 - [X] versions are kept when user is deleted, reassigned to sentinel
 - [X] add UUID to Page
 

@@ -35,7 +35,7 @@ REST endpoints for Notebooks.
         - ?since=_timestamp_ only pages updated after that point, including
           deletions
 - [X] include `editable` boolean in notebook metadata
-- [ ] include content hash
+- [X] include content hash
 
 
 # page content @phase
@@ -51,3 +51,5 @@ REST endpoints for Notebooks.
 - [ ] POST api/notebooks/{user}/{notebook}/
         - multipart, file (required), path (optional, overrides same as
           website)
+- [ ] reject uploads without file extension
+        - prevents path conflicts between files and directories

@@ -32,6 +32,8 @@ test-python: lint-python
 	docker compose exec $(EXEC_FLAGS) web pytest
 
 test-integration:
+	shellcheck tests/*.sh
+	awk 'length > 88 { print FILENAME ":" NR ": " length " chars > 88"; print; err=1 } END { exit err }' tests/*.sh
 	bats tests/*.bats
 
 test: test-python test-integration

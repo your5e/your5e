@@ -378,6 +378,7 @@ class TestNotebookPages(NotebookApiMixin):
             "created_by": "wendy",
             "updated_at": page["updated_at"],
             "deleted_at": None,
+            "content_hash": "c97598c919faef1e6b2478920c93a932c01fa126c4581ded374e2de8918c6649",  # noqa: E501
         }
 
         deleted = results[5]
@@ -391,6 +392,7 @@ class TestNotebookPages(NotebookApiMixin):
             "created_by": "wendy",
             "updated_at": None,
             "deleted_at": deleted["deleted_at"],
+            "content_hash": "d04123f976133f704ccec0af8f38bd2fecc66218310485daaba4fa09694f3a7d",  # noqa: E501
         }
 
     @ApiMixin.as_api_user("wendy")

@@ -190,6 +190,7 @@ class PageSerializer(serializers.Serializer):
     created_by = serializers.SerializerMethodField()
     updated_at = serializers.SerializerMethodField()
     deleted_at = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    content_hash = serializers.SerializerMethodField()
 
     def get_path(self, obj):
         return obj.latest_version.path
@@ -210,6 +211,9 @@ class PageSerializer(serializers.Serializer):
         if obj.deleted_at:
             return None
         return obj.latest_version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def get_content_hash(self, obj):
+        return obj.latest_version.content.hash
 
 
 class PagePagination(BasePagination):

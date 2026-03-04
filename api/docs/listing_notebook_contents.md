@@ -27,7 +27,8 @@ The response structure is:
       "version": 3,
       "created_by": "norm",
       "updated_at": "2024-01-15T10:30:00Z",
-      "deleted_at": null
+      "deleted_at": null,
+      "content_hash": "a1b2c3..."
     },
     {
       "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
@@ -37,7 +38,8 @@ The response structure is:
       "version": 1,
       "created_by": "norm",
       "updated_at": null,
-      "deleted_at": "2024-01-15T08:00:00Z"
+      "deleted_at": "2024-01-15T08:00:00Z",
+      "content_hash": "d4e5f6..."
     },
     {
       ...

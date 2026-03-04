@@ -73,20 +73,30 @@ class Command(BaseCommand):
                 Welcome to our campaign wiki.
 
                 ![Map](random-hexmap-7.png)
-                """).encode(),
+            """).encode(),
             created_by=norm,
         )
         page = Page.objects.create(wiki=notebook)
         page.update(
             filename="Welcome.md",
             mime_type="text/markdown",
-            data=b"# Welcome\n\nThis is a sample wiki page.",
+            data=dedent("""\
+                # Welcome
+
+                This is a sample wiki page.
+            """).encode(),
             created_by=norm,
         )
         page.update(
             filename="Home.md",
             mime_type="text/markdown",
-            data=b"# Home\n\nThis is the home page.\n\nRenamed and updated.",
+            data=dedent("""\
+                # Home
+
+                This is the home page.
+
+                Renamed and updated.
+            """).encode(),
             created_by=wendy,
         )
 
@@ -100,7 +110,60 @@ class Command(BaseCommand):
         session_page.update(
             filename="sessions/session-01.md",
             mime_type="text/markdown",
-            data=b"# Session 1\n\nThe party met in a tavern.",
+            data=dedent("""\
+                # Session 1
+
+                The party met in a tavern.
+            """).encode(),
+            created_by=norm,
+        )
+
+        bestiary_page = Page.objects.create(wiki=notebook)
+        bestiary_page.update(
+            filename="Bestiary.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Bestiary
+
+                Creatures encountered.
+            """).encode(),
+            created_by=norm,
+        )
+        bestiary_page.update(
+            filename="Bestiary.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Bestiary
+
+                Creatures encountered.
+
+                ## Goblin
+
+                Small and cunning.
+            """).encode(),
+            created_by=norm,
+        )
+
+        npc_content = dedent("""\
+            # NPCs
+
+            Important characters.
+
+            ## Bartender
+
+            Knows everyone.
+        """).encode()
+        npcs_page = Page.objects.create(wiki=notebook)
+        npcs_page.update(
+            filename="NPCs.md",
+            mime_type="text/markdown",
+            data=npc_content,
+            created_by=norm,
+        )
+        npcs_page.update(
+            filename="characters/NPCs.md",
+            mime_type="text/markdown",
+            data=npc_content,
             created_by=norm,
         )
 
@@ -108,7 +171,11 @@ class Command(BaseCommand):
         deleted_page.update(
             filename="Old Notes.md",
             mime_type="text/markdown",
-            data=b"# Old Notes\n\nThese notes are no longer needed.",
+            data=dedent("""\
+                # Old Notes
+
+                These notes are no longer needed.
+            """).encode(),
             created_by=norm,
         )
         deleted_page.soft_delete()
@@ -121,7 +188,11 @@ class Command(BaseCommand):
         places_page.update(
             filename="places/index.md",
             mime_type="text/markdown",
-            data=b"# Places\n\nLocations in the world.",
+            data=dedent("""\
+                # Places
+
+                Locations in the world.
+            """).encode(),
             created_by=wendy,
         )
         places_page.update(
@@ -134,7 +205,7 @@ class Command(BaseCommand):
 
                 - [[The Capital]]
                 - [[The Wilds]]
-                """).encode(),
+            """).encode(),
             created_by=wendy,
         )
         capital_page = Page.objects.create(wiki=wendys_notebook)
@@ -147,7 +218,7 @@ class Command(BaseCommand):
                 A bustling city of commerce and intrigue.
 
                 See also: [[The Wilds|the wilderness beyond]].
-                """).encode(),
+            """).encode(),
             created_by=wendy,
         )
         wilds_page = Page.objects.create(wiki=wendys_notebook)
@@ -160,7 +231,7 @@ class Command(BaseCommand):
                 Untamed forests and ancient ruins.
 
                 Return to [Places](./index).
-                """).encode(),
+            """).encode(),
             created_by=wendy,
         )
         NotebookPermission.objects.create(

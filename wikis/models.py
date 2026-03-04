@@ -234,7 +234,7 @@ class Page(models.Model):
             raise ValueError(f"Version {version_number} does not exist") from err
         content_hash = version.content_id
         version.delete()
-        Content.purge_orphaned([content_hash])
+        Content.purge_stale([content_hash])
         if self.version_set.exists():
             self.wiki.updated()
         else:
@@ -246,7 +246,7 @@ class Page(models.Model):
             self.version_set.values_list("content_id", flat=True)
         )
         super().delete(*args, **kwargs)
-        Content.purge_orphaned(content_hashes)
+        Content.purge_stale(content_hashes)
         wiki.updated()
 
     def __str__(self):
@@ -267,7 +267,7 @@ class Content(models.Model):
         raise RuntimeError("Content cannot be deleted directly; use purge")
 
     @classmethod
-    def purge_orphaned(cls, content_hashes):
+    def purge_stale(cls, content_hashes):
         for content_hash in content_hashes:
             if not Version.objects.filter(content_id=content_hash).exists():
                 cls.objects.filter(hash=content_hash).delete()
