@@ -49,10 +49,10 @@ REST endpoints for Notebooks.
 - [X] PATCH to update the page's metadata (path)
 - [X] PATCH to revert to older version
 - [X] DELETE to soft-delete the page
-- [ ] POST api/notebooks/{user}/{notebook}/
-        - multipart, file (required), path (optional, overrides same as
+- [X] POST api/notebooks/{user}/{notebook}/
+        - multipart, file (required), filename (optional, overrides same as
           website)
-- [ ] reject uploads without file extension
+- [X] reject uploads without file extension
         - prevents path conflicts between files and directories
 
 

@@ -3,6 +3,42 @@
 Operations on individual pages within a notebook.
 
 
+## POST `/api/notebooks/{username}/{notebook-slug}/`
+
+Create a new page in the notebook. Accepts a multipart form with:
+
+- `file` (required): the file content to upload
+- `filename` (optional): override the uploaded file's name
+
+If `filename` is not provided, the uploaded file's original name is used.
+Filenames must have a file extension. Filenames can include directories
+(e.g. `heroes/Theron.md`).
+
+### Response
+
+```json
+{
+  "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "/api/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "html_url": "https://your5e.com/notebooks/norm/campaign-notes/new-page",
+  "filename": "New Page.md",
+  "mime_type": "text/markdown",
+  "version": 1,
+  "created_by": "norm",
+  "updated_at": "2024-01-15T12:00:00Z",
+  "content_hash": "a1b2c3..."
+}
+```
+
+Returns _201 Created_ on success.
+
+Returns _400 Bad Request_ if:
+- no file is provided
+- the filename has no file extension
+
+Returns _409 Conflict_ if a page with the same path already exists.
+
+
 ## GET `/api/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Returns the current content of a page, with the appropriate `Content-Type`

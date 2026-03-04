@@ -1136,6 +1136,211 @@ class TestPageContentPatchRevert(NotebookApiMixin):
 
 
 @pytest.mark.django_db
+class TestPageCreate(NotebookApiMixin):
+    def test_unauthenticated(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("test.md", b"# New Page")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("new-page.md", b"# New Page")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CREATED
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("editor-page.md", b"# Editor Page")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CREATED
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("viewer-page.md", b"# Viewer Page")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("user-page.md", b"# User Page")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_response_fields(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        content = b"# Response Test\n\nContent here."
+        content_hash = hashlib.sha256(content).hexdigest()
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("response-test.md", content)},
+            format="multipart",
+        )
+        data = response.json()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": data["uuid"],
+            "url": f"/api/notebooks/wendy/heros-legendes/{data['uuid']}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/response-test",
+            "filename": "response-test.md",
+            "mime_type": "text/markdown",
+            "version": 1,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": content_hash,
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_content_retrievable(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        content = b"# Retrievable\n\nThis content should be retrievable."
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("retrievable.md", content)},
+            format="multipart",
+        )
+        uuid = response.json()["uuid"]
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.content == content
+
+    @ApiMixin.as_api_user("wendy")
+    def test_filename_override(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("original.md", b"# Override Test"),
+                "filename": "custom-name.md",
+            },
+            format="multipart",
+        )
+        data = response.json()
+        assert data["filename"] == "custom-name.md"
+        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/custom-name"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_filename_with_directory(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("nested.md", b"# Nested"),
+                "filename": "subdir/nested.md",
+            },
+            format="multipart",
+        )
+        data = response.json()
+        assert data["filename"] == "subdir/nested.md"
+        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/subdir/nested"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_image_upload(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from notebooks.tests import PNG_BYTES
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("test-image.png", PNG_BYTES)},
+            format="multipart",
+        )
+        data = response.json()
+        assert data["mime_type"] == "image/png"
+        assert data["filename"] == "test-image.png"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_no_file_extension_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("noextension", b"# No Extension")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_filename_override_no_extension_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("valid.md", b"# Valid"),
+                "filename": "noextension",
+            },
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_page_already_exists_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("index.md", b"# Duplicate")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CONFLICT
+
+    @ApiMixin.as_api_user("wendy")
+    def test_path_conflict_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("Index.md", b"# Path Conflict")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CONFLICT
+
+    @ApiMixin.as_api_user("wendy")
+    def test_no_file_rejected(self, api_client):
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/no-such-notebook/",
+            data={"file": SimpleUploadedFile("test.md", b"# Test")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_user(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/nobody/some-notebook/",
+            data={"file": SimpleUploadedFile("test.md", b"# Test")},
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
 class TestPageContentDelete(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):

@@ -1,4 +1,6 @@
+import mimetypes
 from datetime import UTC, datetime
+from http import HTTPStatus
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -12,7 +14,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
-from rest_framework.parsers import JSONParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from api.views import AuthenticatedAPIView
@@ -268,7 +270,82 @@ class NotebookAccessMixin:
 class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
     serializer_class = PageSerializer
     pagination_class = PagePagination
+    parser_classes = [MultiPartParser]
     notebook = None
+
+    def post(self, request, username, slug):
+        from wikis.models import Page, Version
+
+        notebook = self.get_notebook()
+
+        if not NotebookPermissions.can_edit(notebook, request.user):
+            return Response(status=HTTPStatus.FORBIDDEN)
+
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            raise ValidationError({"file": "This field is required."})
+
+        form_filename = request.POST.get("filename")
+        if form_filename:
+            filename = form_filename
+        else:
+            filename = uploaded_file.name
+
+        if "." not in filename or filename.endswith("."):
+            raise ValidationError({"filename": "Filename must have a file extension."})
+
+        mime_type, _ = mimetypes.guess_type(filename)
+        if mime_type is None:
+            ext = "." + filename.rsplit(".", 1)[-1].lower()
+            mime_type = {
+                ".md": "text/markdown",
+                ".markdown": "text/markdown",
+            }.get(ext, "application/octet-stream")
+
+        temp_version = Version(filename=filename)
+        path = temp_version.generate_path()
+
+        try:
+            notebook.get_page(path=path)
+            return Response(
+                {"filename": "A page with this path already exists."},
+                status=HTTPStatus.CONFLICT,
+            )
+        except Page.DoesNotExist:
+            pass
+
+        page = Page.objects.create(wiki=notebook)
+        version = page.update(
+            filename=filename,
+            mime_type=mime_type,
+            data=uploaded_file.read(),
+            created_by=request.user,
+        )
+
+        return self.page_response(request, notebook, page, version)
+
+    def page_response(self, request, notebook, page, version):
+        api_url = reverse("api_page_content", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+            "uuid": str(page.uuid),
+        })
+        html_path = reverse("notebook_page", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+            "path": version.path,
+        })
+        return Response({
+            "uuid": str(page.uuid),
+            "url": api_url,
+            "html_url": request.build_absolute_uri(html_path),
+            "filename": version.filename,
+            "mime_type": version.mime_type,
+            "version": version.number,
+            "created_by": version.created_by.username,
+            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "content_hash": version.content.hash,
+        }, status=HTTPStatus.CREATED)
 
     def list(self, request, *args, **kwargs):
         self.notebook = self.get_notebook()
