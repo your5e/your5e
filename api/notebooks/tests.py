@@ -1027,3 +1027,109 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestPageContentPatchRevert(NotebookApiMixin):
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_response_fields(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1},
+            format="json",
+        )
+        data = response.json()
+        expected_hash = hashlib.sha256(b"# Session One\n\nFirst draft.").hexdigest()
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://testserver/notebooks/wendy/heros-legendes/session-one",
+            "filename": "Session One.md",
+            "mime_type": "text/markdown",
+            "version": 4,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": expected_hash,
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_version(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 999},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_revert_to_and_filename_mutually_exclusive(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 1, "filename": "new-name.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_revert_to_current_version_no_new_version(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"revert_to": 3},
+            format="json",
+        )
+        data = response.json()
+        assert data["version"] == 3

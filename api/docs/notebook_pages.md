@@ -15,10 +15,11 @@ Arguments:
 
 ## PATCH `/api/notebooks/{username}/{notebook-slug}/{uuid}`
 
-Rename a page by updating its filename. The content is preserved and a new
-version is created. If the filename is unchanged, no new version is created.
+Update a page's metadata. Either rename a page or revert it to an older
+version. A new version is created with the change. Provide exactly one of
+`filename` or `revert_to`.
 
-Request body (JSON):
+### Renaming a page
 
 ```json
 {
@@ -26,7 +27,22 @@ Request body (JSON):
 }
 ```
 
-The response structure is:
+The content is preserved. If the filename is unchanged, no new version is
+created. Filenames can include directories (e.g. `heroes/Theron.md`).
+
+### Reverting to an older version
+
+```json
+{
+  "revert_to": 2
+}
+```
+
+Creates a new version with the content, filename, and mime type from the
+specified version number. If the page is already at that content and filename,
+no new version is created.
+
+### Response
 
 ```json
 {
@@ -42,12 +58,12 @@ The response structure is:
 }
 ```
 
-Filenames can include directories (e.g. `heroes/Theron.md`).
-
 Returns _400 Bad Request_ if:
-- the filename is missing
+- neither `filename` nor `revert_to` is provided
+- both `filename` and `revert_to` are provided
 - the filename contains forbidden characters
 - the filename conflicts with an existing page
+- the version number does not exist
 
 
 ## PUT `/api/notebooks/{username}/{notebook-slug}/{uuid}`

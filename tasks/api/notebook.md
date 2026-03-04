@@ -47,7 +47,7 @@ REST endpoints for Notebooks.
         - raw body with Content-Type header
         - response includes previous hash for conflict detection
 - [X] PATCH to update the page's metadata (path)
-- [ ] PATCH to revert to older version
+- [X] PATCH to revert to older version
 - [ ] DELETE to soft-delete the page
 - [ ] POST api/notebooks/{user}/{notebook}/
         - multipart, file (required), path (optional, overrides same as

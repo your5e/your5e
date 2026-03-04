@@ -381,6 +381,22 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
 
         data = JSONParser().parse(request)
         filename = data.get("filename")
+        revert_to = data.get("revert_to")
+
+        if filename and revert_to:
+            raise ValidationError({
+                "revert_to": "Cannot specify both filename and revert_to."
+            })
+
+        if revert_to is not None:
+            try:
+                version = page.revert(
+                    version_number=revert_to,
+                    reverted_by=request.user,
+                )
+            except ValueError as err:
+                raise ValidationError({"revert_to": str(err)}) from err
+            return self.version_response(request, notebook, page, version)
 
         if not filename:
             raise ValidationError({"filename": "This field is required."})
