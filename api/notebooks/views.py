@@ -415,6 +415,28 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
 
         return self.version_response(request, notebook, page, version)
 
+    def delete(self, request, username, slug, uuid):
+        notebook = self.get_notebook()
+
+        if not NotebookPermissions.can_edit(notebook, request.user):
+            return Response(status=403)
+
+        try:
+            page_uuid = UUID(uuid)
+        except ValueError:
+            raise Http404 from None
+
+        page = notebook.page_set.filter(
+            uuid=page_uuid,
+            deleted_at__isnull=True,
+        ).first()
+
+        if not page:
+            raise Http404
+
+        page.soft_delete()
+        return Response(status=204)
+
     def version_response(self, request, notebook, page, version, previous_hash=None):
         api_url = reverse("api_page_content", kwargs={
             "username": notebook.owner.username,

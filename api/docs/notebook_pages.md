@@ -75,3 +75,10 @@ If the page has been soft-deleted, this will restore it.
 The response structure is the same as PATCH, with an additional
 `previous_hash` field containing the content hash before this update,
 which can be used for client-side conflict detection.
+
+
+## DELETE `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+
+Soft-delete a page. The page can be restored by updating its content with PUT.
+
+Returns _204 No Content_ on success.

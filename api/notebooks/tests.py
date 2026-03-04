@@ -1133,3 +1133,85 @@ class TestPageContentPatchRevert(NotebookApiMixin):
         )
         data = response.json()
         assert data["version"] == 3
+
+
+@pytest.mark.django_db
+class TestPageContentDelete(NotebookApiMixin):
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @ApiMixin.as_api_user("wendy")
+    def test_page_is_soft_deleted(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_returns_not_found(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_uuid_returns_not_found(self, api_client):
+        response = api_client.delete(
+            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_invalid_uuid_returns_not_found(self, api_client):
+        response = api_client.delete(
+            "/api/notebooks/wendy/heros-legendes/not-a-uuid"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.delete(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_uuid_from_different_notebook(self, api_client):
+        from wikis.models import Page
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Test",
+            created_by=self.susan,
+        )
+        response = api_client.delete(
+            f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
