@@ -4,7 +4,7 @@
 declare fixtures output_dir BATS_FILE_TMPDIR
 
 function uuid_for {
-    grep "^$1\t" "$BATS_FILE_TMPDIR/pages" | cut -f2
+    grep "^$1"$'\t' "$BATS_FILE_TMPDIR/pages" | cut -f2
 }
 
 function init_synced_dir {
@@ -22,7 +22,7 @@ function set_cached_state {
 
     # remove existing file for this UUID if different
     local old_file
-    old_file=$(grep "^$uuid\t" "$state_file" | cut -f2)
+    old_file=$(grep "^$uuid"$'\t' "$state_file" | cut -f2)
     [[ -n "$old_file" && "$old_file" != "$filename" ]] && rm -f "$output_dir/$old_file"
 
     # create file with content
@@ -30,7 +30,7 @@ function set_cached_state {
     printf "%s" "$content" > "$output_dir/$filename"
 
     # update cache
-    grep -v "^$uuid\t" "$state_file" > "$state_file.new"
+    grep -v "^$uuid"$'\t' "$state_file" > "$state_file.new"
     printf "%s\t%s\t%s\n" "$uuid" "$filename" "$hash" >> "$state_file.new"
     mv "$state_file.new" "$state_file"
 }
@@ -39,7 +39,7 @@ function untrack_file {
     local filename="$1"
     local state_file="$output_dir/.sync-state"
 
-    grep -v "\t$filename\t" "$state_file" > "$state_file.new"
+    grep -v $'\t'"$filename"$'\t' "$state_file" > "$state_file.new"
     mv "$state_file.new" "$state_file"
 }
 
@@ -52,8 +52,9 @@ function move_cached_file {
     rmdir -p "$(dirname "$output_dir/$from")" 2>/dev/null || true
 
     local uuid
-    uuid=$(grep "\t$from\t" "$state_file" | cut -f1)
-    sed -i '' "s|$uuid\t$from\t|$uuid\t$to\t|" "$state_file"
+    uuid=$(grep $'\t'"$from"$'\t' "$state_file" | cut -f1)
+    sed "s|$uuid\t$from\t|$uuid\t$to\t|" "$state_file" > "$state_file.new"
+    mv "$state_file.new" "$state_file"
 }
 
 function replace_cached_uuid {
@@ -62,7 +63,8 @@ function replace_cached_uuid {
     local old_uuid
     old_uuid=$(uuid_for "$filename")
 
-    sed -i '' "s/^$old_uuid\t/$new_uuid\t/" "$state_file"
+    sed "s/^$old_uuid\t/$new_uuid\t/" "$state_file" > "$state_file.new"
+    mv "$state_file.new" "$state_file"
 }
 
 function rewind_bestiarymd_state {

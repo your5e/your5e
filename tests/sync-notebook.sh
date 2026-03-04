@@ -520,14 +520,17 @@ function file_exists_with_different_case {
     local filepath="$1"
     local file="$2"
 
-    [[ ! -f "$filepath" ]] \
-        && return 1
-
-    local dir_path base_name
+    local dir_path base_name actual_file
     dir_path=$(dirname "$filepath")
     base_name=$(basename "$file")
 
-    [[ -z $(find "$dir_path" -maxdepth 1 -name "$base_name" -print -quit) ]]
+    actual_file=$(
+        find "$dir_path" -maxdepth 1 -iname "$base_name" -print -quit 2>/dev/null
+    )
+
+    [[ -z "$actual_file" ]] && return 1
+    [[ "$(basename "$actual_file")" == "$base_name" ]] && return 1
+    return 0
 }
 
 function deleted_locally_no_new_content {
