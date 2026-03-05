@@ -1028,6 +1028,66 @@ class TestPageContentPatch(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
 
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_rejected(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": ".hidden.md"},
+            format="json",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_in_directory_rejected(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "folder/.hidden.md"},
+            format="json",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_directory_rejected(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": ".hidden/file.md"},
+            format="json",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_parent_path_is_file_rejected(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "NOTES/subpage.md"},
+            format="json",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["Path 'notes' already exists as a file."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_grandparent_path_is_file_rejected(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"filename": "Notes/sub/page.md"},
+            format="json",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["Path 'notes' already exists as a file."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
 
 @pytest.mark.django_db
 class TestPageContentPatchRevert(NotebookApiMixin):
@@ -1338,6 +1398,75 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile(".hidden.md", b"# Hidden")},
+            format="multipart",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_in_directory_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={"file": SimpleUploadedFile("folder/.hidden.md", b"# Hidden")},
+            format="multipart",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_dotfile_directory_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("file.md", b"# Hidden"),
+                "filename": ".hidden/file.md",
+            },
+            format="multipart",
+        )
+        diff = response.json()
+        assert diff == {"filename": ["No hidden files."]}
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @ApiMixin.as_api_user("wendy")
+    def test_parent_path_is_file_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("subpage.md", b"# Subpage"),
+                "filename": "NOTES/subpage.md",
+            },
+            format="multipart",
+        )
+        diff = response.json()
+        assert diff == {"filename": "Path 'notes' already exists as a file."}
+        assert response.status_code == HTTPStatus.CONFLICT
+
+    @ApiMixin.as_api_user("wendy")
+    def test_grandparent_path_is_file_rejected(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile("page.md", b"# Subpage"),
+                "filename": "Notes/sub/page.md",
+            },
+            format="multipart",
+        )
+        diff = response.json()
+        assert diff == {"filename": "Path 'notes' already exists as a file."}
+        assert response.status_code == HTTPStatus.CONFLICT
 
 
 @pytest.mark.django_db

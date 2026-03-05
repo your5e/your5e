@@ -315,12 +315,22 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             pass
 
         page = Page.objects.create(wiki=notebook)
-        version = page.update(
-            filename=filename,
-            mime_type=mime_type,
-            data=uploaded_file.read(),
-            created_by=request.user,
-        )
+        try:
+            version = page.update(
+                filename=filename,
+                mime_type=mime_type,
+                data=uploaded_file.read(),
+                created_by=request.user,
+            )
+        except DjangoValidationError as err:
+            page.delete()
+            messages = err.message_dict.get("filename", [])
+            if messages and "already exists as a file" in messages[0]:
+                return Response(
+                    {"filename": messages[0]},
+                    status=HTTPStatus.CONFLICT,
+                )
+            raise ValidationError(err.message_dict) from err
 
         return self.page_response(request, notebook, page, version)
 

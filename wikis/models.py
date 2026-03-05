@@ -302,6 +302,7 @@ class Version(models.Model):
     def clean(self):
         self.validate_filename()
         self.validate_path_unique()
+        self.validate_parent_paths()
 
     def validate_filename(self):
         if self.filename.endswith("/"):
@@ -311,6 +312,9 @@ class Version(models.Model):
         for char in FORBIDDEN_FILENAME_CHARS:
             if char in self.filename:
                 raise ValidationError(f"Filename cannot contain {char}")
+        for part in self.filename.split("/"):
+            if part.startswith("."):
+                raise ValidationError({"filename": "No hidden files."})
 
     def generate_path(self, filename=None):
         if filename is None:
@@ -353,6 +357,38 @@ class Version(models.Model):
             raise ValidationError(
                 f"Path {self.path} already exists in this wiki"
             )
+
+    def validate_parent_paths(self):
+        parts = self.path.split("/")
+        if len(parts) < 2:
+            return
+        latest_version_numbers = Version.objects.filter(
+            page__wiki=self.page.wiki,
+            page__deleted_at__isnull=True,
+        ).exclude(
+            page=self.page
+        ).values("page").annotate(
+            max_number=models.Max("number")
+        )
+        for i in range(1, len(parts)):
+            parent_path = "/".join(parts[:i])
+            conflicting = Version.objects.filter(
+                page__wiki=self.page.wiki,
+                page__deleted_at__isnull=True,
+                path=parent_path,
+            ).exclude(
+                page=self.page
+            ).filter(
+                number__in=models.Subquery(
+                    latest_version_numbers.filter(
+                        page=models.OuterRef("page")
+                    ).values("max_number")
+                )
+            ).exists()
+            if conflicting:
+                raise ValidationError({
+                    "filename": f"Path '{parent_path}' already exists as a file."
+                })
 
     def render(self, base_url=None):
         if self.mime_type == "text/markdown":

@@ -12,7 +12,8 @@ Create a new page in the notebook. Accepts a multipart form with:
 
 If `filename` is not provided, the uploaded file's original name is used.
 Filenames must have a file extension. Filenames can include directories
-(e.g. `heroes/Theron.md`).
+(e.g. `heroes/Theron.md`). Hidden files (names starting with `.`) are not
+allowed.
 
 ### Response
 
@@ -35,6 +36,8 @@ Returns _201 Created_ on success.
 Returns _400 Bad Request_ if:
 - no file is provided
 - the filename has no file extension
+- the filename is a hidden file (starts with `.`)
+- the path would be nested under an existing file
 
 Returns _409 Conflict_ if a page with the same path already exists.
 
@@ -64,7 +67,8 @@ version. A new version is created with the change. Provide exactly one of
 ```
 
 The content is preserved. If the filename is unchanged, no new version is
-created. Filenames can include directories (e.g. `heroes/Theron.md`).
+created. Filenames can include directories (e.g. `heroes/Theron.md`). Hidden
+files (names starting with `.`) are not allowed.
 
 ### Reverting to an older version
 
@@ -98,7 +102,9 @@ Returns _400 Bad Request_ if:
 - neither `filename` nor `revert_to` is provided
 - both `filename` and `revert_to` are provided
 - the filename contains forbidden characters
+- the filename is a hidden file (starts with `.`)
 - the filename conflicts with an existing page
+- the path would be nested under an existing file
 - the version number does not exist
 
 
