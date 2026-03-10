@@ -16,6 +16,8 @@ setup_file() {
     export YOUR5E_API_BASE="http://localhost:5843"
     export BATS_FILE_TMPDIR="${BATS_FILE_TMPDIR:-$(mktemp -d)}"
 
+    restore_database
+
     # fetch page metadata from API once for all tests
     curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
         "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
@@ -31,9 +33,9 @@ setup() {
 
 
 @test "no change" {
-    fail_on_file_download
+    fail_on_multiple_curl_calls
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -46,7 +48,7 @@ setup() {
 @test "untracked file" {
     create_file "scratchpad.txt"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -67,10 +69,10 @@ setup() {
     untrack_and_remove_file "Bestiary.md"
     create_file "Bestiary.md/notes.txt"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Bestiary.md blocked by local directory, skipped
+        pull: ERROR cannot pull "Bestiary.md", blocked by local directory
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -90,10 +92,10 @@ setup() {
     untrack_file "Home.md"
     modify_file "Home.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Home.md has local modifications, skipped
+        pull: ERROR cannot pull "Home.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -112,10 +114,10 @@ setup() {
     set_older_filename "characters/NPCs.md" "NPCs.md"
     create_file "characters/NPCs.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           NPCs.md -> characters/NPCs.md blocked by local file
+        pull: ERROR cannot rename "NPCs.md" to "characters/NPCs.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -136,10 +138,10 @@ setup() {
     set_older_content "Welcome.md"
     create_file "Home.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Welcome.md -> Home.md blocked by local file
+        pull: ERROR cannot rename "Welcome.md" to "Home.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -158,10 +160,10 @@ setup() {
 @test "remote edited" {
     set_older_content "Bestiary.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ Bestiary.md
+        pull: "Bestiary.md" (v2)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -174,10 +176,10 @@ setup() {
 @test "remote renamed" {
     set_older_filename "The Old Café.md" "café.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           café.md -> The Old Café.md
+        pull: renamed "café.md" to "The Old Café.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -191,10 +193,10 @@ setup() {
     set_older_filename "characters/NPCs.md" "NPCs.md"
     create_file "characters/NPCs.md/notes.txt"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           NPCs.md -> characters/NPCs.md blocked by local directory, skipped
+        pull: ERROR cannot rename "NPCs.md" to "characters/NPCs.md", blocked by local directory
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -214,11 +216,11 @@ setup() {
     set_older_filename "Home.md" "Welcome.md"
     set_older_content "Welcome.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Welcome.md -> Home.md
-        ++ Home.md
+        pull: renamed "Welcome.md" to "Home.md"
+        pull: "Home.md" (v2)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -233,11 +235,11 @@ setup() {
     set_older_filename "sessions/session-01.md" "characters/NPCs.md"
     set_older_filename "temp.md" "sessions/session-01.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           characters/NPCs.md -> sessions/session-01.md
-           sessions/session-01.md -> characters/NPCs.md
+        pull: renamed "characters/NPCs.md" to "sessions/session-01.md"
+        pull: renamed "sessions/session-01.md" to "characters/NPCs.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -251,11 +253,11 @@ setup() {
     set_older_filename "sessions/session-01.md" "old.md"
     set_older_filename "characters/NPCs.md" "sessions/session-01.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           old.md -> sessions/session-01.md
-           sessions/session-01.md -> characters/NPCs.md
+        pull: renamed "old.md" to "sessions/session-01.md"
+        pull: renamed "sessions/session-01.md" to "characters/NPCs.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -269,11 +271,11 @@ setup() {
     set_older_filename "characters/NPCs.md" "old.md"
     set_older_filename "sessions/session-01.md" "characters/NPCs.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           characters/NPCs.md -> sessions/session-01.md
-           old.md -> characters/NPCs.md
+        pull: renamed "characters/NPCs.md" to "sessions/session-01.md"
+        pull: renamed "old.md" to "characters/NPCs.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -289,12 +291,12 @@ setup() {
     set_older_filename "index.md" "Home.md"
     set_older_filename "temp.md" "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Home.md -> index.md
-           Bestiary.md -> Home.md
-           index.md -> Bestiary.md
+        pull: renamed "Home.md" to "index.md"
+        pull: renamed "Bestiary.md" to "Home.md"
+        pull: renamed "index.md" to "Bestiary.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -311,12 +313,12 @@ setup() {
     set_older_filename "temp.md" "index.md"
     modify_file "Home.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Home.md has local modifications, skipped
-           Bestiary.md -> Home.md blocked by local file
-           index.md -> Bestiary.md blocked by local file
+        pull: SKIPPING rename "Home.md" to "index.md", local changes would be lost
+        pull: ERROR cannot rename "Bestiary.md" to "Home.md", blocked by local file
+        pull: ERROR cannot rename "index.md" to "Bestiary.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -339,12 +341,12 @@ setup() {
     set_older_filename "temp.md" "index.md"
     untrack_file "Home.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           index.md has local modifications, skipped
-           Bestiary.md -> Home.md blocked by local file
-           index.md -> Bestiary.md blocked by local file
+        pull: ERROR cannot pull "index.md", blocked by local file
+        pull: ERROR cannot rename "Bestiary.md" to "Home.md", blocked by local file
+        pull: ERROR cannot rename "index.md" to "Bestiary.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -363,7 +365,7 @@ setup() {
 @test "local edited" {
     modify_file "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -383,10 +385,10 @@ setup() {
     set_older_content "Bestiary.md"
     modify_file "Bestiary.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Bestiary.md has local modifications, skipped
+        pull: SKIPPING pull "Bestiary.md", local changes would be lost
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -406,10 +408,10 @@ setup() {
     set_older_filename "characters/NPCs.md" "NPCs.md"
     modify_file "NPCs.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           NPCs.md has local modifications, skipped
+        pull: SKIPPING rename "NPCs.md" to "characters/NPCs.md", local changes would be lost
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -431,10 +433,10 @@ setup() {
     set_older_content "Welcome.md"
     modify_file "Welcome.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Welcome.md has local modifications, skipped
+        pull: SKIPPING rename "Welcome.md" to "Home.md", local changes would be lost
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -454,10 +456,10 @@ setup() {
 @test "remote deleted" {
     file_tracks_deleted_remote "archive/Old Notes.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        -- archive/Old Notes.md
+        pull: deleted "archive/Old Notes.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -478,10 +480,10 @@ setup() {
     file_tracks_deleted_remote "Old Notes.md"
     modify_file "Old Notes.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Old Notes.md has local modifications, skipped
+        pull: SKIPPING delete "Old Notes.md", local changes would be lost
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -501,10 +503,10 @@ setup() {
 @test "stale file" {
     add_stale_file "my-notes.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        -- my-notes.md
+        pull: deleted "my-notes.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -523,10 +525,10 @@ setup() {
 @test "stale file, remote edited" {
     mark_file_stale "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ index.md
+        pull: "index.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -541,11 +543,10 @@ setup() {
     mark_file_stale "index.md"
     modify_file "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           index.md deleted from server, keeping
-           index.md has local modifications, skipped
+        pull: SKIPPING delete "index.md", local changes would be lost
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -565,7 +566,7 @@ setup() {
     add_stale_file "my-notes.md"
     delete_tracked_file "my-notes.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -580,10 +581,10 @@ setup() {
     mark_file_stale "index.md"
     delete_tracked_file "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ index.md
+        pull: "index.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -597,10 +598,10 @@ setup() {
 @test "local deleted" {
     delete_tracked_file "index.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           index.md deleted locally, skipped
+        pull: SKIPPING pull "index.md", already deleted locally
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -619,10 +620,10 @@ setup() {
     set_older_content "Bestiary.md"
     delete_tracked_file "Bestiary.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ Bestiary.md
+        pull: "Bestiary.md" (v2)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -636,10 +637,10 @@ setup() {
     set_older_filename "characters/NPCs.md" "NPCs.md"
     delete_tracked_file "NPCs.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           NPCs.md deleted locally, skipped
+        pull: SKIPPING rename "NPCs.md" to "characters/NPCs.md", "NPCs.md" deleted locally
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -660,10 +661,10 @@ setup() {
     set_older_content "Welcome.md"
     delete_tracked_file "Welcome.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        ++ Home.md
+        pull: "Home.md" (v2)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -679,10 +680,10 @@ setup() {
     delete_tracked_file "Welcome.md"
     create_file "Home.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           Welcome.md -> Home.md blocked by local file
+        pull: ERROR cannot rename "Welcome.md" to "Home.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -703,15 +704,308 @@ setup() {
     file_tracks_deleted_remote "Old Notes.md"
     delete_tracked_file "Old Notes.md"
 
-    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        -- Old Notes.md
+        pull: deleted "Old Notes.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_deleted "Old Notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed" {
+    rename_local_file "index.md" "renamed-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_matches_fixture "index.md" "renamed-index.md"
+    assert_file_in_state "renamed-index.md"
+    assert_file_not_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited" {
+    rename_local_file "index.md" "renamed-index.md"
+    modify_file "renamed-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "renamed-index.md"
+    assert_file_in_state "renamed-index.md"
+    assert_file_not_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, remote edited" {
+    rename_local_file "Bestiary.md" "renamed-bestiary.md"
+    set_older_content "renamed-bestiary.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: "Bestiary.md" to "renamed-bestiary.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_matches_fixture "Bestiary.md" "renamed-bestiary.md"
+    assert_file_in_state "renamed-bestiary.md"
+    assert_file_not_in_state "Bestiary.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited, remote edited" {
+    rename_local_file "Bestiary.md" "renamed-bestiary.md"
+    set_older_content "renamed-bestiary.md"
+    modify_file "renamed-bestiary.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING pull "Bestiary.md" to "renamed-bestiary.md", local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "renamed-bestiary.md"
+    assert_file_in_state "renamed-bestiary.md"
+    assert_file_not_in_state "Bestiary.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, remote renamed" {
+    set_older_filename "index.md" "original.md"
+    rename_local_file "original.md" "my-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING rename "original.md" to "index.md", already "my-index.md" locally
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_matches_fixture "index.md" "my-index.md"
+    assert_file_in_state "my-index.md"
+    assert_file_not_in_state "index.md"
+    assert_file_not_in_state "original.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited, remote renamed" {
+    set_older_filename "index.md" "original.md"
+    rename_local_file "original.md" "my-index.md"
+    modify_file "my-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING rename "original.md" to "index.md", already "my-index.md" locally
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "my-index.md"
+    assert_file_in_state "my-index.md"
+    assert_file_not_in_state "index.md"
+    assert_file_not_in_state "original.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, remote edited, remote renamed" {
+    set_older_filename "index.md" "original.md"
+    set_older_content "original.md"
+    rename_local_file "original.md" "my-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING rename "original.md" to "index.md", already "my-index.md" locally
+        pull: "index.md" to "my-index.md" (v1)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_matches_fixture "index.md" "my-index.md"
+    assert_file_in_state "my-index.md"
+    assert_file_not_in_state "index.md"
+    assert_file_not_in_state "original.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited, remote edited, remote renamed" {
+    set_older_filename "index.md" "original.md"
+    set_older_content "original.md"
+    rename_local_file "original.md" "my-index.md"
+    modify_file "my-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING rename "original.md" to "index.md", already "my-index.md" locally
+        pull: SKIPPING pull "index.md" to "my-index.md", local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "my-index.md"
+    assert_file_in_state "my-index.md"
+    assert_file_not_in_state "index.md"
+    assert_file_not_in_state "original.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, remote deleted" {
+    file_tracks_deleted_remote "Old Notes.md"
+    rename_local_file "Old Notes.md" "my-notes.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: deleted "Old Notes.md" (was "my-notes.md")
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_deleted "my-notes.md"
+    assert_file_not_in_state "Old Notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited, remote deleted" {
+    file_tracks_deleted_remote "Old Notes.md"
+    rename_local_file "Old Notes.md" "my-notes.md"
+    modify_file "my-notes.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING delete "Old Notes.md" (at "my-notes.md"), local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "my-notes.md"
+    assert_file_in_state "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, stale file" {
+    add_stale_file "original.md"
+    rename_local_file "original.md" "my-notes.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: deleted "my-notes.md"
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_deleted "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed, local edited, stale file" {
+    add_stale_file "original.md"
+    rename_local_file "original.md" "my-notes.md"
+    modify_file "my-notes.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING delete "my-notes.md", local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "my-notes.md"
+    assert_file_in_state "my-notes.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"

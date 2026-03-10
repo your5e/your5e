@@ -21,6 +21,7 @@ setup:
 	docker compose up -d --build
 	docker compose exec $(EXEC_FLAGS) web python manage.py migrate
 	docker compose exec $(EXEC_FLAGS) web python manage.py seed_development
+	docker compose exec $(EXEC_FLAGS) db pg_dump -U your5e your5e > tests/seed.sql
 
 clean:
 	docker compose down -v

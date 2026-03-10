@@ -15,7 +15,17 @@ Once the API is read-write, we can implement the rest of the algorithm.
 
 - [X] make the existing tests exercise pull-only mode
 - [X] improve test readability with semantic helpers
-- [ ] implement push sync tests
+- [X] mirror the existing pull tests for push
+- [X] add any push-specific tests missing from the matrix
 - [ ] implement user permission scenarios
 - [ ] ensure results pagination
-- [ ] add extra API error scenarios
+- [ ] cover any remaining API error scenarios
+
+We could also make the script a watcher to push updates real-time.
+
+- [ ] update the script to watch for changes
+        - debounce changes before pushing, many small edits in quick
+          succession should be coalesced
+        - renames happen immediately
+        - sync on an interval to fetch remote changes
+        - recovering from abandoned sync, still pushes local changes
