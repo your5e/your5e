@@ -199,9 +199,29 @@ class Page(models.Model):
         self.save()
         self.wiki.updated()
 
-    def restore(self):
+    def restore(self, *, filename=None):
+        latest = self.latest_version
+        if filename:
+            new_version = Version(
+                page=self,
+                filename=filename,
+                path=latest.generate_path(filename),
+                mime_type=latest.mime_type,
+                content=latest.content,
+                created_by=latest.created_by,
+            )
+            new_version.validate_path_unique()
+        else:
+            latest.validate_path_unique()
         self.deleted_at = None
         self.save()
+        if filename:
+            self.update(
+                filename=filename,
+                mime_type=latest.mime_type,
+                data=latest.content.data,
+                created_by=latest.created_by,
+            )
         self.wiki.updated()
 
     def history(self):
@@ -335,7 +355,8 @@ class Version(models.Model):
 
     def validate_path_unique(self):
         latest_version_numbers = Version.objects.filter(
-            page__wiki=self.page.wiki
+            page__wiki=self.page.wiki,
+            page__deleted_at__isnull=True,
         ).exclude(
             page=self.page
         ).values("page").annotate(
@@ -343,6 +364,7 @@ class Version(models.Model):
         )
         conflicting = Version.objects.filter(
             page__wiki=self.page.wiki,
+            page__deleted_at__isnull=True,
             path=self.path,
         ).exclude(
             page=self.page

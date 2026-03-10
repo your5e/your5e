@@ -436,7 +436,10 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         previous_hash = page.latest_version.content.hash
 
         if page.deleted_at:
-            page.restore()
+            try:
+                page.restore()
+            except DjangoValidationError:
+                return Response(status=HTTPStatus.CONFLICT)
 
         version = page.update(
             filename=page.latest_version.filename,
@@ -458,10 +461,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         except ValueError:
             raise Http404 from None
 
-        page = notebook.page_set.filter(
-            uuid=page_uuid,
-            deleted_at__isnull=True,
-        ).first()
+        page = notebook.page_set.filter(uuid=page_uuid).first()
 
         if not page:
             raise Http404
@@ -469,6 +469,24 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         data = JSONParser().parse(request)
         filename = data.get("filename")
         revert_to = data.get("revert_to")
+        restore = data.get("restore")
+
+        if page.deleted_at:
+            if revert_to is not None:
+                raise ValidationError({
+                    "revert_to": "Cannot revert a deleted page."
+                })
+            if not restore:
+                raise ValidationError({
+                    "restore": "Page is deleted. Provide restore to undelete."
+                })
+            try:
+                page.restore(filename=filename)
+            except DjangoValidationError:
+                return Response(status=HTTPStatus.CONFLICT)
+            return self.version_response(
+                request, notebook, page, page.latest_version
+            )
 
         if filename and revert_to:
             raise ValidationError({

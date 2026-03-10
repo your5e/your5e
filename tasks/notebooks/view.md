@@ -67,7 +67,7 @@ Edit a page -- upload new content, change the filename, delete.
 - [X] upload file resets mime type and filename
 - [X] restore deleted page
         - redirects to notebook index
-- [ ] restore with optional filename
+- [X] restore with optional filename
         - allows us to bypass conflicts
         - ensures there is no new conflict
 

@@ -399,6 +399,28 @@ class TestPage(WikiMixin):
         self.wiki.refresh_from_db()
         assert self.wiki.last_updated > self.last_updated_after_setup
 
+    def test_soft_delete_frees_path_for_new_page(self):
+        self.page.soft_delete()
+        new_page = Page.objects.create(wiki=self.wiki)
+        new_page.update(
+            filename="document.txt",
+            mime_type="text/plain",
+            data=b"New page content",
+            created_by=self.wendy,
+        )
+        assert new_page.version_set.first().path == "document.txt"
+
+    def test_soft_delete_frees_path_for_similar_filename(self):
+        self.page.soft_delete()
+        new_page = Page.objects.create(wiki=self.wiki)
+        new_page.update(
+            filename="Document.TXT",
+            mime_type="text/plain",
+            data=b"New page content",
+            created_by=self.wendy,
+        )
+        assert new_page.version_set.first().path == "document.txt"
+
     def test_restore_clears_deleted_at(self):
         self.page.soft_delete()
         assert self.page.deleted_at is not None
@@ -409,6 +431,39 @@ class TestPage(WikiMixin):
         assert self.page.deleted_at is None
         self.wiki.refresh_from_db()
         assert self.wiki.last_updated > before_restore
+
+    def test_restore_raises_when_path_occupied(self):
+        self.page.soft_delete()
+        new_page = Page.objects.create(wiki=self.wiki)
+        new_page.update(
+            filename="document.txt",
+            mime_type="text/plain",
+            data=b"New page content",
+            created_by=self.wendy,
+        )
+        with pytest.raises(ValidationError):
+            self.page.restore()
+        self.page.refresh_from_db()
+        assert self.page.deleted_at is not None
+
+    def test_restore_with_filename_resolves_conflict(self):
+        self.page.soft_delete()
+        new_page = Page.objects.create(wiki=self.wiki)
+        new_page.update(
+            filename="document.txt",
+            mime_type="text/plain",
+            data=b"New page content",
+            created_by=self.wendy,
+        )
+        self.page.restore(filename="restored.txt")
+        assert self.page.deleted_at is None
+        assert self.page.latest_version.path == "restored.txt"
+
+    def test_restore_with_filename_without_conflict(self):
+        self.page.soft_delete()
+        self.page.restore(filename="renamed.txt")
+        assert self.page.deleted_at is None
+        assert self.page.latest_version.path == "renamed.txt"
 
     def test_version_reassigned_to_sentinel_on_user_delete(self):
         self.wendy.delete()

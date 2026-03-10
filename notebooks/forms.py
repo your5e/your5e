@@ -12,3 +12,13 @@ class PageForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 20, "cols": 80}),
     )
     file = forms.FileField(required=False)
+
+
+class RestoreForm(forms.Form):
+    filename = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.TextInput(attrs={
+            "placeholder": "New location (optional)",
+        }),
+    )

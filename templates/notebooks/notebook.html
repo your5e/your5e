@@ -45,7 +45,7 @@
 {% for page in deleted_pages %}
   <li>
     {{ page.filename }}
-    {% include "notebooks/includes/restore_form.html" with page_pk=page.page.pk %}
+    <a href="{% url 'notebook_restore' %}?page={{ page.page.uuid }}">Restore</a>
   </li>
 {% endfor %}
 </ul>

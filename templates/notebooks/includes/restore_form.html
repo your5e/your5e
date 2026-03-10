@@ -1,6 +1,0 @@
-<form method="post" action="{% url 'notebook_restore' %}">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <input type="hidden" name="page" value="{{ page_pk }}">
-  <button type="submit">Restore</button>
-</form>

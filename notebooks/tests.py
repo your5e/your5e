@@ -300,13 +300,13 @@ class NotebookMixin(UserMixin):
 
     def assert_edit_controls_present(self, content):
         assert '?edit">Edit' in content
-        assert 'action="/notebooks/restore"' in content
+        assert 'href="/notebooks/restore?page=' in content
         assert '<input type="file"' in content
         assert 'action="/notebooks/delete"' in content
 
     def assert_edit_controls_absent(self, content):
         assert '?edit">Edit' not in content
-        assert 'action="/notebooks/restore"' not in content
+        assert 'href="/notebooks/restore?page=' not in content
         assert '<input type="file"' not in content
         assert 'action="/notebooks/delete"' not in content
 
@@ -2003,10 +2003,53 @@ class TestNotebookPageDeleteView(NotebookMixin):
 
 class TestNotebookPageRestoreView(NotebookMixin):
     @UserMixin.as_user("wendy")
+    def test_get_shows_restore_form(self, client):
+        response = client.get(
+            "/notebooks/restore",
+            {"page": str(self.deleted_page.uuid)},
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "old-draft.md" in content
+        assert 'name="filename"' in content
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_get_restore_form(self, client):
+        response = client.get(
+            "/notebooks/restore",
+            {"page": str(self.deleted_page.uuid)},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_get_restore_form(self, client):
+        response = client.get(
+            "/notebooks/restore",
+            {"page": str(self.deleted_page.uuid)},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_get_restore_form(self, client):
+        response = client.get(
+            "/notebooks/restore",
+            {"page": str(self.deleted_page.uuid)},
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @UserMixin.as_user("wendy")
+    def test_restore_non_deleted_page_redirects_to_page(self, client):
+        page = self.wendys_notebook.get_page(filename="heroes/theron.md")
+        response = client.get(
+            "/notebooks/restore",
+            {"page": str(page.uuid)},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/heroes/theron"
+
+    @UserMixin.as_user("wendy")
     def test_owner_can_restore_page(self, client):
         response = client.post("/notebooks/restore", {
-            "notebook": self.wendys_notebook.pk,
-            "page": self.deleted_page.pk,
+            "page": str(self.deleted_page.uuid),
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/wendy/heros-legendes/"
@@ -2016,8 +2059,7 @@ class TestNotebookPageRestoreView(NotebookMixin):
     @UserMixin.as_user("susan")
     def test_editor_can_restore_page(self, client):
         response = client.post("/notebooks/restore", {
-            "notebook": self.wendys_notebook.pk,
-            "page": self.deleted_page.pk,
+            "page": str(self.deleted_page.uuid),
         })
         assert response.status_code == HTTPStatus.FOUND
         self.deleted_page.refresh_from_db()
@@ -2026,8 +2068,7 @@ class TestNotebookPageRestoreView(NotebookMixin):
     @UserMixin.as_user("mary")
     def test_viewer_cannot_restore_page(self, client):
         response = client.post("/notebooks/restore", {
-            "notebook": self.wendys_notebook.pk,
-            "page": self.deleted_page.pk,
+            "page": str(self.deleted_page.uuid),
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.deleted_page.refresh_from_db()
@@ -2036,8 +2077,7 @@ class TestNotebookPageRestoreView(NotebookMixin):
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_restore_page(self, client):
         response = client.post("/notebooks/restore", {
-            "notebook": self.wendys_notebook.pk,
-            "page": self.deleted_page.pk,
+            "page": str(self.deleted_page.uuid),
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.deleted_page.refresh_from_db()
@@ -2045,10 +2085,73 @@ class TestNotebookPageRestoreView(NotebookMixin):
 
     def test_anonymous_cannot_restore_page(self, client):
         response = client.post("/notebooks/restore", {
-            "notebook": self.wendys_notebook.pk,
-            "page": self.deleted_page.pk,
+            "page": str(self.deleted_page.uuid),
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @UserMixin.as_user("wendy")
+    def test_restore_with_conflict_shows_error(self, client):
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# New page at same path",
+            created_by=self.wendy,
+        )
+        response = client.post("/notebooks/restore", {
+            "page": str(self.deleted_page.uuid),
+        })
+        assert response.status_code == HTTPStatus.CONFLICT
+        content = response.content.decode()
+        assert "old-draft" in content
+        assert "already exists" in content
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @UserMixin.as_user("wendy")
+    def test_restore_with_filename_resolves_conflict(self, client):
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# New page at same path",
+            created_by=self.wendy,
+        )
+        response = client.post("/notebooks/restore", {
+            "page": str(self.deleted_page.uuid),
+            "filename": "restored-draft.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+        assert self.deleted_page.latest_version.path == "restored-draft"
+
+    @UserMixin.as_user("wendy")
+    def test_restore_with_filename_without_conflict(self, client):
+        response = client.post("/notebooks/restore", {
+            "page": str(self.deleted_page.uuid),
+            "filename": "renamed-draft.md",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+        assert self.deleted_page.latest_version.path == "renamed-draft"
+
+    @UserMixin.as_user("wendy")
+    def test_restore_with_conflicting_filename_shows_error(self, client):
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="existing.md",
+            mime_type="text/markdown",
+            data=b"# Existing page",
+            created_by=self.wendy,
+        )
+        response = client.post("/notebooks/restore", {
+            "page": str(self.deleted_page.uuid),
+            "filename": "existing.md",
+        })
+        assert response.status_code == HTTPStatus.CONFLICT
+        content = response.content.decode()
+        assert "existing" in content.lower()
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
 

@@ -248,13 +248,77 @@ class NotebookPageDeleteView(NotebookWriteMixin, View):
         )
 
 
-class NotebookPageRestoreView(NotebookWriteMixin, View):
-    @NotebookPermissions.edit_required
-    def post(self, request):
-        page = get_object_or_404(Page, pk=request.POST.get("page"))
-        page.restore()
+class NotebookPageRestoreView(View):
+    def get_page_and_notebook(self, request):
+        page_uuid = request.GET.get("page") or request.POST.get("page")
+        page = get_object_or_404(Page, uuid=page_uuid)
+        notebook = page.wiki.notebook
+        return page, notebook
 
-        return redirect(self.object)
+    def check_permission(self, request, notebook):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        if not NotebookPermissions.can_edit(notebook, request.user):
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        return None
+
+    def get_page_url(self, notebook, page):
+        return reverse("notebook_page", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+            "path": page.latest_version.path,
+        })
+
+    def get(self, request):
+        from notebooks.forms import RestoreForm
+
+        page, notebook = self.get_page_and_notebook(request)
+        if not page.deleted_at:
+            return redirect(self.get_page_url(notebook, page))
+
+        denied = self.check_permission(request, notebook)
+        if denied:
+            return denied
+
+        form = RestoreForm()
+        return render(request, "notebooks/restore.html", {
+            "notebook": notebook,
+            "page": page,
+            "form": form,
+        })
+
+    def post(self, request):
+        from notebooks.forms import RestoreForm
+
+        page, notebook = self.get_page_and_notebook(request)
+        if not page.deleted_at:
+            return redirect(self.get_page_url(notebook, page))
+
+        denied = self.check_permission(request, notebook)
+        if denied:
+            return denied
+
+        form = RestoreForm(request.POST)
+        if not form.is_valid():
+            return render(request, "notebooks/restore.html", {
+                "notebook": notebook,
+                "page": page,
+                "form": form,
+            }, status=HTTPStatus.BAD_REQUEST)
+
+        filename = form.cleaned_data.get("filename") or None
+        try:
+            page.restore(filename=filename)
+        except ValidationError as e:
+            for message in e.messages:
+                form.add_error("filename", message)
+            return render(request, "notebooks/restore.html", {
+                "notebook": notebook,
+                "page": page,
+                "form": form,
+            }, status=HTTPStatus.CONFLICT)
+
+        return redirect(notebook)
 
 
 class NotebookCollaboratorsView(NotebookWriteMixin, View):

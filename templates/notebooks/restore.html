@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Restore {{ page.latest_version.filename }} - {{ notebook.name }}{% endblock %}
+
+{% block content %}
+<h1>Restore page</h1>
+
+<p>Restore <strong>{{ page.latest_version.filename }}</strong> to {{ notebook.name }}.</p>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="page" value="{{ page.uuid }}">
+
+  {% if form.errors %}
+  <ul class="errorlist">
+    {% for field in form %}
+      {% for error in field.errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    {% endfor %}
+    {% for error in form.non_field_errors %}
+    <li>{{ error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p>
+    <label for="id_filename">Restore to:</label>
+    {{ form.filename }}
+  </p>
+  <p class="help">Leave blank to restore to the original location ({{ page.latest_version.filename }}).</p>
+
+  <button type="submit">Restore</button>
+  <a href="{{ notebook.get_absolute_url }}">Cancel</a>
+</form>
+{% endblock %}

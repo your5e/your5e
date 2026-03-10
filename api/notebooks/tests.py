@@ -755,6 +755,25 @@ class TestPageContentPut(NotebookApiMixin):
         assert response.content == new_content
 
     @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_with_conflict_returns_conflict(self, api_client):
+        from wikis.models import Page
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# New page at same path",
+            created_by=self.wendy,
+        )
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"# Revived",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.CONFLICT
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
         response = api_client.put(
             "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
@@ -989,14 +1008,99 @@ class TestPageContentPatch(NotebookApiMixin):
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     @ApiMixin.as_api_user("wendy")
-    def test_deleted_page_returns_not_found(self, api_client):
+    def test_deleted_page_restore(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"restore": True},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_restore_with_filename(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"restore": True, "filename": "revived.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+        assert self.deleted_page.latest_version.filename == "revived.md"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_filename_without_restore_rejected(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
             f"/api/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "revived.md"},
             format="json",
         )
-        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_restore_conflict(self, api_client):
+        from wikis.models import Page
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# New page at same path",
+            created_by=self.wendy,
+        )
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"restore": True},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.CONFLICT
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_restore_conflict_resolved_by_filename(self, api_client):
+        from wikis.models import Page
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="old-draft.md",
+            mime_type="text/markdown",
+            data=b"# New page at same path",
+            created_by=self.wendy,
+        )
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"restore": True, "filename": "revived.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.OK
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is None
+        assert self.deleted_page.latest_version.filename == "revived.md"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_restore_filename_also_conflicts(self, api_client):
+        from wikis.models import Page
+        Page.objects.create(wiki=self.wendys_notebook).update(
+            filename="existing.md",
+            mime_type="text/markdown",
+            data=b"# Existing page",
+            created_by=self.wendy,
+        )
+        uuid = str(self.deleted_page.uuid)
+        response = api_client.patch(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data={"restore": True, "filename": "existing.md"},
+            format="json",
+        )
+        assert response.status_code == HTTPStatus.CONFLICT
+        self.deleted_page.refresh_from_db()
+        assert self.deleted_page.deleted_at is not None
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_filename(self, api_client):

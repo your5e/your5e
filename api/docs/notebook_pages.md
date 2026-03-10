@@ -54,9 +54,8 @@ Arguments:
 
 ## PATCH `/api/notebooks/{username}/{notebook-slug}/{uuid}`
 
-Update a page's metadata. Either rename a page or revert it to an older
-version. A new version is created with the change. Provide exactly one of
-`filename` or `revert_to`.
+Update a page's metadata. Rename a page, revert it to an older version, or
+restore a deleted page. A new version is created with the change.
 
 ### Renaming a page
 
@@ -82,6 +81,27 @@ Creates a new version with the content, filename, and mime type from the
 specified version number. If the page is already at that content and filename,
 no new version is created.
 
+### Restoring a deleted page
+
+To restore to the original location:
+
+```json
+{
+  "restore": true
+}
+```
+
+To restore to a different location (e.g. to resolve a conflict):
+
+```json
+{
+  "restore": true,
+  "filename": "Restored Page.md"
+}
+```
+
+If the target location is occupied by another page, returns _409 Conflict_.
+
 ### Response
 
 ```json
@@ -99,13 +119,16 @@ no new version is created.
 ```
 
 Returns _400 Bad Request_ if:
-- neither `filename` nor `revert_to` is provided
+- neither `filename`, `revert_to`, nor `restore` is provided (for non-deleted pages)
+- `restore` is not provided (for deleted pages)
 - both `filename` and `revert_to` are provided
 - the filename contains forbidden characters
 - the filename is a hidden file (starts with `.`)
-- the filename conflicts with an existing page
 - the path would be nested under an existing file
 - the version number does not exist
+- `revert_to` is used on a deleted page
+
+Returns _409 Conflict_ if the target path is occupied by another page.
 
 
 ## PUT `/api/notebooks/{username}/{notebook-slug}/{uuid}`
@@ -118,9 +141,14 @@ The response structure is the same as PATCH, with an additional
 `previous_hash` field containing the content hash before this update,
 which can be used for client-side conflict detection.
 
+Returns _409 Conflict_ if the page is deleted and its path is now occupied
+by another page. Use PATCH with a new filename to restore with a different
+name.
+
 
 ## DELETE `/api/notebooks/{username}/{notebook-slug}/{uuid}`
 
-Soft-delete a page. The page can be restored by updating its content with PUT.
+Soft-delete a page. The page can be restored using PATCH with `restore`, or
+by updating its content with PUT.
 
 Returns _204 No Content_ on success.

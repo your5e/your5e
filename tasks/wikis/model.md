@@ -83,10 +83,10 @@ Pages are not immediately purged from the database, so they can be recovered.
 - [X] wiki "purge deleted" deletes anything older than cutoff
 - [X] management command for "purge deleted"
 - [X] deleting the only version in a page removes the page
-- [ ] soft-deletion does not block new pages with the same filename/path
+- [X] soft-deletion does not block new pages with the same filename/path
         - test same filename
         - test similar filename that will produce the same path
-- [ ] restoring pages can specify a new filename
+- [X] restoring pages can specify a new filename
         - test restoring without filename and with/without conflicting paths
         - test restoring with filename and with/without conflicting paths
 
