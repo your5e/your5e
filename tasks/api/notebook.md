@@ -49,6 +49,10 @@ REST endpoints for Notebooks.
 - [X] PATCH to update the page's metadata (path)
 - [X] PATCH to revert to older version
 - [X] DELETE to soft-delete the page
+- [ ] PATCH to restore deleted page
+        - `{"restore": true}` restores to original location
+        - `{"restore": true, "filename": "new.md"}` restores to new location
+        - returns conflict if target location is occupied
 - [X] POST api/notebooks/{user}/{notebook}/
         - multipart, file (required), filename (optional, overrides same as
           website)
@@ -58,6 +62,9 @@ REST endpoints for Notebooks.
 
 # test coverage @phase
 
+- [ ] PUT returns conflict when restoring deleted page with occupied path
 - [ ] test that `url` fields in API responses can be followed all the way down
 - [ ] assert error response bodies in tests, not just status codes
 - [ ] ensure API docs accurately describe error response structure
+- [ ] ensure API docs accurately describe responses
+- [ ] ensure restore arg to PATCH is rejected if the file is not soft-deleted
