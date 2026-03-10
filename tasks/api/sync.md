@@ -13,8 +13,8 @@ While the API is read-only, we can implement only some of the algorithm.
 
 Once the API is read-write, we can implement the rest of the algorithm.
 
-- [ ] make the existing tests exercise pull-only mode
-- [ ] improve test readability with semantic helpers
+- [X] make the existing tests exercise pull-only mode
+- [X] improve test readability with semantic helpers
 - [ ] implement push sync tests
 - [ ] implement user permission scenarios
 - [ ] ensure results pagination

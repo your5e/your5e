@@ -173,18 +173,13 @@ function handle_updates {
     if is_cached_uuid_stale "$cached_uuid" "$uuid"; then
         seen_uuids["$cached_uuid"]=1
 
-        if [[ -f "$dest_path" ]]; then
+        if [[ -f "$dest_path" ]] && has_local_changes "$cached_uuid" "$dest_path"; then
             printf "   %s deleted from server, keeping\n" "$dest_file"
-
-            if has_local_changes "$cached_uuid" "$dest_path"; then
-                printf "   %s has local modifications, skipped\n" "$dest_file"
-            else
-                printf "   %s has new remote content, skipped\n" "$dest_file"
-            fi
+            printf "   %s has local modifications, skipped\n" "$dest_file"
             return 0
         fi
 
-        del_cached "$cached_uuid"
+        remove_file "$cached_uuid" "$dest_path"
     fi
 
     if file_blocked_by_directory "$dest_path" "$uuid" "$dest_file"; then
@@ -217,6 +212,13 @@ function handle_updates {
                 mv "$dest_path" "${dest_path}.vacated"
                 rename_file "$src_path" "$dest_path"
                 printf "   %s -> %s\n" "$src_file" "$dest_file"
+
+                if file_matches_hash "$dest_path" "$hash"; then
+                    set_cached "$uuid" "$dest_file" "$hash"
+                else
+                    download_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
+                    printf "++ %s\n" "$dest_file"
+                fi
 
             else
                 printf "   %s -> %s blocked by local file\n" \
@@ -279,12 +281,19 @@ function report_stale_files {
         [[ -n "${seen_uuids[$uuid]:-}" ]] \
             && continue
 
-        if [[ ! -f "$output_dir/$file" ]]; then
+        local filepath="$output_dir/$file"
+
+        if [[ ! -f "$filepath" ]]; then
             del_cached "$uuid"
             continue
         fi
 
-        printf "   %s deleted from server, keeping\n" "$file"
+        if has_local_changes "$uuid" "$filepath"; then
+            printf "   %s deleted from server, keeping\n" "$file"
+        else
+            remove_file "$uuid" "$filepath"
+            printf -- "-- %s\n" "$file"
+        fi
     done < "$state_file"
 }
 
@@ -344,14 +353,11 @@ function set_cached {
 
     tmp=$(mktemp)
     if [[ -f "$state_file" ]]; then
-        # remove this UUID and any other UUID tracking the same path
         awk \
             -F'\t' \
             -v u="$uuid" \
-            -v f="$filename" \
             '
                 $1 == u { next }
-                $2 == f { next }
                 { print }
             ' \
                 "$state_file" \

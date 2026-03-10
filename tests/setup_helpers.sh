@@ -43,7 +43,17 @@ function untrack_file {
     mv "$state_file.new" "$state_file"
 }
 
-function move_cached_file {
+function untrack_and_remove_file {
+    local filename="$1"
+    untrack_file "$filename"
+    rm -rf "${output_dir:?}/$filename"
+}
+
+function delete_tracked_file {
+    rm "$output_dir/$1"
+}
+
+function set_older_filename {
     local from="$1" to="$2"
     local state_file="$output_dir/.sync-state"
 
@@ -57,34 +67,26 @@ function move_cached_file {
     mv "$state_file.new" "$state_file"
 }
 
-function replace_cached_uuid {
-    local filename="$1" new_uuid="$2"
-    local state_file="$output_dir/.sync-state"
-    local old_uuid
-    old_uuid=$(uuid_for "$filename")
-
-    sed "s/^$old_uuid\t/$new_uuid\t/" "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
-}
-
-function rewind_bestiarymd_state {
-    set_cached_state "$(uuid_for "Bestiary.md")" "Bestiary.md" "old content"
+function set_older_content {
+    local filename="$1"
+    local uuid
+    uuid=$(grep $'\t'"$filename"$'\t' "$output_dir/.sync-state" | cut -f1)
+    set_cached_state "$uuid" "$filename" "old content"
 }
 
 function modify_file {
-    echo "local modifications" > "$output_dir/$1"
+    echo "local content" > "$output_dir/$1"
 }
 
-function file_deleted_locally {
-    rm "$output_dir/$1"
-}
-
-function rewind_homemd_state {
-    set_cached_state "$(uuid_for "Home.md")" "Welcome.md" "old content"
-}
 
 function mark_file_stale {
-    replace_cached_uuid "index.md" "stale-uuid-$RANDOM"
+    local filename="$1"
+    local state_file="$output_dir/.sync-state"
+    local old_uuid
+    old_uuid=$(grep $'\t'"$filename"$'\t' "$state_file" | cut -f1)
+
+    sed "s/^$old_uuid	/stale-uuid-$RANDOM	/" "$state_file" > "$state_file.new"
+    mv "$state_file.new" "$state_file"
 }
 
 function create_file {
@@ -92,8 +94,16 @@ function create_file {
     echo "local content" > "$output_dir/$1"
 }
 
+function copy_fixture {
+    local source="$1"
+    local dest="${2:-$1}"
+    mkdir -p "$(dirname "$output_dir/$dest")"
+    cp "$fixtures/campaign-notes/$source" "$output_dir/$dest"
+}
+
 function add_stale_file {
-    set_cached_state "stale-uuid-no-server-file" "my-notes.md" "local content"
+    local filename="$1"
+    set_cached_state "stale-uuid-$RANDOM" "$filename" "local content"
 }
 
 function file_tracks_deleted_remote {
@@ -104,11 +114,114 @@ function assert_not_in_state {
     ! grep "$1" "$output_dir/.sync-state" || false
 }
 
-function replace_with_directory {
+function assert_file_not_downloaded {
     local filename="$1"
-    local filepath="$output_dir/$filename"
+    [[ ! -f "$output_dir/$filename" ]]
+    assert_file_not_in_state "$filename"
+}
 
-    [[ -f "$filepath" ]] && rm "$filepath"
-    mkdir -p "$filepath"
-    echo "local notes" > "$filepath/notes.txt"
+function assert_tracked_file_deleted {
+    local filename="$1"
+    [[ ! -f "$output_dir/$filename" ]]
+    assert_file_not_in_state "$filename"
+}
+
+function assert_tracked_file_not_restored {
+    local filename="$1"
+    [[ ! -f "$output_dir/$filename" ]]
+    assert_file_in_state "$filename"
+}
+
+function assert_empty_dir_removed {
+    local dirname="$1"
+    [[ ! -d "$output_dir/$dirname" ]]
+}
+
+function assert_file_not_in_state {
+    local filename="$1"
+    ! grep $'\t'"$filename"$'\t' "$output_dir/.sync-state"
+}
+
+function assert_tracked_file_intact {
+    local filename="$1"
+    local state_file="$output_dir/.sync-state"
+
+    [[ -f "$output_dir/$filename" ]]
+
+    local cached_hash
+    cached_hash=$(grep $'\t'"$filename"$'\t' "$state_file" | cut -f3)
+    [[ -n "$cached_hash" ]]
+
+    local actual_hash
+    actual_hash=$(shasum -a 256 "$output_dir/$filename" | cut -d' ' -f1)
+    [[ "$actual_hash" == "$cached_hash" ]]
+}
+
+function assert_file_in_state {
+    local filename="$1"
+    grep -q $'\t'"$filename"$'\t' "$output_dir/.sync-state"
+}
+
+function assert_file_unchanged {
+    local filename="$1"
+    diff -u <(echo "local content") "$output_dir/$filename"
+}
+
+function assert_file_matches_fixture {
+    local fixture="${1}"
+    local filename="${2:-$1}"
+    diff -u "$fixtures/campaign-notes/$fixture" "$output_dir/$filename"
+}
+
+function assert_tracked_file_matches_fixture {
+    local fixture="$1"
+    local filename="${2:-$1}"
+
+    [[ -f "$output_dir/$filename" ]]
+    diff -q "$fixtures/campaign-notes/$fixture" "$output_dir/$filename" >/dev/null
+    grep -q $'\t'"$filename"$'\t' "$output_dir/.sync-state"
+}
+
+function assert_file_ignored {
+    local filename="$1"
+    assert_file_unchanged "$filename"
+    assert_file_not_in_state "$filename"
+}
+
+function assert_file_downloaded {
+    local filename="$1"
+    assert_file_matches_fixture "$filename"
+    assert_file_in_state "$filename"
+}
+
+function assert_state_matches_fixture {
+    local expected
+    expected=$(
+        find "$fixtures/campaign-notes" -type f ! -name ".sync-state" -print0 \
+            | while IFS= read -r -d '' file; do
+                local relative="${file#"$fixtures"/campaign-notes/}"
+                local hash
+                hash=$(shasum -a 256 "$file" | cut -d' ' -f1)
+                printf "%s\t%s\n" "$relative" "$hash"
+            done | sort
+    )
+    diff -u <(echo "$expected") <(cut -f2,3 "$output_dir/.sync-state" | sort)
+}
+
+function assert_dir_matches_fixture {
+    diff -ru --exclude=".sync-state" "$output_dir" "$fixtures/campaign-notes"
+}
+
+function assert_success {
+    # shellcheck disable=SC2154  # $status is set by bats
+    [[ $status -eq 0 ]]
+}
+
+function fail_on_file_download {
+    # shellcheck disable=SC2329  # invoked indirectly via export -f
+    curl() {
+        [[ "$*" == *"-o"* ]] && return 1
+        command curl "$@"
+    }
+    export -f curl
 }

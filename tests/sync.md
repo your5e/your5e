@@ -20,10 +20,10 @@ The algorithm to sync the local directory is:
 4.  Update the local cache to reflect this, either as a separate step or
     after each individual operation.
 5.  _GET_ remote state of the notebook.
-7.  _mv_ any files where the remote UUID now has a different filename.
-6.  _GET_ any files where the local hash matches, but the server's hash
+6.  _mv_ any files where the remote UUID now has a different filename.
+7.  _GET_ any files where the local hash matches, but the server's hash
     has changed (remote updates).
-8.  _rm_ any files deleted remotely (any local edits will have already
+8.  _rm_ any files deleted remotely (any local editeds will have already
     un-deleted them in step 2).
 9.  Cache the new state, either as a separate step or after each individual
     operation.
@@ -40,59 +40,59 @@ retried later.
 - **Content** — local and remote file content matches
 - **Filename** — local and remote filename matches
 
-| Test |  Local | Remote | Content | Filename |
-|------|--------|--------|---------|----------|
-| first sync to empty directory | — | file | | |
-| first sync to non-empty directory preserves all local files | file | file | ❌ | ✔️ |
-| first sync local file matches remote | file | file | ✔️ | ✔️ |
-| first sync local file without extension blocks remote subdirectory | file | dir | | |
-| first sync local directory blocks remote file | dir | file | | |
-| first sync case sensitivity collision | file | file | ❌ | ❌ |
-| first sync case sensitivity collision, content matches | file | file | ✔️ | ❌ |
+| Test                    | Local | Remote | Content | Filename |
+|-------------------------|-------|--------|---------|----------|
+| empty directory         | —     | file   |         |          |
+| local files             | file  | file   | ❌      | ✔️       |
+| local matches remote    | file  | file   | ✔️      | ✔️       |
+| local file clashes      | file  | dir    |         |          |
+| local dir clashes       | dir   | file   |         |          |
+| case collision          | file  | file   | ❌      | ❌       |
+| case collision, matches | file  | file   | ✔️      | ❌       |
 
 ### `subsequent_sync.bats`
 
 - **Tracked** — file is in .sync-state from previous sync
-- **In Sync** — local content matches tracked state from last sync
-- **Conflict** — remote wants to write but local state blocks it
-- **Content Update** — remote content differs from tracked
-- **Filename Update** — remote filename differs from tracked
-- **Remote Delete** — remote is soft-deleted
-- **Purged** — tracked UUID no longer found on server
-- **Local Delete** — local file has been deleted
+- **Local Edited** — local content differs from cached hash
+- **Local Renamed** — local file has been moved to a different path
+- **Local Deleted** — local file no longer exists
+- **Remote Edited** — server content hash differs from cached
+- **Remote Renamed** — server filename differs from cached
+- **Remote Deleted** — server has soft-deleted the file
+- **Stale** — tracked UUID no longer exists on server
 
-| Test | Tracked | In Sync | Conflict | Content Update | Filename Update | Remote Deleted | Purged | Local Deleted |
-|------|---------|---------|----------|----------------|-----------------|----------------|--------|---------------|
-| no change | ✔️ | ✔️ | | | | | | |
-| untracked file | | — | | | | | | |
-| untracked file blocked by directory | | — | ✔️ | | | | | |
-| untracked file, content update | | — | ✔️ | ✔️ | | | | |
-| untracked file, filename update | | — | ✔️ | | ✔️ | | | |
-| untracked file, content update, filename update | | — | ✔️ | ✔️ | ✔️ | | | |
-| content update | ✔️ | ✔️ | | ✔️ | | | | |
-| filename update | ✔️ | ✔️ | | | ✔️ | | | |
-| filename update blocked by directory | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
-| content update, filename update | ✔️ | ✔️ | | ✔️ | ✔️ | | | |
-| filename update swapped | ✔️ | ✔️ | | | ✔️ | | | |
-| filename update chain | ✔️ | ✔️ | | | ✔️ | | | |
-| filename update chain, reversed | ✔️ | ✔️ | | | ✔️ | | | |
-| filename update cycle | ✔️ | ✔️ | | | ✔️ | | | |
-| filename update cycle, local modification blocks cycle | ✔️ | ❌ | ✔️ | | ✔️ | | | |
-| filename update cycle, untracked file blocks cycle | ✔️ | ❌ | ✔️ | | ✔️ | | | |
-| local update | ✔️ | ❌ | | | | | | |
-| local update, content update | ✔️ | ❌ | ✔️ | ✔️ | | | | |
-| local update, filename update | ✔️ | ❌ | ✔️ | | ✔️ | | | |
-| local update, content update, filename update | ✔️ | ❌ | ✔️ | ✔️ | ✔️ | | | |
-| remote deleted | ✔️ | ✔️ | | | | ✔️ | | |
-| remote deleted, local update | ✔️ | ❌ | ✔️ | | | ✔️ | | |
-| stale file | ✔️ | ✔️ | | | | | ✔️ | |
-| stale file, content update | ✔️ | ✔️ | ✔️ | ✔️ | | | ✔️ | |
-| stale file, local update | ✔️ | ❌ | ✔️ | ✔️ | | | ✔️ | |
-| stale file, local delete | ✔️ | ❌ | | | | | ✔️ | ✔️ |
-| stale file, local delete, server reuses filename | ✔️ | ❌ | | | | | ✔️ | ✔️ |
-| local delete | ✔️ | ❌ | | | | | | ✔️ |
-| local delete, content update | ✔️ | ❌ | | ✔️ | | | | ✔️ |
-| local delete, filename update | ✔️ | ❌ | | | ✔️ | | | ✔️ |
-| local delete, content update, filename update | ✔️ | ❌ | | ✔️ | ✔️ | | | ✔️ |
-| local delete, content update, filename update blocked | ✔️ | ❌ | ✔️ | ✔️ | ✔️ | | | ✔️ |
-| local delete, remote deleted | ✔️ | ❌ | | | | ✔️ | | ✔️ |
+| Test | Tracked | Local Edited | Local Renamed | Local Deleted | Remote Edited | Remote Renamed | Remote Deleted | Stale |
+|------|---------|--------------|---------------|---------------|---------------|----------------|----------------|--------|
+| no change | ✔️ | | | | | | | |
+| untracked file | | | | | | | | |
+| untracked file, local edited, directory | | ✔️ | | | | | | |
+| untracked file, local edited | | ✔️ | | | | | | |
+| untracked file, remote renamed | | | | | | ✔️ | | |
+| untracked file, local edited, remote renamed | | ✔️ | | | | ✔️ | | |
+| remote edited | ✔️ | | | | ✔️ | | | |
+| remote renamed | ✔️ | | | | | ✔️ | | |
+| remote renamed, local edited, directory | ✔️ | ✔️ | | | | ✔️ | | |
+| remote edited, remote renamed | ✔️ | | | | ✔️ | ✔️ | | |
+| remote renamed, swapped | ✔️ | | | | | ✔️ | | |
+| remote renamed, chain | ✔️ | | | | | ✔️ | | |
+| remote renamed, chain reversed | ✔️ | | | | | ✔️ | | |
+| remote renamed, cycle | ✔️ | | | | | ✔️ | | |
+| remote renamed, cycle, local edited | ✔️ | ✔️ | | | | ✔️ | | |
+| remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | |
+| local edited | ✔️ | ✔️ | | | | | | |
+| local edited, remote edited | ✔️ | ✔️ | | | ✔️ | | | |
+| local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
+| local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
+| remote deleted | ✔️ | | | | | | ✔️ | |
+| remote deleted, local edited | ✔️ | ✔️ | | | | | ✔️ | |
+| stale file | ✔️ | | | | | | | ✔️ |
+| stale file, remote edited | ✔️ | | | | ✔️ | | | ✔️ |
+| stale file, local edited | ✔️ | ✔️ | | | | | | ✔️ |
+| stale file, local deleted | ✔️ | | | ✔️ | | | | ✔️ |
+| stale file, local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
+| local deleted | ✔️ | | | ✔️ | | | | |
+| local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | |
+| local deleted, remote renamed | ✔️ | | | ✔️ | | ✔️ | | |
+| local deleted, remote edited, remote renamed | ✔️ | | | ✔️ | ✔️ | ✔️ | | |
+| local deleted, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | |
+| local deleted, remote deleted | ✔️ | | | ✔️ | | | ✔️ | |

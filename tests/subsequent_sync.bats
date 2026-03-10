@@ -31,20 +31,16 @@ setup() {
 
 
 @test "no change" {
-    # ensures no curl commands executed, except to list the notebook
-    curl() {
-        [[ "$*" == *"/norm/campaign-notes/" ]] || return 1
-        command curl "$@"
-    }
-    export -f curl
+    fail_on_file_download
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -ru --exclude=".sync-state" "$output_dir" "$fixtures/campaign-notes"
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
 @test "untracked file" {
@@ -55,13 +51,21 @@ setup() {
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ -f "$output_dir/scratchpad.txt" ]
-    [ $status -eq 0 ]
+    assert_file_ignored "scratchpad.txt"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "untracked file blocked by directory" {
-    untrack_file "Bestiary.md"
-    replace_with_directory "Bestiary.md"
+@test "untracked file, local edited, directory" {
+    untrack_and_remove_file "Bestiary.md"
+    create_file "Bestiary.md/notes.txt"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -71,12 +75,18 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ -d "$output_dir/Bestiary.md" ]
-    diff -u <(echo "local notes") <(cat "$output_dir/Bestiary.md/notes.txt")
-    [ $status -eq 0 ]
+    assert_file_ignored "Bestiary.md/notes.txt"
+    assert_file_not_downloaded "Bestiary.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "untracked file, content update" {
+@test "untracked file, local edited" {
     untrack_file "Home.md"
     modify_file "Home.md"
 
@@ -88,12 +98,18 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/Home.md")
-    [ $status -eq 0 ]
+    assert_file_ignored "Home.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "untracked file, filename update" {
-    move_cached_file "characters/NPCs.md" "NPCs.md"
+@test "untracked file, remote renamed" {
+    set_older_filename "characters/NPCs.md" "NPCs.md"
     create_file "characters/NPCs.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -104,13 +120,20 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ -f "$output_dir/NPCs.md" ]
-    diff -u <(echo "local content") <(cat "$output_dir/characters/NPCs.md")
-    [ $status -eq 0 ]
+    assert_file_matches_fixture "characters/NPCs.md" "NPCs.md"
+    assert_file_ignored "characters/NPCs.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "untracked file, content update, filename update" {
-    rewind_homemd_state
+@test "untracked file, local edited, remote renamed" {
+    set_older_filename "Home.md" "Welcome.md"
+    set_older_content "Welcome.md"
     create_file "Home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -121,13 +144,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local content") <(cat "$output_dir/Home.md")
-    [ -f "$output_dir/Welcome.md" ]
-    [ $status -eq 0 ]
+    assert_file_ignored "Home.md"
+    assert_tracked_file_intact "Welcome.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "content update" {
-    rewind_bestiarymd_state
+@test "remote edited" {
+    set_older_content "Bestiary.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -137,12 +166,13 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/Bestiary.md" "$output_dir/Bestiary.md"
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update" {
-    move_cached_file "The Old Café.md" "café.md"
+@test "remote renamed" {
+    set_older_filename "The Old Café.md" "café.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -152,14 +182,14 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/The Old Café.md" "$output_dir/The Old Café.md"
-    [ ! -f "$output_dir/café.md" ]
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update blocked by directory" {
-    move_cached_file "characters/NPCs.md" "NPCs.md"
-    replace_with_directory "characters/NPCs.md"
+@test "remote renamed, local edited, directory" {
+    set_older_filename "characters/NPCs.md" "NPCs.md"
+    create_file "characters/NPCs.md/notes.txt"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -169,14 +199,20 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ -f "$output_dir/NPCs.md" ]
-    [ -d "$output_dir/characters/NPCs.md" ]
-    diff -u <(echo "local notes") <(cat "$output_dir/characters/NPCs.md/notes.txt")
-    [ $status -eq 0 ]
+    assert_tracked_file_intact "NPCs.md"
+    assert_file_ignored "characters/NPCs.md/notes.txt"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "content update, filename update" {
-    rewind_homemd_state
+@test "remote edited, remote renamed" {
+    set_older_filename "Home.md" "Welcome.md"
+    set_older_content "Welcome.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -187,15 +223,15 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/Home.md" "$output_dir/Home.md"
-    [ ! -f "$output_dir/Welcome.md" ]
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update swapped" {
-    move_cached_file "characters/NPCs.md" "temp.md"
-    move_cached_file "sessions/session-01.md" "characters/NPCs.md"
-    move_cached_file "temp.md" "sessions/session-01.md"
+@test "remote renamed, swapped" {
+    set_older_filename "characters/NPCs.md" "temp.md"
+    set_older_filename "sessions/session-01.md" "characters/NPCs.md"
+    set_older_filename "temp.md" "sessions/session-01.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -206,14 +242,14 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
-    diff -u "$fixtures/campaign-notes/sessions/session-01.md" "$output_dir/sessions/session-01.md"
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update chain" {
-    move_cached_file "sessions/session-01.md" "old.md"
-    move_cached_file "characters/NPCs.md" "sessions/session-01.md"
+@test "remote renamed, chain" {
+    set_older_filename "sessions/session-01.md" "old.md"
+    set_older_filename "characters/NPCs.md" "sessions/session-01.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -224,15 +260,14 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
-    diff -u "$fixtures/campaign-notes/sessions/session-01.md" "$output_dir/sessions/session-01.md"
-    [ ! -f "$output_dir/old.md" ]
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update chain, reversed" {
-    move_cached_file "characters/NPCs.md" "old.md"
-    move_cached_file "sessions/session-01.md" "characters/NPCs.md"
+@test "remote renamed, chain reversed" {
+    set_older_filename "characters/NPCs.md" "old.md"
+    set_older_filename "sessions/session-01.md" "characters/NPCs.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -243,17 +278,16 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/characters/NPCs.md" "$output_dir/characters/NPCs.md"
-    diff -u "$fixtures/campaign-notes/sessions/session-01.md" "$output_dir/sessions/session-01.md"
-    [ ! -f "$output_dir/old.md" ]
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update cycle" {
-    move_cached_file "Bestiary.md" "temp.md"
-    move_cached_file "Home.md" "Bestiary.md"
-    move_cached_file "index.md" "Home.md"
-    move_cached_file "temp.md" "index.md"
+@test "remote renamed, cycle" {
+    set_older_filename "Bestiary.md" "temp.md"
+    set_older_filename "Home.md" "Bestiary.md"
+    set_older_filename "index.md" "Home.md"
+    set_older_filename "temp.md" "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -265,17 +299,16 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/Bestiary.md" "$output_dir/Bestiary.md"
-    diff -u "$fixtures/campaign-notes/Home.md" "$output_dir/Home.md"
-    diff -u "$fixtures/campaign-notes/index.md" "$output_dir/index.md"
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "filename update cycle, local modification blocks cycle" {
-    move_cached_file "Bestiary.md" "temp.md"
-    move_cached_file "Home.md" "Bestiary.md"
-    move_cached_file "index.md" "Home.md"
-    move_cached_file "temp.md" "index.md"
+@test "remote renamed, cycle, local edited" {
+    set_older_filename "Bestiary.md" "temp.md"
+    set_older_filename "Home.md" "Bestiary.md"
+    set_older_filename "index.md" "Home.md"
+    set_older_filename "temp.md" "index.md"
     modify_file "Home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -288,15 +321,22 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/Home.md")
-    [ $status -eq 0 ]
+    assert_file_unchanged "Home.md"
+    assert_file_in_state "Home.md"
+    assert_tracked_file_matches_fixture "Home.md" "Bestiary.md"
+    assert_tracked_file_matches_fixture "Bestiary.md" "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "filename update cycle, untracked file blocks cycle" {
-    move_cached_file "Bestiary.md" "temp.md"
-    move_cached_file "Home.md" "Bestiary.md"
-    move_cached_file "index.md" "Home.md"
-    move_cached_file "temp.md" "index.md"
+@test "remote renamed, cycle, untracked file" {
+    set_older_filename "Bestiary.md" "temp.md"
+    set_older_filename "Home.md" "Bestiary.md"
+    set_older_filename "index.md" "Home.md"
+    set_older_filename "temp.md" "index.md"
     untrack_file "Home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -309,11 +349,18 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/index.md" "$output_dir/Home.md"
-    [ $status -eq 0 ]
+    assert_file_matches_fixture "index.md" "Home.md"
+    assert_file_not_in_state "Home.md"
+    assert_tracked_file_matches_fixture "Home.md" "Bestiary.md"
+    assert_tracked_file_matches_fixture "Bestiary.md" "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local update" {
+@test "local edited" {
     modify_file "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -321,12 +368,19 @@ setup() {
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/index.md")
-    [ $status -eq 0 ]
+    assert_file_unchanged "index.md"
+    assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local update, content update" {
-    rewind_bestiarymd_state
+@test "local edited, remote edited" {
+    set_older_content "Bestiary.md"
     modify_file "Bestiary.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -337,12 +391,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/Bestiary.md")
-    [ $status -eq 0 ]
+    assert_file_unchanged "Bestiary.md"
+    assert_file_in_state "Bestiary.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local update, filename update" {
-    move_cached_file "characters/NPCs.md" "NPCs.md"
+@test "local edited, remote renamed" {
+    set_older_filename "characters/NPCs.md" "NPCs.md"
     modify_file "NPCs.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -353,13 +414,21 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/NPCs.md")
-    [ ! -f "$output_dir/characters/NPCs.md" ]
-    [ $status -eq 0 ]
+    assert_file_unchanged "NPCs.md"
+    assert_file_in_state "NPCs.md"
+    assert_file_not_downloaded "characters/NPCs.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local update, content update, filename update" {
-    rewind_homemd_state
+@test "local edited, remote edited, remote renamed" {
+    set_older_filename "Home.md" "Welcome.md"
+    set_older_content "Welcome.md"
     modify_file "Welcome.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -370,9 +439,16 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/Welcome.md")
-    [ ! -f "$output_dir/Home.md" ]
-    [ $status -eq 0 ]
+    assert_file_unchanged "Welcome.md"
+    assert_file_in_state "Welcome.md"
+    assert_file_not_downloaded "Home.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
 @test "remote deleted" {
@@ -386,12 +462,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ ! -f "$output_dir/archive/Old Notes.md" ]
-    [ ! -d "$output_dir/archive" ]
-    [ $status -eq 0 ]
+    assert_tracked_file_deleted "archive/Old Notes.md"
+    assert_empty_dir_removed "archive"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "remote deleted, local update" {
+@test "remote deleted, local edited" {
     file_tracks_deleted_remote "Old Notes.md"
     modify_file "Old Notes.md"
 
@@ -403,45 +486,59 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/Old Notes.md")
-    [ $status -eq 0 ]
+    assert_file_unchanged "Old Notes.md"
+    assert_file_in_state "Old Notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
 @test "stale file" {
-    add_stale_file
+    add_stale_file "my-notes.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           my-notes.md deleted from server, keeping
+        -- my-notes.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ -f "$output_dir/my-notes.md" ]
-    [ $status -eq 0 ]
+    assert_tracked_file_deleted "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "stale file, content update" {
-    mark_file_stale
+@test "stale file, remote edited" {
+    mark_file_stale "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-           index.md deleted from server, keeping
-           index.md has new remote content, skipped
+        ++ index.md
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/index.md" "$output_dir/index.md"
-    grep -q "stale-uuid-" "$output_dir/.sync-state"
-    assert_not_in_state "$(uuid_for "index.md")"
-    [ $status -eq 0 ]
+    assert_not_in_state "stale-uuid"
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "stale file, local update" {
-    mark_file_stale
+@test "stale file, local edited" {
+    mark_file_stale "index.md"
     modify_file "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -453,27 +550,35 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local modifications") <(cat "$output_dir/index.md")
-    [ $status -eq 0 ]
+    assert_file_unchanged "index.md"
+    assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "stale file, local delete" {
-    add_stale_file
-    file_deleted_locally "my-notes.md"
+@test "stale file, local deleted" {
+    add_stale_file "my-notes.md"
+    delete_tracked_file "my-notes.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ ! -f "$output_dir/my-notes.md" ]
-    assert_not_in_state "stale-uuid-"
-    [ $status -eq 0 ]
+    assert_tracked_file_deleted "my-notes.md"
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "stale file, local delete, server reuses filename" {
-    mark_file_stale
-    file_deleted_locally "index.md"
+@test "stale file, local deleted, remote edited" {
+    mark_file_stale "index.md"
+    delete_tracked_file "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -483,14 +588,14 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/index.md" "$output_dir/index.md"
-    assert_not_in_state "stale-uuid-"
-    grep -q "$(uuid_for "index.md")" "$output_dir/.sync-state"
-    [ $status -eq 0 ]
+    assert_not_in_state "stale-uuid"
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "local delete" {
-    file_deleted_locally "index.md"
+@test "local deleted" {
+    delete_tracked_file "index.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -500,13 +605,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ ! -f "$output_dir/index.md" ]
-    [ $status -eq 0 ]
+    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local delete, content update" {
-    rewind_bestiarymd_state
-    file_deleted_locally "Bestiary.md"
+@test "local deleted, remote edited" {
+    set_older_content "Bestiary.md"
+    delete_tracked_file "Bestiary.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -516,13 +627,14 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/Bestiary.md" "$output_dir/Bestiary.md"
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "local delete, filename update" {
-    move_cached_file "characters/NPCs.md" "NPCs.md"
-    file_deleted_locally "NPCs.md"
+@test "local deleted, remote renamed" {
+    set_older_filename "characters/NPCs.md" "NPCs.md"
+    delete_tracked_file "NPCs.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -532,14 +644,21 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ ! -f "$output_dir/NPCs.md" ]
-    [ ! -f "$output_dir/characters/NPCs.md" ]
-    [ $status -eq 0 ]
+    assert_tracked_file_not_restored "NPCs.md"
+    assert_file_not_downloaded "characters/NPCs.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local delete, content update, filename update" {
-    rewind_homemd_state
-    file_deleted_locally "Welcome.md"
+@test "local deleted, remote edited, remote renamed" {
+    set_older_filename "Home.md" "Welcome.md"
+    set_older_content "Welcome.md"
+    delete_tracked_file "Welcome.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -549,14 +668,15 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u "$fixtures/campaign-notes/Home.md" "$output_dir/Home.md"
-    [ ! -f "$output_dir/Welcome.md" ]
-    [ $status -eq 0 ]
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_success
 }
 
-@test "local delete, content update, filename update blocked" {
-    rewind_homemd_state
-    file_deleted_locally "Welcome.md"
+@test "local deleted, local edited, remote edited, remote renamed" {
+    set_older_filename "Home.md" "Welcome.md"
+    set_older_content "Welcome.md"
+    delete_tracked_file "Welcome.md"
     create_file "Home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -567,14 +687,21 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    diff -u <(echo "local content") <(cat "$output_dir/Home.md")
-    [ ! -f "$output_dir/Welcome.md" ]
-    [ $status -eq 0 ]
+    assert_file_unchanged "Home.md"
+    assert_file_not_in_state "Home.md"
+    assert_tracked_file_not_restored "Welcome.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
-@test "local delete, remote deleted" {
+@test "local deleted, remote deleted" {
     file_tracks_deleted_remote "Old Notes.md"
-    file_deleted_locally "Old Notes.md"
+    delete_tracked_file "Old Notes.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -584,8 +711,15 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    [ ! -f "$output_dir/Old Notes.md" ]
-    [ $status -eq 0 ]
+    assert_tracked_file_deleted "Old Notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
 }
 
 # New tests should use or create helpers so as not to obscure what the test is actually doing.
