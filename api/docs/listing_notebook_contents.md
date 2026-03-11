@@ -58,3 +58,8 @@ Arguments:
   seconds (`?since=1705312200`)
 - `cursor` used when paginating results (links to prev/next results are
   included in the response)
+
+Returns _400 Bad Request_ if the `since` timestamp format is invalid.
+
+Returns _404 Not Found_ if the notebook does not exist or you don't have
+access to it.

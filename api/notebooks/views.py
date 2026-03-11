@@ -11,12 +11,13 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from api.exceptions import APIError
 from api.views import AuthenticatedAPIView
 from notebooks.models import Notebook, NotebookPermission
 from notebooks.views import NotebookPermissions
@@ -247,7 +248,7 @@ def parse_timestamp(value):
     try:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError as err:
-        raise ValidationError({"since": "Invalid timestamp format"}) from err
+        raise ValidationError("Invalid timestamp format.") from err
 
 
 class NotebookAccessMixin:
@@ -279,11 +280,11 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
         notebook = self.get_notebook()
 
         if not NotebookPermissions.can_edit(notebook, request.user):
-            return Response(status=HTTPStatus.FORBIDDEN)
+            raise PermissionDenied()
 
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
-            raise ValidationError({"file": "This field is required."})
+            raise ValidationError("File is required.")
 
         form_filename = request.POST.get("filename")
         if form_filename:
@@ -292,7 +293,7 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             filename = uploaded_file.name
 
         if "." not in filename or filename.endswith("."):
-            raise ValidationError({"filename": "Filename must have a file extension."})
+            raise ValidationError("Filename must have an extension.")
 
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type is None:
@@ -307,10 +308,7 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
 
         try:
             notebook.get_page(path=path)
-            return Response(
-                {"filename": "A page with this path already exists."},
-                status=HTTPStatus.CONFLICT,
-            )
+            raise APIError(f"Path '{path}' already exists.", HTTPStatus.CONFLICT)
         except Page.DoesNotExist:
             pass
 
@@ -324,13 +322,10 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             )
         except DjangoValidationError as err:
             page.delete()
-            messages = err.message_dict.get("filename", [])
-            if messages and "already exists as a file" in messages[0]:
-                return Response(
-                    {"filename": messages[0]},
-                    status=HTTPStatus.CONFLICT,
-                )
-            raise ValidationError(err.message_dict) from err
+            for messages in err.message_dict.values():
+                if "already exists" in messages[0]:
+                    raise APIError(messages[0], HTTPStatus.CONFLICT) from err
+                raise ValidationError(messages[0]) from err
 
         return self.page_response(request, notebook, page, version)
 
@@ -421,7 +416,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         notebook = self.get_notebook()
 
         if not NotebookPermissions.can_edit(notebook, request.user):
-            return Response(status=403)
+            raise PermissionDenied()
 
         try:
             page_uuid = UUID(uuid)
@@ -438,8 +433,8 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         if page.deleted_at:
             try:
                 page.restore()
-            except DjangoValidationError:
-                return Response(status=HTTPStatus.CONFLICT)
+            except DjangoValidationError as err:
+                raise APIError(err.messages[0], HTTPStatus.CONFLICT) from err
 
         version = page.update(
             filename=page.latest_version.filename,
@@ -454,7 +449,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         notebook = self.get_notebook()
 
         if not NotebookPermissions.can_edit(notebook, request.user):
-            return Response(status=403)
+            raise PermissionDenied()
 
         try:
             page_uuid = UUID(uuid)
@@ -473,25 +468,19 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
 
         if page.deleted_at:
             if revert_to is not None:
-                raise ValidationError({
-                    "revert_to": "Cannot revert a deleted page."
-                })
+                raise ValidationError("Cannot revert a deleted page.")
             if not restore:
-                raise ValidationError({
-                    "restore": "Page is deleted. Provide restore to undelete."
-                })
+                raise ValidationError("Page is deleted. Set restore to true.")
             try:
                 page.restore(filename=filename)
-            except DjangoValidationError:
-                return Response(status=HTTPStatus.CONFLICT)
+            except DjangoValidationError as err:
+                raise APIError(err.messages[0], HTTPStatus.CONFLICT) from err
             return self.version_response(
                 request, notebook, page, page.latest_version
             )
 
         if filename and revert_to:
-            raise ValidationError({
-                "revert_to": "Cannot specify both filename and revert_to."
-            })
+            raise ValidationError("Cannot specify both filename and revert_to.")
 
         if revert_to is not None:
             try:
@@ -500,11 +489,11 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
                     reverted_by=request.user,
                 )
             except ValueError as err:
-                raise ValidationError({"revert_to": str(err)}) from err
+                raise ValidationError(str(err)) from err
             return self.version_response(request, notebook, page, version)
 
         if not filename:
-            raise ValidationError({"filename": "This field is required."})
+            raise ValidationError("Filename is required.")
 
         latest = page.latest_version
 
@@ -516,7 +505,10 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
                 created_by=request.user,
             )
         except DjangoValidationError as err:
-            raise ValidationError(err.message_dict) from err
+            for messages in err.message_dict.values():
+                if "already exists" in messages[0]:
+                    raise APIError(messages[0], HTTPStatus.CONFLICT) from err
+                raise ValidationError(messages[0]) from err
 
         return self.version_response(request, notebook, page, version)
 
@@ -524,7 +516,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         notebook = self.get_notebook()
 
         if not NotebookPermissions.can_edit(notebook, request.user):
-            return Response(status=403)
+            raise PermissionDenied()
 
         try:
             page_uuid = UUID(uuid)

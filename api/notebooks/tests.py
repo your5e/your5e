@@ -26,6 +26,7 @@ class TestNotebooksList(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -43,6 +44,7 @@ class TestNotebooksList(NotebookApiMixin):
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
         response = api_client.get("/api/notebooks/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -55,6 +57,7 @@ class TestNotebooksList(NotebookApiMixin):
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -67,6 +70,7 @@ class TestNotebooksList(NotebookApiMixin):
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -78,6 +82,7 @@ class TestNotebooksList(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
         response = api_client.get("/api/notebooks/")
+        assert response.status_code == HTTPStatus.OK
         notebook = response.json()["results"][2]
         assert TIMESTAMP_PATTERN.match(notebook["last_updated"])
         assert notebook == {
@@ -95,6 +100,7 @@ class TestNotebooksList(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_response_structure(self, api_client):
         response = api_client.get("/api/notebooks/")
+        assert response.status_code == HTTPStatus.OK
         assert set(response.json().keys()) == {
             "next",
             "previous",
@@ -112,11 +118,13 @@ class TestNotebooksList(NotebookApiMixin):
             )
 
         first_page = api_client.get("/api/notebooks/")
+        assert first_page.status_code == HTTPStatus.OK
         assert len(first_page.json()["results"]) == PAGE_SIZE
         assert first_page.json()["next"] is not None
         assert first_page.json()["previous"] is None
 
         second_page = api_client.get(first_page.json()["next"])
+        assert second_page.status_code == HTTPStatus.OK
         assert len(second_page.json()["results"]) == 5
         assert second_page.json()["previous"] is not None
 
@@ -126,6 +134,7 @@ class TestNotebooksPublic(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/public")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("susan")
     def test_owner(self, api_client):
@@ -141,6 +150,7 @@ class TestNotebooksPublic(NotebookApiMixin):
     @ApiMixin.as_api_user("mary")
     def test_editor(self, api_client):
         response = api_client.get("/api/notebooks/public")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -151,6 +161,7 @@ class TestNotebooksPublic(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/public")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -161,6 +172,7 @@ class TestNotebooksPublic(NotebookApiMixin):
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/public")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -174,6 +186,7 @@ class TestNotebooksInternal(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/internal")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("mary")
     def test_owner(self, api_client):
@@ -189,6 +202,7 @@ class TestNotebooksInternal(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_editor(self, api_client):
         response = api_client.get("/api/notebooks/internal")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -199,6 +213,7 @@ class TestNotebooksInternal(NotebookApiMixin):
     @ApiMixin.as_api_user("susan")
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/internal")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -209,6 +224,7 @@ class TestNotebooksInternal(NotebookApiMixin):
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/internal")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -222,6 +238,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/private")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -237,6 +254,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
         response = api_client.get("/api/notebooks/private")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -247,6 +265,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/private")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -257,6 +276,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/private")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -268,6 +288,7 @@ class TestNotebooksUser(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/wendy/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -283,6 +304,7 @@ class TestNotebooksUser(NotebookApiMixin):
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
         response = api_client.get("/api/notebooks/wendy/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -293,6 +315,7 @@ class TestNotebooksUser(NotebookApiMixin):
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/wendy/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -303,6 +326,7 @@ class TestNotebooksUser(NotebookApiMixin):
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/wendy/")
+        assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
                 for n in response.json()["results"]
@@ -312,6 +336,7 @@ class TestNotebooksUser(NotebookApiMixin):
     def test_nonexistent_user(self, api_client):
         response = api_client.get("/api/notebooks/nobody/")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
 
 @pytest.mark.django_db
@@ -337,6 +362,7 @@ class TestNotebookPages(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -357,10 +383,12 @@ class TestNotebookPages(NotebookApiMixin):
     def test_user(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_structure(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
         assert set(response.json().keys()) == {
             "next",
             "previous",
@@ -372,6 +400,7 @@ class TestNotebookPages(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
         results = response.json()["results"]
 
         page = results[8]
@@ -408,11 +437,13 @@ class TestNotebookPages(NotebookApiMixin):
     def test_nonexistent_notebook(self, api_client):
         response = api_client.get("/api/notebooks/wendy/no-such-notebook/")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
         response = api_client.get("/api/notebooks/nobody/some-notebook/")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter(self, api_client):
@@ -487,12 +518,14 @@ class TestNotebookPages(NotebookApiMixin):
             {"since": "banana"},
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Invalid timestamp format."}
 
         response = api_client.get(
             "/api/notebooks/wendy/heros-legendes/",
             {"since": "index.md"},
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Invalid timestamp format."}
 
     @ApiMixin.as_api_user("wendy")
     def test_cursor_pagination(self, api_client):
@@ -509,11 +542,13 @@ class TestNotebookPages(NotebookApiMixin):
             )
 
         first_page = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        assert first_page.status_code == HTTPStatus.OK
         assert len(first_page.json()["results"]) == PAGE_SIZE
         assert first_page.json()["next"] is not None
         assert first_page.json()["previous"] is None
 
         second_page = api_client.get(first_page.json()["next"])
+        assert second_page.status_code == HTTPStatus.OK
         assert second_page.json()["previous"] is not None
 
     @ApiMixin.as_api_user("wendy")
@@ -538,10 +573,12 @@ class TestNotebookPages(NotebookApiMixin):
             "/api/notebooks/wendy/heros-legendes/",
             {"since": cutoff},
         )
+        assert first_page.status_code == HTTPStatus.OK
         assert len(first_page.json()["results"]) == PAGE_SIZE
         assert first_page.json()["next"] is not None
 
         second_page = api_client.get(first_page.json()["next"])
+        assert second_page.status_code == HTTPStatus.OK
         assert len(second_page.json()["results"]) == 2
         assert second_page.json()["previous"] is not None
 
@@ -552,6 +589,7 @@ class TestPageContent(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -581,12 +619,14 @@ class TestPageContent(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_returns_not_found(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
@@ -594,11 +634,13 @@ class TestPageContent(NotebookApiMixin):
             "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/not-a-uuid")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_version_parameter(self, api_client):
@@ -618,18 +660,21 @@ class TestPageContent(NotebookApiMixin):
             {"version": "999"},
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/api/notebooks/nobody/some-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
@@ -645,6 +690,7 @@ class TestPageContent(NotebookApiMixin):
             f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
 
 @pytest.mark.django_db
@@ -678,6 +724,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
@@ -688,6 +735,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
@@ -697,6 +745,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
@@ -709,6 +758,7 @@ class TestPageContentPut(NotebookApiMixin):
             data=new_content,
             content_type="text/markdown",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
@@ -724,6 +774,7 @@ class TestPageContentPut(NotebookApiMixin):
             "previous_hash": previous_hash,
         }
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
         assert response.content == new_content
 
     @ApiMixin.as_api_user("wendy")
@@ -737,6 +788,7 @@ class TestPageContentPut(NotebookApiMixin):
             data=new_content,
             content_type="text/markdown",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
@@ -752,6 +804,7 @@ class TestPageContentPut(NotebookApiMixin):
             "previous_hash": previous_hash,
         }
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
         assert response.content == new_content
 
     @ApiMixin.as_api_user("wendy")
@@ -770,6 +823,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'old-draft' already exists."}
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
 
@@ -781,6 +835,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
@@ -790,6 +845,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
@@ -800,6 +856,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
@@ -817,6 +874,7 @@ class TestPageContentPut(NotebookApiMixin):
             content_type="text/markdown",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_identical_content_no_new_version(self, api_client):
@@ -827,6 +885,7 @@ class TestPageContentPut(NotebookApiMixin):
             data=b"# Welcome\n\nThis is the index page.",
             content_type="text/markdown",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
@@ -874,6 +933,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
@@ -884,6 +944,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
@@ -893,6 +954,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
@@ -903,6 +965,7 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "welcome.md"},
             format="json",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
@@ -920,12 +983,14 @@ class TestPageContentPatch(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_content_preserved(self, api_client):
         uuid = self.get_page_uuid("index")
-        api_client.patch(
+        patch_response = api_client.patch(
             f"/api/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
+        assert patch_response.status_code == HTTPStatus.OK
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
         assert response.content == b"# Welcome\n\nThis is the index page."
 
     @ApiMixin.as_api_user("wendy")
@@ -936,6 +1001,7 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "pages/welcome.md"},
             format="json",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/pages/welcome"
         assert data["filename"] == "pages/welcome.md"
@@ -949,6 +1015,7 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "index.md"},
             format="json",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data == {
             "uuid": uuid,
@@ -970,6 +1037,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
@@ -979,6 +1047,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
@@ -989,6 +1058,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
@@ -1006,6 +1076,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore(self, api_client):
@@ -1041,6 +1112,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Page is deleted. Set restore to true."}
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
 
@@ -1060,6 +1132,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'old-draft' already exists."}
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
 
@@ -1099,6 +1172,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'existing' already exists."}
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
 
@@ -1111,6 +1185,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Filename cannot contain '['."}
 
     @ApiMixin.as_api_user("wendy")
     def test_path_conflict(self, api_client):
@@ -1120,7 +1195,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "notes.md"},
             format="json",
         )
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'notes' already exists."}
 
     @ApiMixin.as_api_user("wendy")
     def test_missing_filename(self, api_client):
@@ -1131,6 +1207,7 @@ class TestPageContentPatch(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Filename is required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_rejected(self, api_client):
@@ -1140,9 +1217,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": ".hidden.md"},
             format="json",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_in_directory_rejected(self, api_client):
@@ -1152,9 +1228,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "folder/.hidden.md"},
             format="json",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_directory_rejected(self, api_client):
@@ -1164,9 +1239,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": ".hidden/file.md"},
             format="json",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_parent_path_is_file_rejected(self, api_client):
@@ -1176,9 +1250,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "NOTES/subpage.md"},
             format="json",
         )
-        diff = response.json()
-        assert diff == {"filename": ["Path 'notes' already exists as a file."]}
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'notes' already exists."}
 
     @ApiMixin.as_api_user("wendy")
     def test_grandparent_path_is_file_rejected(self, api_client):
@@ -1188,9 +1261,8 @@ class TestPageContentPatch(NotebookApiMixin):
             data={"filename": "Notes/sub/page.md"},
             format="json",
         )
-        diff = response.json()
-        assert diff == {"filename": ["Path 'notes' already exists as a file."]}
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'notes' already exists."}
 
 
 @pytest.mark.django_db
@@ -1224,6 +1296,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
@@ -1234,6 +1307,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("session-one")
@@ -1243,6 +1317,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
@@ -1252,6 +1327,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             data={"revert_to": 1},
             format="json",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         expected_hash = hashlib.sha256(b"# Session One\n\nFirst draft.").hexdigest()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
@@ -1276,6 +1352,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Version '999' does not exist."}
 
     @ApiMixin.as_api_user("wendy")
     def test_revert_to_and_filename_mutually_exclusive(self, api_client):
@@ -1286,6 +1363,9 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             format="json",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {
+            "error": "Cannot specify both filename and revert_to."
+        }
 
     @ApiMixin.as_api_user("wendy")
     def test_revert_to_current_version_no_new_version(self, api_client):
@@ -1295,6 +1375,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
             data={"revert_to": 3},
             format="json",
         )
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["version"] == 3
 
@@ -1309,6 +1390,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
@@ -1339,6 +1421,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
@@ -1349,6 +1432,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
@@ -1360,6 +1444,7 @@ class TestPageCreate(NotebookApiMixin):
             data={"file": SimpleUploadedFile("response-test.md", content)},
             format="multipart",
         )
+        assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
@@ -1378,13 +1463,15 @@ class TestPageCreate(NotebookApiMixin):
     def test_content_retrievable(self, api_client):
         from django.core.files.uploadedfile import SimpleUploadedFile
         content = b"# Retrievable\n\nThis content should be retrievable."
-        response = api_client.post(
+        create_response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("retrievable.md", content)},
             format="multipart",
         )
-        uuid = response.json()["uuid"]
+        assert create_response.status_code == HTTPStatus.CREATED
+        uuid = create_response.json()["uuid"]
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        assert response.status_code == HTTPStatus.OK
         assert response.content == content
 
     @ApiMixin.as_api_user("wendy")
@@ -1398,6 +1485,7 @@ class TestPageCreate(NotebookApiMixin):
             },
             format="multipart",
         )
+        assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert data["filename"] == "custom-name.md"
         assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/custom-name"
@@ -1413,6 +1501,7 @@ class TestPageCreate(NotebookApiMixin):
             },
             format="multipart",
         )
+        assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert data["filename"] == "subdir/nested.md"
         assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/subdir/nested"
@@ -1427,6 +1516,7 @@ class TestPageCreate(NotebookApiMixin):
             data={"file": SimpleUploadedFile("test-image.png", PNG_BYTES)},
             format="multipart",
         )
+        assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert data["mime_type"] == "image/png"
         assert data["filename"] == "test-image.png"
@@ -1440,6 +1530,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Filename must have an extension."}
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_override_no_extension_rejected(self, api_client):
@@ -1453,6 +1544,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Filename must have an extension."}
 
     @ApiMixin.as_api_user("wendy")
     def test_page_already_exists_rejected(self, api_client):
@@ -1463,6 +1555,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'index' already exists."}
 
     @ApiMixin.as_api_user("wendy")
     def test_path_conflict_rejected(self, api_client):
@@ -1473,6 +1566,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'index' already exists."}
 
     @ApiMixin.as_api_user("wendy")
     def test_no_file_rejected(self, api_client):
@@ -1482,6 +1576,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "File is required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
@@ -1492,6 +1587,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
@@ -1502,6 +1598,7 @@ class TestPageCreate(NotebookApiMixin):
             format="multipart",
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_rejected(self, api_client):
@@ -1511,9 +1608,8 @@ class TestPageCreate(NotebookApiMixin):
             data={"file": SimpleUploadedFile(".hidden.md", b"# Hidden")},
             format="multipart",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_in_directory_rejected(self, api_client):
@@ -1523,9 +1619,8 @@ class TestPageCreate(NotebookApiMixin):
             data={"file": SimpleUploadedFile("folder/.hidden.md", b"# Hidden")},
             format="multipart",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_directory_rejected(self, api_client):
@@ -1538,9 +1633,8 @@ class TestPageCreate(NotebookApiMixin):
             },
             format="multipart",
         )
-        diff = response.json()
-        assert diff == {"filename": ["No hidden files."]}
         assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "No hidden files."}
 
     @ApiMixin.as_api_user("wendy")
     def test_parent_path_is_file_rejected(self, api_client):
@@ -1553,9 +1647,8 @@ class TestPageCreate(NotebookApiMixin):
             },
             format="multipart",
         )
-        diff = response.json()
-        assert diff == {"filename": "Path 'notes' already exists as a file."}
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'notes' already exists."}
 
     @ApiMixin.as_api_user("wendy")
     def test_grandparent_path_is_file_rejected(self, api_client):
@@ -1568,9 +1661,8 @@ class TestPageCreate(NotebookApiMixin):
             },
             format="multipart",
         )
-        diff = response.json()
-        assert diff == {"filename": "Path 'notes' already exists as a file."}
         assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json() == {"error": "Path 'notes' already exists."}
 
 
 @pytest.mark.django_db
@@ -1592,17 +1684,20 @@ class TestPageContentDelete(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_page_is_soft_deleted(self, api_client):
@@ -1612,12 +1707,14 @@ class TestPageContentDelete(NotebookApiMixin):
 
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_returns_not_found(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
@@ -1625,6 +1722,7 @@ class TestPageContentDelete(NotebookApiMixin):
             "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
@@ -1632,12 +1730,14 @@ class TestPageContentDelete(NotebookApiMixin):
             "/api/notebooks/wendy/heros-legendes/not-a-uuid"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.delete(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
@@ -1653,3 +1753,4 @@ class TestPageContentDelete(NotebookApiMixin):
             f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}

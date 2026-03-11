@@ -12,4 +12,8 @@ Returns:
     {"username": "your-username"}
     ```
 
-- `401 Unathorized` if the token is missing or invalid
+- `401 Unauthorised` if the token is missing or invalid
+
+    ```json
+    {"error": "Authentication required."}
+    ```

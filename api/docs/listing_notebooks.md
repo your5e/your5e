@@ -66,3 +66,5 @@ you.
 ## GET `/api/notebooks/{username}/`
 
 Lists notebooks owned by that user that you have access to.
+
+Returns _404 Not Found_ if the user does not exist.

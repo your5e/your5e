@@ -64,7 +64,7 @@ REST endpoints for Notebooks.
 
 - [X] PUT returns conflict when restoring deleted page with occupied path
 - [ ] test that `url` fields in API responses can be followed all the way down
-- [ ] assert error response bodies in tests, not just status codes
+- [X] assert error response bodies in tests, not just status codes
 - [ ] ensure API docs accurately describe error response structure
 - [ ] ensure API docs accurately describe responses
 - [ ] ensure restore arg to PATCH is rejected if the file is not soft-deleted

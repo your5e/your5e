@@ -544,7 +544,11 @@ class NotebookPageView(NotebookReadMixin, View):
             }
             for message in e.messages:
                 if "already exists" in message:
-                    conflict_path = message.split()[1]
+                    conflict_path = (
+                        message
+                        .removeprefix("Path '")
+                        .removesuffix("' already exists.")
+                    )
                     context["conflict_filename"] = form.cleaned_data["filename"]
                     context["conflict_url"] = reverse("notebook_page", kwargs={
                         "username": username,

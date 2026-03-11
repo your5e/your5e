@@ -88,6 +88,10 @@ if DEBUG:
 
 KNOX_TOKEN_MODEL = "users.AuthToken"
 
+REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "api.exceptions.api_exception_handler",
+}
+
 REST_KNOX = {
     "TOKEN_TTL": None,
 }

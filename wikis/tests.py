@@ -191,19 +191,19 @@ class TestVersion(WikiMixin):
         self.version.filename = ".hidden.md"
         with pytest.raises(ValidationError) as exc:
             self.version.validate_filename()
-        assert exc.value.message_dict == {"filename": ["No hidden files."]}
+        assert exc.value.messages == ["No hidden files."]
 
     def test_validate_filename_rejects_dotfile_in_directory(self):
         self.version.filename = "folder/.hidden.md"
         with pytest.raises(ValidationError) as exc:
             self.version.validate_filename()
-        assert exc.value.message_dict == {"filename": ["No hidden files."]}
+        assert exc.value.messages == ["No hidden files."]
 
     def test_validate_filename_rejects_dotfile_directory(self):
         self.version.filename = ".hidden/file.md"
         with pytest.raises(ValidationError) as exc:
             self.version.validate_filename()
-        assert exc.value.message_dict == {"filename": ["No hidden files."]}
+        assert exc.value.messages == ["No hidden files."]
 
     def test_validate_parent_paths_rejects_file_as_directory(self):
         page_b = Page.objects.create(wiki=self.wiki)
@@ -214,9 +214,7 @@ class TestVersion(WikiMixin):
                 data=b"# Subfile",
                 created_by=self.wendy,
             )
-        assert exc.value.message_dict == {
-            "filename": ["Path 'document.txt' already exists as a file."]
-        }
+        assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_validate_parent_paths_rejects_grandparent_file(self):
         page_b = Page.objects.create(wiki=self.wiki)
@@ -227,9 +225,7 @@ class TestVersion(WikiMixin):
                 data=b"# Subfile",
                 created_by=self.wendy,
             )
-        assert exc.value.message_dict == {
-            "filename": ["Path 'document.txt' already exists as a file."]
-        }
+        assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_validate_parent_paths_case_insensitive(self):
         page_b = Page.objects.create(wiki=self.wiki)
@@ -240,9 +236,7 @@ class TestVersion(WikiMixin):
                 data=b"# Subfile",
                 created_by=self.wendy,
             )
-        assert exc.value.message_dict == {
-            "filename": ["Path 'document.txt' already exists as a file."]
-        }
+        assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_render_non_markdown_returns_bytes(self):
         assert self.version.render() == b"Test content"

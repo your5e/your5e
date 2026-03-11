@@ -33,13 +33,18 @@ allowed.
 
 Returns _201 Created_ on success.
 
+Returns _403 Forbidden_ if you don't have edit permission on the notebook.
+
+Returns _404 Not Found_ if the notebook does not exist or you don't have
+access to it.
+
 Returns _400 Bad Request_ if:
 - no file is provided
 - the filename has no file extension
 - the filename is a hidden file (starts with `.`)
-- the path would be nested under an existing file
 
-Returns _409 Conflict_ if a page with the same path already exists.
+Returns _409 Conflict_ if a page with the same path already exists, or the
+path would be nested under an existing file.
 
 
 ## GET `/api/notebooks/{username}/{notebook-slug}/{uuid}`
@@ -50,6 +55,9 @@ header.
 Arguments:
 
 - `version` returns a specific version of the page instead of the latest
+
+Returns _404 Not Found_ if the notebook or page does not exist, you don't have
+access, the page has been deleted, or the specified version does not exist.
 
 
 ## PATCH `/api/notebooks/{username}/{notebook-slug}/{uuid}`
@@ -102,6 +110,11 @@ To restore to a different location (e.g. to resolve a conflict):
 
 If the target location is occupied by another page, returns _409 Conflict_.
 
+Returns _403 Forbidden_ if you don't have edit permission on the notebook.
+
+Returns _404 Not Found_ if the notebook or page does not exist, or you don't
+have access.
+
 ### Response
 
 ```json
@@ -124,11 +137,11 @@ Returns _400 Bad Request_ if:
 - both `filename` and `revert_to` are provided
 - the filename contains forbidden characters
 - the filename is a hidden file (starts with `.`)
-- the path would be nested under an existing file
 - the version number does not exist
 - `revert_to` is used on a deleted page
 
-Returns _409 Conflict_ if the target path is occupied by another page.
+Returns _409 Conflict_ if the target path is occupied by another page, or the
+path would be nested under an existing file.
 
 
 ## PUT `/api/notebooks/{username}/{notebook-slug}/{uuid}`
@@ -141,6 +154,11 @@ The response structure is the same as PATCH, with an additional
 `previous_hash` field containing the content hash before this update,
 which can be used for client-side conflict detection.
 
+Returns _403 Forbidden_ if you don't have edit permission on the notebook.
+
+Returns _404 Not Found_ if the notebook or page does not exist, or you don't
+have access.
+
 Returns _409 Conflict_ if the page is deleted and its path is now occupied
 by another page. Use PATCH with a new filename to restore with a different
 name.
@@ -152,3 +170,8 @@ Soft-delete a page. The page can be restored using PATCH with `restore`, or
 by updating its content with PUT.
 
 Returns _204 No Content_ on success.
+
+Returns _403 Forbidden_ if you don't have edit permission on the notebook.
+
+Returns _404 Not Found_ if the notebook or page does not exist, has already
+been deleted, or you don't have access.

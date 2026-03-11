@@ -239,7 +239,7 @@ class Page(models.Model):
         try:
             version = self.version_set.get(number=version_number)
         except Version.DoesNotExist as err:
-            raise ValueError(f"Version {version_number} does not exist") from err
+            raise ValueError(f"Version '{version_number}' does not exist.") from err
         return self.update(
             filename=version.filename,
             mime_type=version.mime_type,
@@ -251,7 +251,7 @@ class Page(models.Model):
         try:
             version = self.version_set.get(number=version_number)
         except Version.DoesNotExist as err:
-            raise ValueError(f"Version {version_number} does not exist") from err
+            raise ValueError(f"Version '{version_number}' does not exist.") from err
         content_hash = version.content_id
         version.delete()
         Content.purge_stale([content_hash])
@@ -326,15 +326,15 @@ class Version(models.Model):
 
     def validate_filename(self):
         if self.filename.endswith("/"):
-            raise ValidationError("Filename cannot end with /")
+            raise ValidationError("Filename cannot end with '/'.")
         if "../" in self.filename:
-            raise ValidationError("Filename cannot contain ../")
+            raise ValidationError("Filename cannot contain '../'.")
         for char in FORBIDDEN_FILENAME_CHARS:
             if char in self.filename:
-                raise ValidationError(f"Filename cannot contain {char}")
+                raise ValidationError(f"Filename cannot contain '{char}'.")
         for part in self.filename.split("/"):
             if part.startswith("."):
-                raise ValidationError({"filename": "No hidden files."})
+                raise ValidationError("No hidden files.")
 
     def generate_path(self, filename=None):
         if filename is None:
@@ -376,9 +376,7 @@ class Version(models.Model):
             )
         ).exists()
         if conflicting:
-            raise ValidationError(
-                f"Path {self.path} already exists in this wiki"
-            )
+            raise ValidationError(f"Path '{self.path}' already exists.")
 
     def validate_parent_paths(self):
         parts = self.path.split("/")
@@ -408,9 +406,7 @@ class Version(models.Model):
                 )
             ).exists()
             if conflicting:
-                raise ValidationError({
-                    "filename": f"Path '{parent_path}' already exists as a file."
-                })
+                raise ValidationError(f"Path '{parent_path}' already exists.")
 
     def render(self, base_url=None):
         if self.mime_type == "text/markdown":
