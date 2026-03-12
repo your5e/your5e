@@ -1,7 +1,10 @@
-.PHONY: clean dev lint-python makemigrations migrate reset setup test test-python test-integration
+.PHONY: clean dev lint-python makemigrations migrate reset setup test test-python test-integration test-server test-server-down
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
+
+TEST_COMPOSE_FILE := docker-compose.test.yml
+TEST_COMPOSE_PROJECT := your5e-test
 
 EXEC_FLAGS ?=
 
@@ -31,6 +34,17 @@ reset: clean setup
 
 test-python: lint-python
 	docker compose exec $(EXEC_FLAGS) web pytest
+
+test-server:
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) up --build -d --wait
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py migrate
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py seed_development
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db-test psql -U your5e postgres \
+		-c "DROP DATABASE IF EXISTS your5e_seed" \
+		-c "CREATE DATABASE your5e_seed WITH TEMPLATE your5e_test"
+
+test-server-down:
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
 
 test-integration:
 	shellcheck tests/*.sh

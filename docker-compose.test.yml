@@ -1,0 +1,46 @@
+services:
+  db-test:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: your5e_test
+      POSTGRES_USER: your5e
+      POSTGRES_PASSWORD: your5e
+    command:
+      - "postgres"
+      - "-c"
+      - "fsync=off"
+      - "-c"
+      - "full_page_writes=off"
+      - "-c"
+      - "log_checkpoints=off"
+      - "-c"
+      - "synchronous_commit=off"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U your5e -d your5e_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  web-test:
+    build: .
+    depends_on:
+      db-test:
+        condition: service_healthy
+    ports:
+      - "5844:8000"
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    environment:
+      DEBUG: "1"
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: "test"
+      DB_NAME: "your5e_test"
+      DB_USER: "your5e"
+      DB_PASSWORD: "your5e"
+      DB_HOST: "db-test"
+      DB_PORT: "5432"

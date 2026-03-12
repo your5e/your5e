@@ -13,7 +13,7 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
-    export YOUR5E_API_BASE="http://localhost:5843"
+    export YOUR5E_API_BASE="http://localhost:5844"
     export BATS_FILE_TMPDIR="${BATS_FILE_TMPDIR:-$(mktemp -d)}"
 
     restore_database

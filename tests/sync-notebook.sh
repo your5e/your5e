@@ -188,7 +188,7 @@ function apply_local_updates {
 
         create_remote_file "$notebook" "$file" "$filepath" \
             || true
-    done < <(find "$output_dir" -type f ! -name ".sync-state" -print0)
+    done < <(find "$output_dir" -type f ! -name ".sync-state" -print0 | sort -z)
 
     # stale UUIDs must stay in cache until after the new files loop,
     # otherwise the file would be picked up as "new" and tried again

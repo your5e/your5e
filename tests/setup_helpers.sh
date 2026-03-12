@@ -4,10 +4,14 @@
 declare fixtures output_dir BATS_FILE_TMPDIR
 
 function restore_database {
-    docker compose exec -T db psql -U your5e -c \
-        "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" your5e >/dev/null 2>&1
-    docker compose exec -T db psql -U your5e your5e \
-        < "$BATS_TEST_DIRNAME/seed.sql" >/dev/null 2>&1
+    COMPOSE_FILE=docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db-test \
+        psql -U your5e postgres >/dev/null 2>&1 <<-SQL
+        SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity WHERE datname = 'your5e_test';
+        DROP DATABASE IF EXISTS your5e_test;
+        CREATE DATABASE your5e_test WITH TEMPLATE your5e_seed;
+	SQL
 }
 
 function uuid_for {
@@ -267,7 +271,7 @@ function assert_no_output_dir {
 }
 
 function fail_on_multiple_curl_calls {
-    # shellcheck disable=SC2329  # invoked indirectly via export -f
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
     curl() {
         local marker="${BATS_TEST_TMPDIR}/.curl_called"
         if [[ -f "$marker" ]]; then

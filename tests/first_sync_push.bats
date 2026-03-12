@@ -13,7 +13,7 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
-    export YOUR5E_API_BASE="http://localhost:5843"
+    export YOUR5E_API_BASE="http://localhost:5844"
 }
 
 setup() {
@@ -54,10 +54,10 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: "notes.txt" (v1)
         push: ERROR cannot push "Home.md": Path 'home' already exists.
-        push: "sessions/notes.txt" (v1)
         push: ERROR cannot push "index.md": Path 'index' already exists.
+        push: "notes.txt" (v1)
+        push: "sessions/notes.txt" (v1)
         pull: "random-hexmap-7.png" (v1)
         pull: ERROR cannot pull "index.md", blocked by local file
         pull: ERROR cannot pull "Home.md", blocked by local file

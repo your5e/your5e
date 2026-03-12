@@ -11,7 +11,7 @@ bats_require_minimum_version 1.7.0
 load 'setup_helpers.sh'
 
 setup_file() {
-    export YOUR5E_API_BASE="http://localhost:5843"
+    export YOUR5E_API_BASE="http://localhost:5844"
     restore_database
 }
 

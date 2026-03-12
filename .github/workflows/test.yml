@@ -22,5 +22,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bats
 
+      - name: Start test server
+        run: make test-server
+
       - name: Run integration tests
-        run: bats tests/*.bats
+        run: make test-integration
+
+      - name: Stop test server
+        run: make test-server-down
