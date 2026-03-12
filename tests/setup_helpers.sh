@@ -31,9 +31,9 @@ function uuid_for {
 function init_synced_dir {
     # create directory as if it was already synced
     cp -r "$fixtures/campaign-notes" "$output_dir"
-    # cache format: uuid server_filename local_filename hash
-    # after a sync, both filenames are the same
-    awk -F'\t' '$4 == "" {print $2"\t"$1"\t"$1"\t"$3}' "$BATS_FILE_TMPDIR/pages" \
+    # cache format: uuid server_filename local_filename server_hash local_hash
+    # after a sync, both filenames are the same, both hashes are the same
+    awk -F'\t' '$4 == "" {print $2"\t"$1"\t"$1"\t"$3"\t"$3}' "$BATS_FILE_TMPDIR/pages" \
         > "$output_dir/.sync-state"
 }
 
@@ -52,10 +52,10 @@ function set_cached_state {
     mkdir -p "$(dirname "$output_dir/$filename")"
     printf "%s" "$content" > "$output_dir/$filename"
 
-    # update cache (both filenames same after reconciliation)
+    # update cache (both filenames same, both hashes same after reconciliation)
     grep -v "^$uuid"$'\t' "$state_file" > "$state_file.new"
-    printf "%s\t%s\t%s\t%s\n" \
-        "$uuid" "$filename" "$filename" "$hash" >> "$state_file.new"
+    printf "%s\t%s\t%s\t%s\t%s\n" \
+        "$uuid" "$filename" "$filename" "$hash" "$hash" >> "$state_file.new"
     mv "$state_file.new" "$state_file"
 }
 
@@ -107,6 +107,14 @@ function rename_local_file {
     mv "$state_file.new" "$state_file"
 }
 
+function rename_local_file_untracked {
+    local from="$1" to="$2"
+
+    mkdir -p "$(dirname "$output_dir/$to")"
+    mv "$output_dir/$from" "$output_dir/$to"
+    rmdir -p "$(dirname "$output_dir/$from")" 2>/dev/null || true
+}
+
 function set_older_content {
     local filename="$1"
     local state_file="$output_dir/.sync-state"
@@ -117,9 +125,9 @@ function set_older_content {
     # update file content
     printf "%s" "$content" > "$output_dir/$filename"
 
-    # update only the hash column, preserving server_fn and local_fn
+    # update both hash columns, preserving server_fn and local_fn
     awk -F'\t' -v f="$filename" -v h="$hash" -v OFS='\t' \
-        '$3 == f {$4 = h} {print}' "$state_file" > "$state_file.new"
+        '$3 == f {$4 = h; $5 = h} {print}' "$state_file" > "$state_file.new"
     mv "$state_file.new" "$state_file"
 }
 

@@ -23,7 +23,7 @@ Once the API is read-write, we can implement the rest of the algorithm.
 
 We could also make the script a watcher to push updates real-time.
 
-- [ ] update the script to watch for changes
+- [X] update the script to watch for changes
         - debounce changes before pushing, many small edits in quick
           succession should be coalesced
         - renames happen immediately

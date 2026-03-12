@@ -7,18 +7,26 @@
 
 api_token="${YOUR5E_API_TOKEN:-}"
 base_url="${YOUR5E_API_BASE:-http://localhost:5843}"
+debounce_seconds=300
+poll_seconds=900
 pull_only=0
+verbose=0
+watch=0
 state_file=""
 remote_state_file="$(mktemp)"
 trap 'rm -f "$remote_state_file"' EXIT
 
 function main {
-    while getopts "b:hpt:" opt; do
+    while getopts "b:d:hi:pt:vw" opt; do
         case "$opt" in
             b)  base_url="$OPTARG" ;;
+            d)  debounce_seconds="$OPTARG" ;;
             h)  usage ;;
+            i)  poll_seconds="$OPTARG" ;;
             p)  pull_only=1 ;;
             t)  api_token="$OPTARG" ;;
+            v)  verbose=1 ;;
+            w)  watch=1 ;;
             *)  usage ;;
         esac
     done
@@ -36,40 +44,79 @@ function main {
     local output_dir="$2"
     state_file="${output_dir}/.sync-state"
 
+    sync_notebook "$notebook" "$output_dir"
+
+    if [[ $watch -eq 1 ]]; then
+        watch_for_changes "$notebook" "$output_dir"
+    fi
+
+    exit 0
+}
+
+function sync_notebook {
+    local notebook="$1"
+    local output_dir="$2"
+
+    : > "$remote_state_file"
+
     fetch_remote_state "$notebook"
 
     [[ -n "${AFTER_FETCH_HOOK:-}" ]] \
         && eval "$AFTER_FETCH_HOOK"
 
+    detect_untracked_renames "$output_dir"
+
     [[ $pull_only -eq 0 ]] \
         && apply_local_updates "$notebook" "$output_dir"
 
     # shellcheck disable=SC2046
-    apply_remote_deletions "$output_dir" $(get_deleted_uuids)
+    apply_remote_deletions "$output_dir" $(get_remote_state "" deleted_uuids)
 
     # shellcheck disable=SC2046
-    apply_remote_updates "$notebook" "$output_dir" "" $(get_active_uuids)
+    apply_remote_updates "$notebook" "$output_dir" "" \
+        $(get_remote_state "" active_uuids)
 
     check_for_stale_files "$output_dir"
-
-    # [[ -t 1 ]] \
-    #     && printf "\e[2K"
-
-    exit 0
 }
 
-function usage {
-    sed -e 's/^        //' >&2 <<-EOF
-        Usage: $0 [-b URL] [-h] [-p] [-t TOKEN] <username/notebook> <output_dir>
+function detect_untracked_renames {
+    local output_dir="$1"
 
-            -b  Base URL   (default: \$YOUR5E_API_BASE or http://localhost:5843)
-            -p  Pull only  (do not push local changes)
-            -t  API token  (default: \$YOUR5E_API_TOKEN)
+    [[ ! -f "$state_file" ]] \
+        && return
 
-        Example:
-          $0 norm/campaign-notes ./backup
-	EOF
-    exit 1
+    local uuid local_fn local_hash filepath
+    while IFS=$'\t' read -r uuid _ local_fn _ local_hash; do
+        filepath="${output_dir}/${local_fn}"
+        [[ -f "$filepath" ]] \
+            && continue
+
+        local new_fn
+        new_fn=$(find_untracked_file_by_hash "$output_dir" "$local_hash")
+        [[ -z "$new_fn" ]] \
+            && continue
+
+        printf "info: detected rename \"%s\" to \"%s\"\n" "$local_fn" "$new_fn"
+        update_sync_state "$uuid" "" "$new_fn"
+    done < "$state_file"
+}
+
+function find_untracked_file_by_hash {
+    local output_dir="$1"
+    local target_hash="$2"
+
+    local file hash relative
+    while IFS= read -r -d '' file; do
+        relative="${file#"$output_dir"/}"
+        file_is_already_tracked "$relative" \
+            && continue
+
+        hash=$(hash_file "$file")
+        if [[ "$hash" == "$target_hash" ]]; then
+            echo "$relative"
+            return
+        fi
+    done < <(find "$output_dir" -type f -print0)
 }
 
 function fetch_remote_state {
@@ -134,13 +181,13 @@ function apply_local_updates {
     local -a stale_uuids=()
 
     if has_local_state; then
-        while IFS=$'\t' read -r uuid _ local_fn hash; do
+        while IFS=$'\t' read -r uuid _ local_fn hash _; do
             [[ $pull_only -eq 1 ]] \
                 && break
 
             local filepath="$output_dir/$local_fn"
             local remote_filename
-            remote_filename=$(get_remote_filename "$uuid")
+            remote_filename=$(get_remote_state "$uuid" filename)
 
             if exists_remotely_and_renamed_locally "$uuid"; then
                 rename_remote_file \
@@ -203,7 +250,7 @@ function apply_local_updates {
     # stale UUIDs must stay in cache until after the new files loop,
     # otherwise the file would be picked up as "new" and tried again
     for uuid in "${stale_uuids[@]:+"${stale_uuids[@]}"}"; do
-        del_cached "$uuid"
+        update_sync_state -d "$uuid"
     done
 }
 
@@ -215,9 +262,9 @@ function apply_remote_deletions {
         is_untracked "$uuid" && continue
 
         local cached_local_file
-        cached_local_file=$(get_cached_local_filename "$uuid")
+        cached_local_file=$(get_sync_state "$uuid" local_filename)
         local cached_remote_file
-        cached_remote_file=$(get_cached_remote_filename "$uuid")
+        cached_remote_file=$(get_sync_state "$uuid" server_filename)
         local filepath="${output_dir}/${cached_local_file}"
 
         if has_local_changes "$uuid" "$filepath"; then
@@ -259,14 +306,14 @@ function apply_remote_updates {
     shift
 
     local dest_file
-    dest_file=$(get_remote_filename "$uuid")
+    dest_file=$(get_remote_state "$uuid" filename)
     local hash
-    hash=$(get_remote_hash "$uuid")
+    hash=$(get_remote_state "$uuid" hash)
     local version
-    version=$(get_remote_version "$uuid")
+    version=$(get_remote_state "$uuid" version)
 
     local src_file
-    src_file=$(get_cached_local_filename "$uuid")
+    src_file=$(get_sync_state "$uuid" local_filename)
     local src_path="${output_dir}/${src_file}"
 
     # To break rename cycles, we need to know which paths will be vacated by other
@@ -290,7 +337,7 @@ function apply_remote_updates {
     #     && printf "\e[2K%s\r" "$dest_file"
 
     local cached_uuid
-    cached_uuid=$(get_cached_uuid "$dest_file")
+    cached_uuid=$(get_sync_state "$dest_file" uuid)
 
     if is_cached_uuid_stale "$cached_uuid" "$uuid"; then
         if [[ -f "$dest_path" ]] && has_local_changes "$cached_uuid" "$dest_path"; then
@@ -315,7 +362,7 @@ function apply_remote_updates {
 
     elif file_matches_hash "$dest_path" "$hash" && is_untracked "$uuid"; then
         printf "pull: tracking \"%s\" (v%s)\n" "$dest_file" "$version"
-        update_sync_state "$uuid" "$dest_file" "$hash"
+        update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
 
     elif is_being_renamed "$uuid" "$dest_file"; then
         # To break a rename cycle, the last in the chain is put in a temporary location.
@@ -324,7 +371,7 @@ function apply_remote_updates {
 
         if is_locally_renamed "$uuid"; then
             local cached_remote_fn
-            cached_remote_fn=$(get_cached_remote_filename "$uuid")
+            cached_remote_fn=$(get_sync_state "$uuid" server_filename)
             printf 'pull: SKIPPING rename "%s" to "%s", already "%s" locally\n' \
                 "$cached_remote_fn" "$dest_file" "$src_file"
 
@@ -352,7 +399,7 @@ function apply_remote_updates {
                 printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
 
                 if file_matches_hash "$dest_path" "$hash"; then
-                    update_sync_state "$uuid" "$dest_file" "$hash"
+                    update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
                 else
                     fetch_remote_file \
                         "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
@@ -385,7 +432,7 @@ function apply_remote_updates {
             printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
 
             if file_matches_hash "$dest_path" "$hash"; then
-                update_sync_state "$uuid" "$dest_file" "$hash"
+                update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
             else
                 fetch_remote_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
                 printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
@@ -419,7 +466,7 @@ function apply_remote_updates {
 
     else
         if file_matches_hash "$dest_path" "$hash"; then
-            update_sync_state "$uuid" "$dest_file" "$hash"
+            update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
         else
             fetch_remote_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
             printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
@@ -433,19 +480,19 @@ function check_for_stale_files {
     [[ ! -f "$state_file" ]] \
         && return 0
 
-    while IFS=$'\t' read -r uuid _ local_fn hash; do
+    while IFS=$'\t' read -r uuid _ local_fn hash _; do
         is_uuid_on_remote "$uuid" && continue
 
         # Skip if filename now belongs to a different UUID on remote
         # (we already handled this in apply_remote_updates_impl)
         local remote_uuid
-        remote_uuid=$(get_remote_uuid_by_filename "$local_fn")
+        remote_uuid=$(get_remote_state "$local_fn" uuid)
         [[ -n "$remote_uuid" ]] && continue
 
         local filepath="$output_dir/$local_fn"
 
         if [[ ! -f "$filepath" ]]; then
-            del_cached "$uuid"
+            update_sync_state -d "$uuid"
             continue
         fi
 
@@ -459,225 +506,251 @@ function check_for_stale_files {
     done < "$state_file"
 }
 
-function get_deleted_uuids {
-    awk -F'\t' '$5 != "" {print $1}' "$remote_state_file"
+function watch_for_changes {
+    local notebook="$1"
+    local output_dir="$2"
+    local -a pending_events=()
+    local last_event_time=0 last_sync_time now real_output_dir
+
+    real_output_dir=$(cd "$output_dir" && pwd -P)
+    last_sync_time=$(date +%s)
+
+    log_watch_event "watching '${real_output_dir}' for changes"
+
+    while true; do
+        if read -t 1 -r event; then
+            pending_events+=("$event")
+            last_event_time=$(date +%s)
+
+            local filepath="${event%%:*}"
+
+            process_watch_event \
+                "$output_dir" \
+                "${filepath#"$real_output_dir"/}" \
+                "${event#*:}"
+        else
+            local now
+            now=$(date +%s)
+            if [[ ${#pending_events[@]} -gt 0 \
+                    && $((now - last_event_time)) -ge $debounce_seconds ]]; then
+                log_watch_event "syncing (${#pending_events[@]} events)"
+                sync_notebook "$notebook" "$output_dir"
+                log_watch_event "----"
+                pending_events=()
+                last_sync_time=$now
+            elif [[ $((now - last_sync_time)) -ge $poll_seconds ]]; then
+                log_watch_event "polling remote"
+                sync_notebook "$notebook" "$output_dir"
+                last_sync_time=$now
+            fi
+        fi
+    done < <(fswatch --format='%p:%f' --exclude '.sync-state' "$output_dir")
 }
 
-function get_active_uuids {
-    awk -F'\t' '$5 == "" {print $1}' "$remote_state_file"
-}
+function process_watch_event {
+    local output_dir="$1"
+    local relative="$2"
+    local flags="$3"
+    local filepath="${output_dir}/${relative}"
 
-function get_remote_uuid_by_filename {
-    local filename="$1"
-    awk -F'\t' -v f="$filename" '$2 == f && $5 == "" {print $1; exit}' \
-        "$remote_state_file"
-}
+    log_watch_event "$relative $flags"
 
-function get_remote_filename {
-    local uuid="$1"
-    awk -F'\t' -v u="$uuid" '$1 == u {print $2; exit}' "$remote_state_file"
-}
+    if [[ "$flags" == *Updated* && -f "$filepath" ]]; then
+        local uuid
+        uuid=$(get_sync_state "$relative" uuid)
+        if [[ -n "$uuid" ]]; then
+            local hash
+            hash=$(hash_file "$filepath")
+            update_sync_state "$uuid" "" "" "" "$hash"
+            log_watch_event "$relative $hash"
+        fi
+    fi
 
-function add_remote_state {
-    local uuid="$1"
-    local filename="$2"
-    local hash="$3"
-    local version="$4"
-    printf "%s\t%s\t%s\t%s\t\n" "$uuid" "$filename" "$hash" "$version" \
-        >> "$remote_state_file"
+    if [[ "$flags" == *Renamed* && -f "$filepath" ]]; then
+        if ! file_is_already_tracked "$relative"; then
+            local hash uuid
+            hash=$(hash_file "$filepath")
+            uuid=$(find_uuid_by_local_hash "$hash")
+            if [[ -n "$uuid" ]]; then
+                update_sync_state "$uuid" "" "$relative"
+                log_watch_event "  rename matched ${hash:0:8}..."
+            else
+                log_watch_event "  no match for ${hash:0:8}..."
+            fi
+        fi
+    fi
 }
 
 function update_remote_state {
-    local uuid="$1"
-    local hash="$2"
-    local version="$3"
-    local filename="${4:-}"
-    local tmp
+    local delete=0
+    if [[ "${1:-}" == "-d" ]]; then
+        delete=1
+        shift
+    fi
 
+    local uuid="$1"
+
+    if [[ $delete -eq 1 ]]; then
+        [[ ! -f "$remote_state_file" ]] && return 0
+        local tmp
+        tmp=$(mktemp)
+        awk -F'\t' -v u="$uuid" '$1 != u' "$remote_state_file" > "$tmp"
+        mv "$tmp" "$remote_state_file"
+        return 0
+    fi
+
+    local filename="${2:-}"
+    local hash="${3:-}"
+    local version="${4:-}"
+    local tmp
     tmp=$(mktemp)
-    awk \
-        -F'\t' \
-        -v u="$uuid" \
-        -v f="$filename" \
-        -v h="$hash" \
-        -v ver="$version" \
-        -v OFS='\t' '
-            $1 == u {
-                if (f != "") $2 = f
-                $3 = h
-                $4 = ver
-                $5 = ""
-            }
-            { print }
-        ' \
-            "$remote_state_file" \
-                > "$tmp"
+    local found=0
+
+    if [[ -f "$remote_state_file" ]]; then
+        while IFS=$'\t' read -r u f h v d; do
+            if [[ "$u" == "$uuid" ]]; then
+                found=1
+                [[ -n "$filename" ]] && f="$filename"
+                [[ -n "$hash" ]] && h="$hash"
+                [[ -n "$version" ]] && v="$version"
+                d=""  # clear deleted_at when updating
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\n' "$u" "$f" "$h" "$v" "$d" >> "$tmp"
+        done < "$remote_state_file"
+    fi
+
+    if [[ $found -eq 0 ]]; then
+        printf '%s\t%s\t%s\t%s\t\n' "$uuid" "$filename" "$hash" "$version" >> "$tmp"
+    fi
+
     mv "$tmp" "$remote_state_file"
 }
 
-function del_remote_state {
-    local uuid="$1"
-    local tmp
+function get_remote_state {
+    local key="$1"
+    local field="$2"
 
-    tmp=$(mktemp)
+    [[ ! -f "$remote_state_file" ]] \
+        && return
+
+    case "$field" in
+        deleted_uuids)
+            awk -F'\t' '$5 != "" {print $1}' "$remote_state_file"
+            return
+            ;;
+        active_uuids)
+            awk -F'\t' '$5 == "" {print $1}' "$remote_state_file"
+            return
+            ;;
+    esac
+
+    local key_col value_col active_only=0
+    case "$field" in
+        filename) key_col=1; value_col=2 ;;
+        hash)     key_col=1; value_col=3 ;;
+        version)  key_col=1; value_col=4 ;;
+        uuid)     key_col=2; value_col=1; active_only=1 ;;
+    esac
+
     awk \
         -F'\t' \
-        -v u="$uuid" '
-            $1 == u { next }
-            { print }
+        -v k="$key" \
+        -v kc="$key_col" \
+        -v vc="$value_col" \
+        -v ao="$active_only" \
+        '
+            $kc == k && (ao == 0 || $5 == "") { print $vc; exit }
         ' \
-            "$remote_state_file" \
-                > "$tmp"
-    mv "$tmp" "$remote_state_file"
+            "$remote_state_file"
 }
 
 function update_sync_state {
-    local uuid="$1"
-    local filename="$2"
-    local hash="$3"
-    local tmp
-
-    tmp=$(mktemp)
-    if [[ -f "$state_file" ]]; then
-        awk \
-            -F'\t' \
-            -v u="$uuid" \
-            '
-                $1 == u { next }
-                { print }
-            ' \
-                "$state_file" \
-                    > "$tmp"
+    local delete=0
+    if [[ "${1:-}" == "-d" ]]; then
+        delete=1
+        shift
     fi
 
-    # after reconciliation, both remote_filename and local_filename are the same
-    printf "%s\t%s\t%s\t%s\n" "$uuid" "$filename" "$filename" "$hash" >> "$tmp"
+    local uuid="$1"
+
+    if [[ $delete -eq 1 ]]; then
+        [[ ! -f "$state_file" ]] && return 0
+        local tmp
+        tmp=$(mktemp)
+        awk -F'\t' -v u="$uuid" '$1 != u' "$state_file" > "$tmp"
+        mv "$tmp" "$state_file"
+        return 0
+    fi
+
+    local server_fn="${2:-}"
+    local local_fn="${3:-}"
+    local server_hash="${4:-}"
+    local local_hash="${5:-}"
+    local tmp
+    tmp=$(mktemp)
+    local found=0
+
+    if [[ -f "$state_file" ]]; then
+        while IFS=$'\t' read -r u sf lf sh lh; do
+            if [[ "$u" == "$uuid" ]]; then
+                found=1
+                [[ -n "$server_fn" ]] && sf="$server_fn"
+                [[ -n "$local_fn" ]] && lf="$local_fn"
+                [[ -n "$server_hash" ]] && sh="$server_hash"
+                [[ -n "$local_hash" ]] && lh="$local_hash"
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\n' "$u" "$sf" "$lf" "$sh" "$lh" >> "$tmp"
+        done < "$state_file"
+    fi
+
+    if [[ $found -eq 0 ]]; then
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$uuid" "$server_fn" "$local_fn" "$server_hash" "$local_hash" >> "$tmp"
+    fi
+
     mv "$tmp" "$state_file"
 }
 
-function get_cached_hash {
-    local uuid="$1"
+function get_sync_state {
+    local key="$1"
+    local field="$2"
 
     [[ ! -f "$state_file" ]] \
         && return
 
+    local key_col value_col
+    case "$field" in
+        server_filename) key_col=1; value_col=2 ;;
+        local_filename)  key_col=1; value_col=3 ;;
+        hash)            key_col=1; value_col=4 ;;
+        local_hash)      key_col=1; value_col=5 ;;
+        uuid)            key_col=3; value_col=1 ;;
+    esac
+
     awk \
         -F'\t' \
-        -v u="$uuid" \
+        -v k="$key" \
+        -v kc="$key_col" \
+        -v vc="$value_col" \
         '
-            $1 != u { next }
-            { print $4; exit }
+            $kc == k { print $vc; exit }
         ' \
             "$state_file"
 }
 
-function del_cached {
-    local uuid="$1"
-
-    [[ ! -f "$state_file" ]] \
-        && return
-
-    local tmp
-    tmp=$(mktemp)
-
-    awk \
-        -F'\t' \
-        -v u="$uuid" \
-        '
-            $1 == u { next }
-            { print }
-        ' \
-            "$state_file" \
-                > "$tmp"
-    mv "$tmp" "$state_file"
-}
-
-function get_cached_local_filename {
-    local uuid="$1"
+function find_uuid_by_local_hash {
+    local hash="$1"
 
     [[ ! -f "$state_file" ]] \
         && return
 
     awk \
         -F'\t' \
-        -v u="$uuid" \
-        '
-            $1 != u { next }
-            { print $3; exit }
-        ' \
-            "$state_file"
-}
-
-function get_cached_remote_filename {
-    local uuid="$1"
-
-    [[ ! -f "$state_file" ]] \
-        && return
-
-    awk \
-        -F'\t' \
-        -v u="$uuid" \
-        '
-            $1 != u { next }
-            { print $2; exit }
-        ' \
-            "$state_file"
-}
-
-function get_cached_uuid {
-    local file="$1"
-
-    [[ ! -f "$state_file" ]] \
-        && return
-
-    awk \
-        -F'\t' \
-        -v f="$file" \
-        '
-            $3 != f { next }
-            { print $1; exit }
-        ' \
-            "$state_file"
-}
-
-function get_remote_hash {
-    local uuid="$1"
-    awk -F'\t' -v u="$uuid" '$1 == u {print $3; exit}' "$remote_state_file"
-}
-
-function get_remote_version {
-    local uuid="$1"
-    awk -F'\t' -v u="$uuid" '$1 == u {print $4; exit}' "$remote_state_file"
-}
-
-function hash_file {
-    local file="$1"
-
-    shasum -a 256 "$file" | cut -d' ' -f1
-}
-
-function update_cached_hash {
-    local uuid="$1"
-    local hash="$2"
-
-    [[ ! -f "$state_file" ]] \
-        && return
-
-    local tmp
-    tmp=$(mktemp)
-
-    awk \
-        -F'\t' \
-        -v u="$uuid" \
         -v h="$hash" \
-        -v OFS='\t' \
         '
-            $1 == u { $4 = h }
-            { print }
+            $5 == h { print $1; exit }
         ' \
-            "$state_file" \
-                > "$tmp"
-    mv "$tmp" "$state_file"
+            "$state_file"
 }
 
 function rename_remote_file {
@@ -731,8 +804,8 @@ function rename_remote_file {
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
 
-    update_remote_state "$uuid" "$new_hash" "$version" "$new_file"
-    update_sync_state "$uuid" "$new_file" "$(get_cached_hash "$uuid")"
+    update_remote_state "$uuid" "$new_file" "$new_hash" "$version"
+    update_sync_state "$uuid" "$new_file" "$new_file"
 
     printf 'push: renamed "%s" to "%s"\n' "$old_file" "$new_file"
 }
@@ -742,7 +815,7 @@ function delete_remote_file {
     local uuid="$2"
     local filename had_changes http_code response
 
-    filename=$(get_cached_local_filename "$uuid")
+    filename=$(get_sync_state "$uuid" local_filename)
     had_changes=0
     has_remote_changes "$uuid" \
         && had_changes=1
@@ -770,8 +843,8 @@ function delete_remote_file {
         return 1
     fi
 
-    del_remote_state "$uuid"
-    del_cached "$uuid"
+    update_remote_state -d "$uuid"
+    update_sync_state -d "$uuid"
 
     if [[ "$http_code" == "204" ]]; then
         if [[ $had_changes -eq 1 ]]; then
@@ -826,10 +899,10 @@ function create_remote_file {
     new_hash=$(echo "$body" | jq -r '.content_hash')
 
     [[ -n "$old_uuid" ]] \
-        && del_cached "$old_uuid"
+        && update_sync_state -d "$old_uuid"
 
-    add_remote_state "$uuid" "$file" "$new_hash" "1"
-    update_sync_state "$uuid" "$file" "$new_hash"
+    update_remote_state "$uuid" "$file" "$new_hash" "1"
+    update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
     printf 'push: "%s" (v1)\n' "$file"
 }
@@ -841,7 +914,7 @@ function update_remote_file {
     local filepath="$4"
     local body cached_hash http_code mime_type new_hash previous_hash response version
 
-    cached_hash=$(get_cached_hash "$uuid")
+    cached_hash=$(get_sync_state "$uuid" hash)
     mime_type=$(file --mime-type -b "$filepath")
     response=$(
         curl -s -w "\n%{http_code}" \
@@ -874,8 +947,8 @@ function update_remote_file {
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
 
-    update_remote_state "$uuid" "$new_hash" "$version"
-    update_sync_state "$uuid" "$file" "$new_hash"
+    update_remote_state "$uuid" "" "$new_hash" "$version"
+    update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
     if [[ "$previous_hash" != "$cached_hash" ]]; then
         printf "push: \"%s\" (v%s, remote changes overwritten)\n" "$file" "$version"
@@ -919,7 +992,44 @@ function fetch_remote_to_local_path {
     fi
 
     mv "$tmp" "$filepath"
-    update_cached_hash "$uuid" "$hash"
+    update_sync_state "$uuid" "" "" "$hash" "$hash"
+}
+
+function fetch_remote_file {
+    local notebook="$1"
+    local output_dir="$2"
+    local uuid="$3"
+    local file="$4"
+    local hash="$5"
+    local filepath="${output_dir}/${file}"
+    local tmp http_code
+
+    tmp=$(mktemp)
+    mkdir -p "$(dirname "$filepath")"
+
+    http_code=$(
+        curl \
+            -s \
+            -w "%{http_code}" \
+            -H "Authorization: Token $api_token" \
+            -o "$tmp" \
+                "${base_url}/api/notebooks/${notebook}/${uuid}"
+    )
+
+    if [[ "$http_code" == "401" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR permission denied"
+        exit 1
+    fi
+
+    mv "$tmp" "$filepath"
+    update_sync_state "$uuid" "$file" "$file" "$hash" "$hash"
 }
 
 function local_file_was_removed {
@@ -983,7 +1093,7 @@ function file_matches_hash {
 function is_untracked {
     local uuid="$1"
 
-    [[ -z $(get_cached_local_filename "$uuid") ]]
+    [[ -z $(get_sync_state "$uuid" local_filename) ]]
 }
 
 function has_local_state {
@@ -994,7 +1104,7 @@ function local_file_is_stale {
     local uuid="$1"
     local remote_filename
 
-    remote_filename=$(get_remote_filename "$uuid")
+    remote_filename=$(get_remote_state "$uuid" filename)
 
     [[ -z "$remote_filename" ]]
 }
@@ -1006,19 +1116,7 @@ function has_local_changes {
     [[ ! -f "$filepath" ]] \
         && return 1
 
-    [[ "$(get_cached_hash "$uuid")" != "$(hash_file "$filepath")" ]]
-}
-
-function remove_file {
-    local uuid="$1"
-    local filepath="$2"
-
-    if [[ -f "$filepath" ]]; then
-        rm "$filepath"
-        rmdir -p "$(dirname "$filepath")" 2>/dev/null || true
-    fi
-
-    del_cached "$uuid"
+    [[ "$(get_sync_state "$uuid" hash)" != "$(hash_file "$filepath")" ]]
 }
 
 function is_cached_uuid_stale {
@@ -1096,7 +1194,7 @@ function is_being_renamed {
     local file="$2"
     local cached_remote_file
 
-    cached_remote_file=$(get_cached_remote_filename "$uuid")
+    cached_remote_file=$(get_sync_state "$uuid" server_filename)
 
     [[ -z "$cached_remote_file" ]] \
         && return 1
@@ -1108,8 +1206,8 @@ function is_locally_renamed {
     local cached_local_file
     local cached_remote_file
 
-    cached_local_file=$(get_cached_local_filename "$uuid")
-    cached_remote_file=$(get_cached_remote_filename "$uuid")
+    cached_local_file=$(get_sync_state "$uuid" local_filename)
+    cached_remote_file=$(get_sync_state "$uuid" server_filename)
 
     [[ -z "$cached_local_file" ]] \
         && return 1
@@ -1129,8 +1227,8 @@ function remote_file_was_renamed {
     local remote_filename
     local local_fn
 
-    remote_filename=$(get_remote_filename "$uuid")
-    local_fn=$(get_cached_local_filename "$uuid")
+    remote_filename=$(get_remote_state "$uuid" filename)
+    local_fn=$(get_sync_state "$uuid" local_filename)
 
     [[ -z "$remote_filename" ]] \
         && return 1
@@ -1140,60 +1238,13 @@ function remote_file_was_renamed {
 function has_remote_changes {
     local uuid="$1"
 
-    [[ "$(get_remote_hash "$uuid")" != "$(get_cached_hash "$uuid")" ]]
+    [[ "$(get_remote_state "$uuid" hash)" != "$(get_sync_state "$uuid" hash)" ]]
 }
 
 function destination_occupied {
     local filepath="$1"
 
     [[ -f "$filepath" ]]
-}
-
-function rename_file {
-    local old_filepath="$1"
-    local new_filepath="$2"
-
-    mkdir -p "$(dirname "$new_filepath")"
-    mv "$old_filepath" "$new_filepath"
-    rmdir -p "$(dirname "$old_filepath")" 2>/dev/null \
-        || true
-}
-
-function fetch_remote_file {
-    local notebook="$1"
-    local output_dir="$2"
-    local uuid="$3"
-    local file="$4"
-    local hash="$5"
-    local filepath="${output_dir}/${file}"
-    local tmp http_code
-
-    tmp=$(mktemp)
-    mkdir -p "$(dirname "$filepath")"
-
-    http_code=$(
-        curl \
-            -s \
-            -w "%{http_code}" \
-            -H "Authorization: Token $api_token" \
-            -o "$tmp" \
-                "${base_url}/api/notebooks/${notebook}/${uuid}"
-    )
-
-    if [[ "$http_code" == "401" ]]; then
-        rm -f "$tmp"
-        echo "sync: ERROR API token invalid"
-        exit 1
-    fi
-
-    if [[ "$http_code" == "403" ]]; then
-        rm -f "$tmp"
-        echo "sync: ERROR permission denied"
-        exit 1
-    fi
-
-    mv "$tmp" "$filepath"
-    update_sync_state "$uuid" "$file" "$hash"
 }
 
 function deleted_locally_no_new_content {
@@ -1214,6 +1265,58 @@ function is_remote_deleted {
     local uuid="$1"
     awk -F'\t' -v u="$uuid" '$1 == u && $5 != "" {found=1; exit} END {exit !found}' \
         "$remote_state_file"
+}
+
+function usage {
+    sed -e 's/^        //' >&2 <<-EOF
+        Usage: $0 [options] <notebook> <dir>
+
+            -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5843)
+            -d SECS  Debounce seconds (default: 300)
+            -i SECS  Poll interval seconds (default: 900)
+            -p       Pull only (do not push local changes)
+            -t TOKEN API token (default: \$YOUR5E_API_TOKEN)
+            -v       Verbose (show debug output in watch mode)
+            -w       Watch (watch for changes)
+
+        Example:
+          $0 norm/campaign-notes ./backup
+	EOF
+    exit 1
+}
+
+function hash_file {
+    local file="$1"
+
+    shasum -a 256 "$file" | cut -d' ' -f1
+}
+
+function log_watch_event {
+    [[ $verbose -eq 1 ]] \
+        && echo "$(date +%H:%M:%S) watch: $1" \
+        || :
+}
+
+function remove_file {
+    local uuid="$1"
+    local filepath="$2"
+
+    if [[ -f "$filepath" ]]; then
+        rm "$filepath"
+        rmdir -p "$(dirname "$filepath")" 2>/dev/null || true
+    fi
+
+    update_sync_state -d "$uuid"
+}
+
+function rename_file {
+    local old_filepath="$1"
+    local new_filepath="$2"
+
+    mkdir -p "$(dirname "$new_filepath")"
+    mv "$old_filepath" "$new_filepath"
+    rmdir -p "$(dirname "$old_filepath")" 2>/dev/null \
+        || true
 }
 
 [[ "${BASH_SOURCE[0]}" != "$0" ]] || main "$@"

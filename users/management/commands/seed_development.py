@@ -1,6 +1,7 @@
 from pathlib import Path
 from textwrap import dedent
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
@@ -13,6 +14,11 @@ class Command(BaseCommand):
     help = "Create default users for development"
 
     def handle(self, *args, **options):
+        db_name = settings.DATABASES["default"]["NAME"]
+        if db_name == "your5e_test":
+            token_dir = Path("tests")
+        else:
+            token_dir = Path(".")
         User.objects.create_user(
             username="admin",
             email="admin@localhost",
@@ -35,7 +41,7 @@ class Command(BaseCommand):
             label="Website",
         )
         _, token = AuthToken.objects.create(user=norm, name="Development")
-        Path("tests/norm.token").write_text(token)
+        (token_dir / "norm.token").write_text(token)
 
         wendy = User.objects.create_user(
             username="wendy",
@@ -45,7 +51,7 @@ class Command(BaseCommand):
             short_name="Wendy",
         )
         _, wendy_token = AuthToken.objects.create(user=wendy, name="Development")
-        Path("tests/wendy.token").write_text(wendy_token)
+        (token_dir / "wendy.token").write_text(wendy_token)
 
         susan = User.objects.create_user(
             username="susan",
@@ -55,7 +61,7 @@ class Command(BaseCommand):
             short_name="Susan",
         )
         _, susan_token = AuthToken.objects.create(user=susan, name="Development")
-        Path("tests/susan.token").write_text(susan_token)
+        (token_dir / "susan.token").write_text(susan_token)
 
         hugh = User.objects.create_user(
             username="hugh",
@@ -65,7 +71,7 @@ class Command(BaseCommand):
             short_name="Hugh",
         )
         _, hugh_token = AuthToken.objects.create(user=hugh, name="Development")
-        Path("tests/hugh.token").write_text(hugh_token)
+        (token_dir / "hugh.token").write_text(hugh_token)
 
         notebook = Notebook.objects.create(
             name="Campaign Notes",

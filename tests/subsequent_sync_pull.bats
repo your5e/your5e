@@ -1009,4 +1009,51 @@ setup() {
     assert_success
 }
 
+@test "local renamed untracked, hash match" {
+    rename_local_file_untracked "index.md" "renamed-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: detected rename "index.md" to "renamed-index.md"
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_matches_fixture "index.md" "renamed-index.md"
+    assert_file_in_state "renamed-index.md"
+    assert_file_not_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
+@test "local renamed untracked, hash mismatch" {
+    rename_local_file_untracked "index.md" "renamed-index.md"
+    modify_file "renamed-index.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING pull "index.md", already deleted locally
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    [[ ! -f "$output_dir/index.md" ]]
+    assert_file_unchanged "renamed-index.md"
+    assert_file_not_in_state "renamed-index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_success
+}
+
 # New tests should use or create helpers so as not to obscure what the test is actually doing.

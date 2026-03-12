@@ -115,6 +115,8 @@ Test updating the state from an existing synced directory works.
 | local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | |
 | local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ |
 | local renamed, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ |
+| local renamed untracked, hash match | ✔️ | | ✔️ | | | | | |
+| local renamed untracked, hash mismatch | ✔️ | ✔️ | ✔️ | | | | | |
 
 ### `sync_permissions.bats`
 

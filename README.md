@@ -28,3 +28,13 @@ The integration tests `tests/*.bats` serve as both tests of the API, and as a
 reference implentation of how I think notebook sync should work. What possible
 scenarios can happen, and how to handle them. Happily, it also happens to
 implement a full sync bash script if you need to sync a directory.
+
+```
+(computer)% export YOUR5E_API_TOKEN='abcdefg...'
+
+# one-time sync
+(computer)% tests/sync-notebook.sh user/notebook dir
+
+# monitor and poll for changes
+(computer)% tests/sync-notebook.sh -w user/notebook dir
+```
