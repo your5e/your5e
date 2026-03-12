@@ -18,12 +18,7 @@ setup_file() {
 
 setup() {
     restore_database
-
-    # fetch page metadata from API after restore
-    curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
-        | jq -r '.results[] | [.filename, .uuid, .content_hash, (.deleted_at // "")] | @tsv' \
-        > "$BATS_FILE_TMPDIR/pages"
+    setup_pages_file
 
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"

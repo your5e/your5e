@@ -14,15 +14,8 @@ load 'setup_helpers.sh'
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
     export YOUR5E_API_BASE="http://localhost:5844"
-    export BATS_FILE_TMPDIR="${BATS_FILE_TMPDIR:-$(mktemp -d)}"
-
     restore_database
-
-    # fetch page metadata from API once for all tests
-    curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
-        | jq -r '.results[] | [.filename, .uuid, .content_hash, (.deleted_at // "")] | @tsv' \
-        > "$BATS_FILE_TMPDIR/pages"
+    setup_pages_file
 }
 
 setup() {

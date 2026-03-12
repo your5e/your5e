@@ -38,6 +38,9 @@ function main {
 
     fetch_remote_state "$notebook"
 
+    [[ -n "${AFTER_FETCH_HOOK:-}" ]] \
+        && eval "$AFTER_FETCH_HOOK"
+
     [[ $pull_only -eq 0 ]] \
         && apply_local_updates "$notebook" "$output_dir"
 
@@ -132,6 +135,9 @@ function apply_local_updates {
 
     if has_local_state; then
         while IFS=$'\t' read -r uuid _ local_fn hash; do
+            [[ $pull_only -eq 1 ]] \
+                && break
+
             local filepath="$output_dir/$local_fn"
             local remote_filename
             remote_filename=$(get_remote_filename "$uuid")
@@ -153,7 +159,8 @@ function apply_local_updates {
                     remote_filename="$local_fn"
                 fi
 
-                delete_remote_file "$notebook" "$uuid"
+                delete_remote_file "$notebook" "$uuid" \
+                    || true
                 continue
             fi
 
@@ -171,13 +178,17 @@ function apply_local_updates {
                     remote_filename="$local_fn"
                 fi
 
-                update_remote_file "$notebook" "$uuid" "$local_fn" "$filepath"
+                update_remote_file "$notebook" "$uuid" "$local_fn" "$filepath" \
+                    || true
             fi
         done < "$state_file"
     fi
 
     # check for new files
     while IFS= read -r -d '' filepath; do
+        [[ $pull_only -eq 1 ]] \
+            && break
+
         local file="${filepath#"$output_dir"/}"
 
         file_is_already_tracked "$file" \
@@ -693,6 +704,17 @@ function rename_remote_file {
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
 
+    if [[ "$http_code" == "401" ]]; then
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        echo "sync: NOTE permission denied, switching to pull-only mode"
+        pull_only=1
+        return 1
+    fi
+
     if [[ "$http_code" == "409" ]]; then
         local error_msg
         error_msg=$(echo "$body" | jq -r '.error')
@@ -732,6 +754,17 @@ function delete_remote_file {
     )
     http_code=$(echo "$response" | tail -1)
 
+    if [[ "$http_code" == "401" ]]; then
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        echo "sync: NOTE permission denied, switching to pull-only mode"
+        pull_only=1
+        return 1
+    fi
+
     if [[ "$http_code" != "204" && "$http_code" != "404" ]]; then
         printf 'push: ERROR failed to delete "%s" (HTTP %s)\n' "$filename" "$http_code"
         return 1
@@ -766,6 +799,17 @@ function create_remote_file {
     )
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
+
+    if [[ "$http_code" == "401" ]]; then
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        echo "sync: NOTE permission denied, switching to pull-only mode"
+        pull_only=1
+        return 1
+    fi
 
     if [[ "$http_code" == "400" || "$http_code" == "409" ]]; then
         error_msg=$(echo "$body" | jq -r '.error')
@@ -810,6 +854,17 @@ function update_remote_file {
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
 
+    if [[ "$http_code" == "401" ]]; then
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        echo "sync: NOTE permission denied, switching to pull-only mode"
+        pull_only=1
+        return 1
+    fi
+
     if [[ "$http_code" != "200" ]]; then
         printf "   %s failed to upload (HTTP %s)\n" "$file" "$http_code"
         return 1
@@ -836,17 +891,32 @@ function fetch_remote_to_local_path {
     local local_file="$4"
     local hash="$5"
     local filepath="${output_dir}/${local_file}"
+    local tmp http_code
 
     mkdir -p "$(dirname "$filepath")"
 
-    local tmp
     tmp=$(mktemp)
 
-    curl \
-        -s \
-        -H "Authorization: Token $api_token" \
-        -o "$tmp" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+    http_code=$(
+        curl \
+            -s \
+            -w "%{http_code}" \
+            -H "Authorization: Token $api_token" \
+            -o "$tmp" \
+                "${base_url}/api/notebooks/${notebook}/${uuid}"
+    )
+
+    if [[ "$http_code" == "401" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR permission denied"
+        exit 1
+    fi
 
     mv "$tmp" "$filepath"
     update_cached_hash "$uuid" "$hash"
@@ -1096,16 +1166,31 @@ function fetch_remote_file {
     local file="$4"
     local hash="$5"
     local filepath="${output_dir}/${file}"
-    local tmp
+    local tmp http_code
 
     tmp=$(mktemp)
     mkdir -p "$(dirname "$filepath")"
 
-    curl \
-        -s \
-        -H "Authorization: Token $api_token" \
-        -o "$tmp" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+    http_code=$(
+        curl \
+            -s \
+            -w "%{http_code}" \
+            -H "Authorization: Token $api_token" \
+            -o "$tmp" \
+                "${base_url}/api/notebooks/${notebook}/${uuid}"
+    )
+
+    if [[ "$http_code" == "401" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR API token invalid"
+        exit 1
+    fi
+
+    if [[ "$http_code" == "403" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR permission denied"
+        exit 1
+    fi
 
     mv "$tmp" "$filepath"
     update_sync_state "$uuid" "$file" "$hash"

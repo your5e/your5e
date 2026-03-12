@@ -45,15 +45,15 @@ Test the initial sync completes correctly.
 - **Content** — local and remote file content matches
 - **Filename** — local and remote filename matches
 
-| Test                    | Local | Remote | Content | Filename |
-|-------------------------|-------|--------|---------|----------|
-| empty directory         | —     | file   |         |          |
-| local files             | file  | file   | ❌      | ✔️       |
-| local matches remote    | file  | file   | ✔️      | ✔️       |
-| local file clashes      | file  | dir    |         |          |
-| local dir clashes       | dir   | file   |         |          |
-| case collision          | file  | file   | ❌      | ❌       |
-| case collision, matches | file  | file   | ✔️      | ❌       |
+| Test | Local | Remote | Content | Filename |
+|------|-------|--------|---------|----------|
+| empty directory | — | file | | |
+| local files | file | file | ❌ | ✔️ |
+| local matches remote | file | file | ✔️ | ✔️ |
+| local file clashes | file | dir | | |
+| local dir clashes | dir | file | | |
+| case collision | file | file | ❌ | ❌ |
+| case collision, matches | file | file | ✔️ | ❌ |
 
 ### `subsequent_sync_*.bats`
 
@@ -118,7 +118,8 @@ Test updating the state from an existing synced directory works.
 
 ### `sync_permissions.bats`
 
-Test what happens when the user does not have the right permissions for the notebook.
+Test what happens when the user does not have the right permissions for the
+notebook.
 
 - **Permission** — user's access level on the target notebook
 - **Notebook** — notebook exists and is accessible
@@ -128,12 +129,21 @@ Test what happens when the user does not have the right permissions for the note
 | full sync switches to pull | viewer | ✔️ |
 | pull, non-collaborator, public | none | ✔️ |
 | pull, non-collaborator, private | none | ✔️ |
-| pull, invalid token | invalid token | ✔️ |
-| pull, no token | no token | ✔️ |
+| pull, invalid token | invalid | ✔️ |
+| pull, no token | none | ✔️ |
 | pull, non-existent, owner | owner | ❌ |
 | pull, non-existent, editor | editor | ❌ |
 | pull, non-existent, viewer | viewer | ❌ |
 | pull, non-existent, non-collaborator | none | ❌ |
+| mid-sync, revoked, new file | editor | ✔️ |
+| mid-sync, downgraded, new file | editor | ✔️ |
+| mid-sync, revoked, local update | editor | ✔️ |
+| mid-sync, downgraded, local update | editor | ✔️ |
+| mid-sync, revoked, local rename | editor | ✔️ |
+| mid-sync, downgraded, local rename | editor | ✔️ |
+| mid-sync, revoked, local delete | editor | ✔️ |
+| mid-sync, downgraded, local delete | editor | ✔️ |
+| mid-sync, revoked, content update | editor | ✔️ |
 
 ### `sync_pagination.bats`
 

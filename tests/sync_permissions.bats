@@ -12,12 +12,24 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_BASE="http://localhost:5844"
-    restore_database
 }
 
 setup() {
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
+    export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
+    export -f invalidate_token
+    export -f downgrade_to_viewer
+
+    restore_database
+    setup_pages_file
+
+    if [[ "${BATS_TEST_DESCRIPTION:-}" =~ mid-sync ]]; then
+        if [[ "${BATS_TEST_DESCRIPTION:-}" =~ downgraded ]]; then
+            export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/wendy.token")"
+        fi
+        init_synced_dir
+    fi
 }
 
 
@@ -175,5 +187,219 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_failure
+}
+
+
+@test "mid-sync, revoked, new file" {
+    create_file "newfile.md"
+    export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: ERROR API token invalid
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "newfile.md"
+    assert_tracked_file_matches_fixture "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_state_matches_fixture
+    assert_failure
+}
+
+@test "mid-sync, downgraded, new file" {
+    set_older_content "Bestiary.md"
+    create_file "newfile.md"
+    export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: NOTE permission denied, switching to pull-only mode
+        pull: "Bestiary.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "newfile.md"
+    assert_tracked_file_matches_fixture "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_success
+}
+
+@test "mid-sync, revoked, local update" {
+    modify_file "index.md"
+    export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: ERROR API token invalid
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_state_matches_fixture
+    assert_failure
+}
+
+@test "mid-sync, downgraded, local update" {
+    set_older_content "Bestiary.md"
+    modify_file "index.md"
+    export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: NOTE permission denied, switching to pull-only mode
+        pull: "Bestiary.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_success
+}
+
+@test "mid-sync, revoked, local rename" {
+    rename_local_file "index.md" "renamed.md"
+    export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: ERROR API token invalid
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_matches_fixture "index.md" "renamed.md"
+    assert_file_not_downloaded "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_failure
+}
+
+@test "mid-sync, downgraded, local rename" {
+    set_older_content "Bestiary.md"
+    rename_local_file "index.md" "renamed.md"
+    export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: NOTE permission denied, switching to pull-only mode
+        pull: "Bestiary.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_matches_fixture "index.md" "renamed.md"
+    assert_file_not_downloaded "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_success
+}
+
+@test "mid-sync, revoked, local delete" {
+    remove_file "index.md"
+    export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: ERROR API token invalid
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_failure
+}
+
+@test "mid-sync, downgraded, local delete" {
+    set_older_content "Bestiary.md"
+    remove_file "index.md"
+    export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: NOTE permission denied, switching to pull-only mode
+        pull: SKIPPING pull "index.md", already deleted locally
+        pull: "Bestiary.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_success
+}
+
+@test "mid-sync, revoked, content update" {
+    set_older_content "Bestiary.md"
+    export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        sync: ERROR API token invalid
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_matches_fixture "index.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
     assert_failure
 }

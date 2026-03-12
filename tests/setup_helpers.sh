@@ -14,6 +14,16 @@ function restore_database {
 	SQL
 }
 
+function setup_pages_file {
+    curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
+        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
+        | jq -r '
+            .results[]
+            | [.filename, .uuid, .content_hash, (.deleted_at // "")]
+            | @tsv' \
+        > "$BATS_FILE_TMPDIR/pages"
+}
+
 function uuid_for {
     grep "^$1"$'\t' "$BATS_FILE_TMPDIR/pages" | cut -f2
 }
@@ -324,4 +334,34 @@ function assert_file_deleted_on_server {
         '$3 == f {found=1; exit} END {exit !found}' "$state_file"
     [[ ! -f "$output_dir/$filename" ]]
     assert_server_file_deleted "$filename"
+}
+
+function invalidate_token {
+    local token="$1"
+    local token_key="${token:0:15}"
+    COMPOSE_FILE=docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db-test \
+        psql -U your5e your5e_test \
+        -c "DELETE FROM users_authtoken WHERE token_key = '$token_key'" \
+        >/dev/null 2>&1
+}
+
+function downgrade_to_viewer {
+    local username="$1" notebook_owner="$2" notebook_slug="$3"
+    COMPOSE_FILE=docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db-test \
+        psql -U your5e your5e_test \
+        -c "UPDATE notebooks_notebookpermission SET role = 'viewer'
+            FROM users_user u, notebooks_notebook n
+            WHERE notebooks_notebookpermission.user_id = u.id
+            AND notebooks_notebookpermission.notebook_id = n.wiki_ptr_id
+            AND u.username = '$username'
+            AND n.owner_id = (
+                SELECT id FROM users_user WHERE username = '$notebook_owner')
+            AND n.slug = '$notebook_slug'" \
+        >/dev/null 2>&1
+}
+
+function remove_file {
+    rm "$output_dir/$1"
 }
