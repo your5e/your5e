@@ -378,6 +378,7 @@ class TestNotebookPages(NotebookApiMixin):
     def test_viewer(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
         self.assert_wendys_notebook_pages(response)
+        assert response.json()["editable"] is False
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):

@@ -35,9 +35,7 @@ class Command(BaseCommand):
             label="Website",
         )
         _, token = AuthToken.objects.create(user=norm, name="Development")
-        self.stdout.write(f"API token for norm: {token}")
-
-        Path("tests/api.token").write_text(token)
+        Path("tests/norm.token").write_text(token)
 
         wendy = User.objects.create_user(
             username="wendy",
@@ -46,6 +44,28 @@ class Command(BaseCommand):
             name="Wendy Testaburger",
             short_name="Wendy",
         )
+        _, wendy_token = AuthToken.objects.create(user=wendy, name="Development")
+        Path("tests/wendy.token").write_text(wendy_token)
+
+        susan = User.objects.create_user(
+            username="susan",
+            email="susan@localhost",
+            password="susan",
+            name="Susan Test",
+            short_name="Susan",
+        )
+        _, susan_token = AuthToken.objects.create(user=susan, name="Development")
+        Path("tests/susan.token").write_text(susan_token)
+
+        hugh = User.objects.create_user(
+            username="hugh",
+            email="hugh@localhost",
+            password="hugh",
+            name="Hugh Test",
+            short_name="Hugh",
+        )
+        _, hugh_token = AuthToken.objects.create(user=hugh, name="Development")
+        Path("tests/hugh.token").write_text(hugh_token)
 
         notebook = Notebook.objects.create(
             name="Campaign Notes",
@@ -104,6 +124,11 @@ class Command(BaseCommand):
             notebook=notebook,
             user=wendy,
             role=NotebookPermission.Role.EDITOR,
+        )
+        NotebookPermission.objects.create(
+            notebook=notebook,
+            user=susan,
+            role=NotebookPermission.Role.VIEWER,
         )
 
         session_page = Page.objects.create(wiki=notebook)

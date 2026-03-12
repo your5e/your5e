@@ -24,8 +24,13 @@ function main {
     done
     shift $((OPTIND-1))
 
-    [[ -z "$api_token" || $# -ne 2 ]] \
+    [[ $# -ne 2 ]] \
         && usage
+
+    if [[ -z "$api_token" ]]; then
+        echo "sync: ERROR API token missing"
+        exit 1
+    fi
 
     local notebook="$1"
     local output_dir="$2"
@@ -67,18 +72,47 @@ function usage {
 function fetch_remote_state {
     local notebook="$1"
     local next_page="${base_url}/api/notebooks/${notebook}/"
-    local response
+    local body first_page=1 http_code response
 
     while [[ -n "$next_page" ]]; do
         response=$(
-            curl -s -H "Authorization: Token $api_token" "$next_page"
+            curl -s -w "\n%{http_code}" \
+                -H "Authorization: Token $api_token" "$next_page"
         )
+        http_code=$(echo "$response" | tail -1)
+        body=$(echo "$response" | sed '$d')
+
+        if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+            echo "sync: ERROR API token invalid"
+            exit 1
+        fi
+
+        if [[ "$http_code" == "404" ]]; then
+            echo "sync: ERROR notebook not found"
+            exit 1
+        fi
+
+        if [[ "$http_code" != "200" ]]; then
+            echo "sync: ERROR unexpected response (HTTP $http_code)"
+            exit 1
+        fi
+
+        if [[ $first_page -eq 1 ]]; then
+            first_page=0
+            local editable
+            editable=$(echo "$body" | jq -r '.editable')
+            if [[ "$editable" == "false" && $pull_only -eq 0 ]]; then
+                echo "sync: NOTE read-only access, switching to pull-only mode"
+                pull_only=1
+            fi
+        fi
+
         next_page=$(
-            echo "$response" \
+            echo "$body" \
                 | jq -r '.next // ""'
         )
 
-        echo "$response" \
+        echo "$body" \
             | jq -r '
                     .results[]
                         | [.uuid, .filename, .content_hash, .version, .deleted_at // ""]

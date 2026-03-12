@@ -111,3 +111,20 @@ authentication problems) should abort the sync for a later retry.
 | local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | |
 | local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ |
 | local renamed, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ |
+
+### `sync_permissions.bats`
+
+- **Permission** — user's access level on the target notebook
+- **Notebook** — notebook exists and is accessible
+
+| Test | Permission | Notebook |
+|------|------------|----------|
+| full sync switches to pull | viewer | ✔️ |
+| pull, non-collaborator, public | none | ✔️ |
+| pull, non-collaborator, private | none | ✔️ |
+| pull, invalid token | invalid token | ✔️ |
+| pull, no token | no token | ✔️ |
+| pull, non-existent, owner | owner | ❌ |
+| pull, non-existent, editor | editor | ❌ |
+| pull, non-existent, viewer | viewer | ❌ |
+| pull, non-existent, non-collaborator | none | ❌ |

@@ -257,6 +257,15 @@ function assert_success {
     [[ $status -eq 0 ]]
 }
 
+function assert_failure {
+    # shellcheck disable=SC2154  # $status is set by bats
+    [[ $status -ne 0 ]]
+}
+
+function assert_no_output_dir {
+    [[ ! -d "$output_dir" ]]
+}
+
 function fail_on_multiple_curl_calls {
     # shellcheck disable=SC2329  # invoked indirectly via export -f
     curl() {

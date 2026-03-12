@@ -1,5 +1,5 @@
 __pycache__/
 *.pyc
 
-tests/api.token
+tests/*.token
 tests/seed.sql

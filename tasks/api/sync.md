@@ -17,7 +17,7 @@ Once the API is read-write, we can implement the rest of the algorithm.
 - [X] improve test readability with semantic helpers
 - [X] mirror the existing pull tests for push
 - [X] add any push-specific tests missing from the matrix
-- [ ] implement user permission scenarios
+- [X] implement user permission scenarios
 - [ ] ensure results pagination
 - [ ] cover any remaining API error scenarios
 

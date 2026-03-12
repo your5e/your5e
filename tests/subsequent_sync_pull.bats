@@ -12,7 +12,7 @@ bats_require_minimum_version 1.7.0
 load 'setup_helpers.sh'
 
 setup_file() {
-    export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/api.token")"
+    export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
     export YOUR5E_API_BASE="http://localhost:5843"
     export BATS_FILE_TMPDIR="${BATS_FILE_TMPDIR:-$(mktemp -d)}"
 
