@@ -107,10 +107,9 @@ function fetch_remote_state {
             fi
         fi
 
-        next_page=$(
-            echo "$body" \
-                | jq -r '.next // ""'
-        )
+        next_page=$(echo "$body" | jq -r '.next // ""')
+        [[ -n "$next_page" && "$next_page" != http* ]] \
+            && next_page="${base_url}${next_page}"
 
         echo "$body" \
             | jq -r '

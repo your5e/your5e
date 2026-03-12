@@ -38,6 +38,8 @@ authentication problems) should abort the sync for a later retry.
 
 ### `first_sync_*.bats`
 
+Test the initial sync completes correctly.
+
 - **Local** — what exists locally: nothing, file, or dir
 - **Remote** — what remote wants: file or dir
 - **Content** — local and remote file content matches
@@ -55,7 +57,9 @@ authentication problems) should abort the sync for a later retry.
 
 ### `subsequent_sync_*.bats`
 
-- **Tracked** — file is in .sync-state from previous sync
+Test updating the state from an existing synced directory works.
+
+- **Tracked** — file is in ``.sync-state` from previous sync
 - **Local Edited** — local content differs from cached hash
 - **Local Renamed** — local file has been moved to a different path
 - **Local Deleted** — local file no longer exists
@@ -114,6 +118,8 @@ authentication problems) should abort the sync for a later retry.
 
 ### `sync_permissions.bats`
 
+Test what happens when the user does not have the right permissions for the notebook.
+
 - **Permission** — user's access level on the target notebook
 - **Notebook** — notebook exists and is accessible
 
@@ -128,3 +134,7 @@ authentication problems) should abort the sync for a later retry.
 | pull, non-existent, editor | editor | ❌ |
 | pull, non-existent, viewer | viewer | ❌ |
 | pull, non-existent, non-collaborator | none | ❌ |
+
+### `sync_pagination.bats`
+
+Ensure the script correctly fetches when there are more than `PAGE_SIZE` pages.
