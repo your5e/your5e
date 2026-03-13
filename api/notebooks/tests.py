@@ -416,7 +416,7 @@ class TestNotebookPages(NotebookApiMixin):
             "created_by": "wendy",
             "updated_at": page["updated_at"],
             "deleted_at": None,
-            "content_hash": "c97598c919faef1e6b2478920c93a932c01fa126c4581ded374e2de8918c6649",  # noqa: E501
+            "content_hash": "679db08be18d05d1eb7ca05ddf83b19a7a6cd676bd3b9ae368106ea35d1ba726",  # noqa: E501
         }
 
         deleted = results[5]
@@ -431,7 +431,7 @@ class TestNotebookPages(NotebookApiMixin):
             "created_by": "wendy",
             "updated_at": None,
             "deleted_at": deleted["deleted_at"],
-            "content_hash": "d04123f976133f704ccec0af8f38bd2fecc66218310485daaba4fa09694f3a7d",  # noqa: E501
+            "content_hash": "5a8fe8a19ce3dad6665d4b8cde547d7e43ac310970be0c7d5b2155850b24b228",  # noqa: E501
         }
 
     @ApiMixin.as_api_user("wendy")
@@ -598,7 +598,7 @@ class TestPageContent(NotebookApiMixin):
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response["Content-Type"] == "text/markdown"
-        assert response.content == b"# Welcome\n\nThis is the index page."
+        assert response.content == b"# Welcome\n\nThis is the index page.\n"
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
@@ -651,7 +651,7 @@ class TestPageContent(NotebookApiMixin):
             {"version": "1"},
         )
         assert response.status_code == HTTPStatus.OK
-        assert response.content == b"# Session One\n\nFirst draft."
+        assert response.content == b"# Session One\n\nFirst draft.\n"
 
     @ApiMixin.as_api_user("wendy")
     def test_version_parameter_invalid(self, api_client):
@@ -752,7 +752,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_response_fields(self, api_client):
         uuid = self.get_page_uuid("index")
         previous_hash = self.get_page_hash("index")
-        new_content = b"# Response Test"
+        new_content = b"# Response Test\n"
         new_hash = hashlib.sha256(new_content).hexdigest()
         response = api_client.put(
             f"/api/notebooks/wendy/heros-legendes/{uuid}",
@@ -782,7 +782,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_deleted_page_is_undeleted(self, api_client):
         uuid = str(self.deleted_page.uuid)
         previous_hash = self.deleted_page.latest_version.content.hash
-        new_content = b"# Revived"
+        new_content = b"# Revived\n"
         new_hash = hashlib.sha256(new_content).hexdigest()
         response = api_client.put(
             f"/api/notebooks/wendy/heros-legendes/{uuid}",
@@ -992,7 +992,7 @@ class TestPageContentPatch(NotebookApiMixin):
         assert patch_response.status_code == HTTPStatus.OK
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
-        assert response.content == b"# Welcome\n\nThis is the index page."
+        assert response.content == b"# Welcome\n\nThis is the index page.\n"
 
     @ApiMixin.as_api_user("wendy")
     def test_html_url_with_directory(self, api_client):
@@ -1330,7 +1330,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        expected_hash = hashlib.sha256(b"# Session One\n\nFirst draft.").hexdigest()
+        expected_hash = hashlib.sha256(b"# Session One\n\nFirst draft.\n").hexdigest()
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
@@ -1438,7 +1438,7 @@ class TestPageCreate(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
         from django.core.files.uploadedfile import SimpleUploadedFile
-        content = b"# Response Test\n\nContent here."
+        content = b"# Response Test\n\nContent here.\n"
         content_hash = hashlib.sha256(content).hexdigest()
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
@@ -1463,7 +1463,7 @@ class TestPageCreate(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_content_retrievable(self, api_client):
         from django.core.files.uploadedfile import SimpleUploadedFile
-        content = b"# Retrievable\n\nThis content should be retrievable."
+        content = b"# Retrievable\n\nThis content should be retrievable.\n"
         create_response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("retrievable.md", content)},

@@ -304,23 +304,34 @@ function fail_on_multiple_curl_calls {
 
 function assert_file_pushed {
     local filename="$1"
+    local expected_content_type="$2"
     local state_file="$output_dir/.sync-state"
+    local actual_hash body cached_hash headers response uuid
 
-    local uuid
     uuid=$(awk -F'\t' -v f="$filename" '$3 == f {print $1; exit}' "$state_file")
     [[ -n "$uuid" ]]
 
-    local cached_hash
     cached_hash=$(awk -F'\t' -v f="$filename" '$3 == f {print $4; exit}' "$state_file")
-    local actual_hash
     actual_hash=$(shasum -a 256 "$output_dir/$filename" | cut -d' ' -f1)
     [[ "$actual_hash" == "$cached_hash" ]]
 
-    local server_content
-    server_content=$(curl -s \
+    response=$(curl -s -i \
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
         "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/$uuid")
-    diff -u "$output_dir/$filename" <(echo "$server_content")
+    headers=$(echo "$response" | sed '/^\r$/q' | tr -d '\r')
+    body=$(echo "$response" | sed '1,/^\r$/d')
+
+    diff -u "$output_dir/$filename" <(echo "$body")
+
+    if [[ -n "$expected_content_type" ]]; then
+        local actual_content_type
+        actual_content_type=$(
+            echo "$headers" \
+                | grep -i '^content-type:' \
+                | cut -d' ' -f2
+        )
+        diff -u <(echo "$expected_content_type") <(echo "$actual_content_type")
+    fi
 }
 
 function assert_server_file_deleted {

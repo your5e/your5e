@@ -74,7 +74,7 @@ Edit a page -- upload new content, change the filename, delete.
 - [X] restore with optional filename
         - allows us to bypass conflicts
         - ensures there is no new conflict
-- [ ] ensure trailing newlines always
+- [X] ensure trailing newlines always
 
 
 # Notebook permissions check @phase

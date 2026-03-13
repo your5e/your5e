@@ -71,8 +71,8 @@ setup() {
 
     assert_file_ignored "Home.md"
     assert_file_ignored "index.md"
-    assert_file_pushed "notes.txt"
-    assert_file_pushed "sessions/notes.txt"
+    assert_file_pushed "notes.txt" "text/plain"
+    assert_file_pushed "sessions/notes.txt" "text/plain"
     assert_file_downloaded "random-hexmap-7.png"
     assert_file_downloaded "sessions/session-01.md"
     assert_file_downloaded "Bestiary.md"

@@ -109,7 +109,7 @@ class TestContent(WikiMixin):
     def test_content_primary_key_is_hash_of_data(self):
         assert self.version.content.pk == self.version.content.hash
         assert self.version.content.hash == (
-            "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87"
+            "d5ef9984be135ec74cbc5dee24825199ca433e1ffd7a2fb22db12a3c5324ea1d"
         )
 
     def test_content_is_shared_between_wikis(self):
@@ -257,7 +257,7 @@ class TestVersion(WikiMixin):
         assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_render_non_markdown_returns_bytes(self):
-        assert self.version.render() == b"Test content"
+        assert self.version.render() == b"Test content\n"
 
     def test_display_name_markdown(self):
         page = Page.objects.create(wiki=self.wiki)
@@ -509,7 +509,7 @@ class TestPage(WikiMixin):
         )
         assert reverted.number == 4
         assert reverted.filename == "history.txt"
-        assert reverted.content.data == b"First revision"
+        assert reverted.content.data == b"First revision\n"
 
     def test_revert_to_current_version_does_not_create_version(self):
         reverted = self.page_with_history.revert(
@@ -578,7 +578,7 @@ class TestPage(WikiMixin):
     def test_get_version_returns_specific_version(self):
         version = self.page_with_history.get_version(number=2)
         assert version.number == 2
-        assert version.content.data == b"Second revision"
+        assert version.content.data == b"Second revision\n"
 
     def test_get_version_raises_for_nonexistent_version(self):
         with pytest.raises(Page.DoesNotExist):
@@ -587,6 +587,49 @@ class TestPage(WikiMixin):
     def test_get_version_raises_for_invalid_version_string(self):
         with pytest.raises(Page.DoesNotExist):
             self.page_with_history.get_version(number="invalid")
+
+    def test_update_text_ensures_trailing_newline(self):
+        page = Page.objects.create(wiki=self.wiki)
+        version = page.update(
+            filename="no-newline.md",
+            mime_type="text/markdown",
+            data=b"# Hello",
+            created_by=self.wendy,
+        )
+        assert version.content.data == b"# Hello\n"
+        assert version.mime_type == "text/markdown"
+
+        page_b = Page.objects.create(wiki=self.wiki)
+        version_b = page_b.update(
+            filename="plain.txt",
+            mime_type="text/plain",
+            data=b"hello",
+            created_by=self.wendy,
+        )
+        assert version_b.content.data == b"hello\n"
+        assert version_b.mime_type == "text/plain"
+
+    def test_update_text_preserves_existing_trailing_newline(self):
+        page = Page.objects.create(wiki=self.wiki)
+        version = page.update(
+            filename="has-newline.md",
+            mime_type="text/markdown",
+            data=b"# Hello\n",
+            created_by=self.wendy,
+        )
+        assert version.content.data == b"# Hello\n"
+        assert version.mime_type == "text/markdown"
+
+    def test_update_binary_does_not_add_trailing_newline(self):
+        page = Page.objects.create(wiki=self.wiki)
+        version = page.update(
+            filename="image.png",
+            mime_type="image/png",
+            data=b"\x89PNG\r\n\x1a\n",
+            created_by=self.wendy,
+        )
+        assert version.content.data == b"\x89PNG\r\n\x1a\n"
+        assert version.mime_type == "image/png"
 
 
 @pytest.mark.django_db

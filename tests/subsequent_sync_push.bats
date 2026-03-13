@@ -51,7 +51,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "scratchpad.txt"
-    assert_file_pushed "scratchpad.txt"
+    assert_file_pushed "scratchpad.txt" "text/plain"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -384,7 +384,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "index.md"
-    assert_file_pushed "index.md"
+    assert_file_pushed "index.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -407,7 +407,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "Bestiary.md"
-    assert_file_pushed "Bestiary.md"
+    assert_file_pushed "Bestiary.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -430,7 +430,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_pushed "NPCs.md"
+    assert_file_pushed "NPCs.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -454,7 +454,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_pushed "Welcome.md"
+    assert_file_pushed "Welcome.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -500,7 +500,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "Old Notes.md"
-    assert_file_pushed "Old Notes.md"
+    assert_file_pushed "Old Notes.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -714,7 +714,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_server_file_deleted "Welcome.md"
-    assert_file_pushed "Home.md"
+    assert_file_pushed "Home.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -781,7 +781,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "renamed-index.md"
-    assert_file_pushed "renamed-index.md"
+    assert_file_pushed "renamed-index.md" "text/markdown"
     assert_file_not_in_state "index.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "Home.md"
@@ -832,7 +832,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "renamed-bestiary.md"
-    assert_file_pushed "renamed-bestiary.md"
+    assert_file_pushed "renamed-bestiary.md" "text/markdown"
     assert_file_not_in_state "Bestiary.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
@@ -883,7 +883,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "my-index.md"
-    assert_file_pushed "my-index.md"
+    assert_file_pushed "my-index.md" "text/markdown"
     assert_file_not_in_state "index.md"
     assert_file_not_in_state "original.md"
     assert_tracked_file_intact "random-hexmap-7.png"
@@ -938,7 +938,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "my-index.md"
-    assert_file_pushed "my-index.md"
+    assert_file_pushed "my-index.md" "text/markdown"
     assert_file_not_in_state "index.md"
     assert_file_not_in_state "original.md"
     assert_tracked_file_intact "random-hexmap-7.png"
@@ -963,7 +963,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_intact "my-notes.md"
-    assert_file_pushed "my-notes.md"
+    assert_file_pushed "my-notes.md" "text/markdown"
     assert_file_not_in_state "Old Notes.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
@@ -990,7 +990,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "my-notes.md"
-    assert_file_pushed "my-notes.md"
+    assert_file_pushed "my-notes.md" "text/markdown"
     assert_file_not_in_state "Old Notes.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
@@ -1039,7 +1039,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "my-notes.md"
-    assert_file_pushed "my-notes.md"
+    assert_file_pushed "my-notes.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -1088,7 +1088,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "renamed-index.md"
-    assert_file_pushed "renamed-index.md"
+    assert_file_pushed "renamed-index.md" "text/markdown"
     assert_file_deleted_on_server "index.md"
     assert_file_in_state "renamed-index.md"
     assert_file_not_in_state "index.md"

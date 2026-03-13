@@ -916,6 +916,8 @@ function update_remote_file {
 
     cached_hash=$(get_sync_state "$uuid" hash)
     mime_type=$(file --mime-type -b "$filepath")
+    [[ "$mime_type" == "text/plain" && "$file" == *.md ]] \
+        && mime_type="text/markdown"
     response=$(
         curl -s -w "\n%{http_code}" \
             -X PUT \

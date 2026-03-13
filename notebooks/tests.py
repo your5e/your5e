@@ -1122,7 +1122,7 @@ class TestNotebookIndexPage(NotebookMixin):
 class TestNotebookUpload(NotebookMixin):
     @UserMixin.as_user("wendy")
     def test_owner_can_upload_markdown(self, client):
-        data = b"# New Page\n\nSome content."
+        data = b"# New Page\n\nSome content.\n"
         upload = BytesIO(data)
         upload.name = "new-page.md"
         response = client.post("/notebooks/upload", {
@@ -1251,7 +1251,7 @@ class TestNotebookUpload(NotebookMixin):
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
         assert page.version_set.count() == initial_version_count + 1
-        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content."
+        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content.\n"
 
     @UserMixin.as_user("wendy")
     def test_upload_identical_content_does_not_create_version(self, client):
@@ -1455,7 +1455,7 @@ class TestNotebookPageView(NotebookMixin):
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
         assert page.version_set.count() == initial_version_count + 1
-        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content."
+        assert page.latest_version.content.data == b"# Updated Notes\n\nNew content.\n"
 
     @UserMixin.as_user("susan")
     def test_editor_can_edit_page(self, client):
@@ -1466,7 +1466,7 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
-        assert page.latest_version.content.data == b"# Editor Update"
+        assert page.latest_version.content.data == b"# Editor Update\n"
         assert page.latest_version.created_by == self.susan
 
     @UserMixin.as_user("mary")
@@ -1555,7 +1555,7 @@ class TestNotebookPageView(NotebookMixin):
         assert response.url == "/notebooks/wendy/heros-legendes/bestiary/dragon"
         page = self.wendys_notebook.get_page(path="bestiary/dragon")
         assert page.latest_version.filename == "bestiary/dragon.md"
-        assert page.latest_version.content.data == b"# Dragon\n\nA fearsome creature."
+        assert page.latest_version.content.data == b"# Dragon\n\nA fearsome creature.\n"
         assert page.latest_version.created_by == self.wendy
 
     @UserMixin.as_user("wendy")
@@ -1596,7 +1596,7 @@ class TestNotebookPageView(NotebookMixin):
         page.refresh_from_db()
         assert page.version_set.count() == initial_version_count + 1
         assert page.latest_version.filename == "archive/Campaign Notes.md"
-        assert page.latest_version.content.data == b"# Campaign Notes\n\nRenamed."
+        assert page.latest_version.content.data == b"# Campaign Notes\n\nRenamed.\n"
 
     @UserMixin.as_user("wendy")
     def test_rename_to_existing_path_shows_error_with_link(self, client):
@@ -1677,7 +1677,7 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
-        assert page.latest_version.content.data == b"# History\n\nEdited by Wendy."
+        assert page.latest_version.content.data == b"# History\n\nEdited by Wendy.\n"
         assert page.latest_version.created_by == self.wendy
 
     @UserMixin.as_user("wendy")
@@ -1726,7 +1726,7 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
-        assert page.latest_version.content.data == b"# History\n\nEdited by Mary."
+        assert page.latest_version.content.data == b"# History\n\nEdited by Mary.\n"
         assert page.latest_version.created_by == self.mary
 
     @UserMixin.as_user("susan")
@@ -1837,7 +1837,9 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
-        assert page.latest_version.content.data == b"# Session Log\n\nEdited by Susan."
+        assert (
+            page.latest_version.content.data == b"# Session Log\n\nEdited by Susan.\n"
+        )
         assert page.latest_version.created_by == self.susan
 
     @UserMixin.as_user("mary")
@@ -1849,7 +1851,9 @@ class TestNotebookPageView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.FOUND
         page.refresh_from_db()
-        assert page.latest_version.content.data == b"# Session Log\n\nEdited by Mary."
+        assert (
+            page.latest_version.content.data == b"# Session Log\n\nEdited by Mary.\n"
+        )
         assert page.latest_version.created_by == self.mary
 
     @UserMixin.as_user("wendy")
