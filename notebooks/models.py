@@ -6,7 +6,27 @@ from users.models import User
 from wikis.models import Wiki
 
 
-class Notebook(Wiki):
+class OwnedSlugMixin:
+    """
+    Mixin for models with name, slug, and owner fields.
+    Generates unique slugs scoped to the owner.
+    """
+
+    def generate_unique_slug(self):
+        base_slug = slugify(self.name)
+        slug = base_slug
+        counter = 2
+        while (
+            self.__class__.objects.filter(slug=slug, owner=self.owner)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        return slug
+
+
+class Notebook(OwnedSlugMixin, Wiki):
     class Visibility(models.TextChoices):
         PRIVATE = "private"
         INTERNAL = "internal"
@@ -63,19 +83,6 @@ class Notebook(Wiki):
         self.name = name
         self.slug = self.generate_unique_slug()
         self.save()
-
-    def generate_unique_slug(self):
-        base_slug = slugify(self.name)
-        slug = base_slug
-        counter = 2
-        while (
-            Notebook.objects.filter(slug=slug, owner=self.owner)
-                .exclude(pk=self.pk)
-                .exists()
-        ):
-            slug = f"{base_slug}-{counter}"
-            counter += 1
-        return slug
 
 
 class NotebookPermission(models.Model):

@@ -10,6 +10,7 @@ from django.views import View
 from django.views.generic import DetailView
 from django.views.generic.detail import SingleObjectMixin
 
+from campaigns.models import Campaign
 from notebooks.models import Notebook
 from users.forms import ProfileForm, ProfileLinkForm
 from users.models import AuthToken, ProfileLink, User
@@ -64,6 +65,7 @@ class ProfileView(ProfileObjectMixin, DetailView):
             context["shared_notebooks"] = Notebook.objects.filter(
                 notebookpermission__user=self.object
             )
+            context["campaigns"] = Campaign.objects.filter(players=self.object)
             context["tokens"] = AuthToken.objects.filter(user=self.object)
             context["token_created"] = self.request.session.pop("token_created", None)
         if context["show_details"]:

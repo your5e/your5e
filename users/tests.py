@@ -89,7 +89,8 @@ class TestUser(UserMixin):
 
     def test_sentinel_user_is_inactive(self):
         sentinel = get_sentinel_user()
-        assert sentinel.username == "(deleted)"
+        assert sentinel.username == "deleted-user"
+        assert sentinel.name == "(deleted)"
         assert sentinel.is_active is False
 
     def test_sentinel_user_is_reused(self):

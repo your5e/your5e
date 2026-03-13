@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ campaign.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Delete {{ campaign.name }}</h1>
+
+<p>This will permanently delete the campaign and remove all players.</p>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+  <input type="hidden" name="confirm" value="true">
+  <button type="submit">Delete campaign</button>
+</form>
+
+<p><a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">Cancel</a></p>
+{% endblock %}

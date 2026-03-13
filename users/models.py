@@ -10,8 +10,9 @@ from knox.models import AbstractAuthToken
 
 def get_sentinel_user():
     user, _ = User.objects.get_or_create(
-        username="(deleted)",
+        username="deleted-user",
         defaults={
+            "name": "(deleted)",
             "email": "deleted@localhost",
             "is_active": False,
         },

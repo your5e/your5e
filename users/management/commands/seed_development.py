@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
+from campaigns.models import Campaign, CampaignNotebook
 from notebooks.models import Notebook, NotebookPermission
 from users.models import AuthToken, ProfileLink, User
 from wikis.models import Page
@@ -281,6 +282,37 @@ class Command(BaseCommand):
             notebook=wendys_notebook,
             user=norm,
             role=NotebookPermission.Role.VIEWER,
+        )
+
+        norms_campaign = Campaign.objects.create(
+            name="The Long Road",
+            owner=norm,
+            description="A journey across the realm.",
+        )
+        norms_campaign.players.add(wendy)
+
+        wendys_campaign = Campaign.objects.create(
+            name="Secrets of the Tower",
+            owner=wendy,
+            description="Mysteries await in the ancient tower.",
+        )
+        wendys_campaign.players.add(norm)
+        wendys_campaign.players.add(susan)
+
+        CampaignNotebook.objects.create(
+            campaign=norms_campaign,
+            notebook=notebook,
+            linked_by=norm,
+        )
+        CampaignNotebook.objects.create(
+            campaign=wendys_campaign,
+            notebook=wendys_notebook,
+            linked_by=wendy,
+        )
+        CampaignNotebook.objects.create(
+            campaign=wendys_campaign,
+            notebook=notebook,
+            linked_by=norm,
         )
 
         call_command("sync_api_docs")

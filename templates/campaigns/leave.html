@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Leave {{ campaign.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Leave {{ campaign.name }}</h1>
+
+{% if is_owner %}
+<p>You are the owner of this campaign. If you leave, ownership will be given up and any remaining player can claim it.</p>
+<p>If you are the only player, the campaign will be deleted.</p>
+{% else %}
+<p>If you leave this campaign you will need the join link to rejoin.</p>
+{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+  <input type="hidden" name="confirm" value="true">
+  <button type="submit">Leave campaign</button>
+</form>
+
+<p><a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">Cancel</a></p>
+{% endblock %}

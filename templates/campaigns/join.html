@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Join {{ campaign.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>{{ campaign.name }}</h1>
+
+{% if is_member %}
+<p>You are already a member of this campaign.</p>
+<p><a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">Go to campaign</a></p>
+{% else %}
+<p>You have been invited to join this campaign.</p>
+<form method="post">
+  {% csrf_token %}
+  <button type="submit">Join</button>
+</form>
+{% endif %}
+{% endblock %}

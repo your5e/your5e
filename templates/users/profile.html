@@ -92,6 +92,38 @@
   <button type="submit">Create notebook</button>
 </form>
 
+<h2>Campaigns</h2>
+{% if campaigns %}
+<ul>
+{% for campaign in campaigns %}
+  <li>
+    <a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">{{ campaign.name }}</a>
+    {% if campaign.owner == profile_user %}
+    (owner)
+    <form method="post" action="{% url 'campaign_delete' %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+      <button type="submit">Delete</button>
+    </form>
+    {% else %}
+    ({{ campaign.owner.username }})
+    {% endif %}
+    <form method="post" action="{% url 'campaign_leave' %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+      <button type="submit">Leave</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" action="{% url 'profile_campaigns' username=profile_user.username %}">
+  {% csrf_token %}
+  <p><input type="text" name="name" placeholder="Campaign name"></p>
+  <button type="submit">Create campaign</button>
+</form>
+
 <h2>API Tokens</h2>
 {% if token_created %}
 <p><strong>Copy this now:</strong> <code>{{ token_created }}</code></p>

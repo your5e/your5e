@@ -12,6 +12,10 @@ Views enforce permissions.
         - owner can change collaborator role, requires confirmation step
         - permissions only listed to other collaborators
 - [X] ensure non-owner cannot change notebook or collaborators
+- [ ] owner can delete notebook, requires confirmation step
+        - empty it first?
+        - what about collaborators?
+
 
 # Notebook index pages @phase
 
@@ -70,6 +74,7 @@ Edit a page -- upload new content, change the filename, delete.
 - [X] restore with optional filename
         - allows us to bypass conflicts
         - ensures there is no new conflict
+- [ ] ensure trailing newlines always
 
 
 # Notebook permissions check @phase
@@ -85,3 +90,18 @@ Ensure the default is deny, override as stated:
         - other site users can see pages site notebooks
         - site users can see pages in public notebooks
         - anonymous can see pages in public notebooks
+
+
+# Notebook creation @phase
+
+Refactor notebook creation into its own view at `/notebooks/create` so it can
+be used from both the profile page and campaign page.
+
+- [ ] create `/notebooks/create` view
+        - set description
+        - set visibility
+        - set collaborators (list)
+        - requires confirmation
+        - redirect to notebook
+- [ ] profile page and campaign page uses
+- [ ] notebook contains links to owner and to campaigns it appears in

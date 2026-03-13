@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>{{ campaign.name }}</h1>
+
+{% if campaign.description %}
+{{ campaign.description|linebreaks }}
+{% endif %}
+
+{% if is_unclaimed %}
+<p>This campaign's owner has been deleted. Any player can claim ownership.</p>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="claim" value="true">
+  <button type="submit">Claim this campaign</button>
+</form>
+{% endif %}
+
+{% if is_owner %}
+<h2>Invite players</h2>
+<p>Share this link: <code>{{ request.scheme }}://{{ request.get_host }}/campaigns/join-{{ campaign.join_slug }}</code></p>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="regenerate_join_slug" value="true">
+  <button type="submit">Generate new link</button>
+</form>
+
+<h2>Settings</h2>
+<form method="post">
+  {% csrf_token %}
+  <p><label>Name: <input type="text" name="name" value="{{ campaign.name }}"></label></p>
+  <button type="submit">Rename</button>
+</form>
+
+<form method="post">
+  {% csrf_token %}
+  <p><label>Description:<br><textarea name="description" rows="10" cols="60">{{ campaign.description }}</textarea></label></p>
+  <button type="submit">Update</button>
+</form>
+{% endif %}
+
+<h2>Players</h2>
+<ul>
+{% for player in players %}
+  <li>
+    {{ player.username }}
+    {% if player == campaign.owner %}
+    (owner)
+    {% elif is_owner %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="remove_player" value="{{ player.pk }}">
+      <button type="submit">Remove</button>
+    </form>
+    {% endif %}
+  </li>
+{% endfor %}
+</ul>
+
+<form method="post" action="{% url 'campaign_leave' %}">
+  {% csrf_token %}
+  <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+  <button type="submit">Leave campaign</button>
+</form>
+
+<h2>Notebooks</h2>
+{% if notebook_data %}
+<ul>
+{% for item in notebook_data %}
+  <li>
+    <a href="{{ item.notebook.get_absolute_url }}">{{ item.notebook.name }}</a>
+    by {{ item.notebook.owner.username }}{% if item.editors %}, {% for editor in item.editors %}{{ editor.username }}{% if not forloop.last %}, {% endif %}{% endfor %} can edit{% endif %}{% if item.viewers %}, {% for viewer in item.viewers %}{{ viewer.username }}{% if not forloop.last %}, {% endif %}{% endfor %} can see{% endif %}
+    {% if item.cannot_see %}
+    ({% for user in item.cannot_see %}{{ user.username }}{% if not forloop.last %}, {% endif %}{% endfor %} cannot see)
+    {% endif %}
+    {% if is_owner and not item.is_first %}
+    <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+      <input type="hidden" name="move_notebook_up" value="{{ item.link.pk }}">
+      <button type="submit">↑</button>
+    </form>
+    {% endif %}
+    {% if is_owner and not item.is_last %}
+    <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+      <input type="hidden" name="move_notebook_down" value="{{ item.link.pk }}">
+      <button type="submit">↓</button>
+    </form>
+    {% endif %}
+    {% if item.can_remove %}
+    <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+      <input type="hidden" name="unlink_notebook" value="{{ item.link.pk }}">
+      <button type="submit">Remove</button>
+    </form>
+    {% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No notebooks linked to this campaign.</p>
+{% endif %}
+
+{% if linkable_notebooks %}
+<form method="post" action="{% url 'campaign_notebooks' %}">
+  {% csrf_token %}
+  <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+  <label>Link a notebook:
+    <select name="link_notebook">
+      {% for notebook in linkable_notebooks %}
+      <option value="{{ notebook.pk }}">{{ notebook.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Link</button>
+</form>
+{% endif %}
+{% endblock %}

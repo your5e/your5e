@@ -13,6 +13,14 @@ from api.notebooks.views import (
     PageContentView,
 )
 from api.views import PingView
+from campaigns.views import (
+    CampaignDeleteView,
+    CampaignJoinView,
+    CampaignLeaveView,
+    CampaignNotebooksView,
+    CampaignView,
+    ProfileCampaignsView,
+)
 from help.views import HelpPageView
 from notebooks.views import (
     NotebookCollaboratorsView,
@@ -131,6 +139,37 @@ urlpatterns = [
         route="profile/<str:username>/tokens",
         name="profile_tokens",
         view=ProfileTokensView.as_view(),
+    ),
+    path(
+        route="profile/<str:username>/campaigns",
+        name="profile_campaigns",
+        view=ProfileCampaignsView.as_view(),
+    ),
+
+    path(
+        route="campaigns/join-<str:join_slug>",
+        name="campaign_join",
+        view=CampaignJoinView.as_view(),
+    ),
+    path(
+        route="campaigns/delete",
+        name="campaign_delete",
+        view=CampaignDeleteView.as_view(),
+    ),
+    path(
+        route="campaigns/leave",
+        name="campaign_leave",
+        view=CampaignLeaveView.as_view(),
+    ),
+    path(
+        route="campaigns/notebooks",
+        name="campaign_notebooks",
+        view=CampaignNotebooksView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>",
+        name="campaign",
+        view=CampaignView.as_view(),
     ),
 
     path(

@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "wikis",
     "notebooks",
     "help",
+    "campaigns",
 ]
 
 MIDDLEWARE = [
