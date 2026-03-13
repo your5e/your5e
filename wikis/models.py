@@ -335,6 +335,9 @@ class Version(models.Model):
         for part in self.filename.split("/"):
             if part.startswith("."):
                 raise ValidationError("No hidden files.")
+        basename = self.filename.rsplit("/", 1)[-1]
+        if "." not in basename or basename.endswith("."):
+            raise ValidationError("Filename must have an extension.")
 
     def generate_path(self, filename=None):
         if filename is None:

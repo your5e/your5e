@@ -205,6 +205,24 @@ class TestVersion(WikiMixin):
             self.version.validate_filename()
         assert exc.value.messages == ["No hidden files."]
 
+    def test_validate_filename_rejects_missing_extension(self):
+        self.version.filename = "notes"
+        with pytest.raises(ValidationError) as exc:
+            self.version.validate_filename()
+        assert exc.value.messages == ["Filename must have an extension."]
+
+    def test_validate_filename_rejects_empty_extension(self):
+        self.version.filename = "notes."
+        with pytest.raises(ValidationError) as exc:
+            self.version.validate_filename()
+        assert exc.value.messages == ["Filename must have an extension."]
+
+    def test_validate_filename_rejects_missing_extension_in_subdirectory(self):
+        self.version.filename = "folder/notes"
+        with pytest.raises(ValidationError) as exc:
+            self.version.validate_filename()
+        assert exc.value.messages == ["Filename must have an extension."]
+
     def test_validate_parent_paths_rejects_file_as_directory(self):
         page_b = Page.objects.create(wiki=self.wiki)
         with pytest.raises(ValidationError) as exc:

@@ -52,6 +52,7 @@ Test the initial sync completes correctly.
 | local matches remote | file | file | ✔️ | ✔️ |
 | local file clashes | file | dir | | |
 | local dir clashes | dir | file | | |
+| hidden files ignored | file | — | | |
 | case collision | file | file | ❌ | ❌ |
 | case collision, matches | file | file | ✔️ | ❌ |
 

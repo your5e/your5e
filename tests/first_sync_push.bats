@@ -161,6 +161,31 @@ setup() {
     assert_success
 }
 
+@test "hidden files ignored" {
+    create_file ".hidden.md"
+    create_file ".obsidian/app.json"
+
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: ERROR cannot push ".hidden.md": No hidden files.
+        push: ERROR cannot push ".obsidian/app.json": No hidden files.
+        pull: "random-hexmap-7.png" (v1)
+        pull: "index.md" (v1)
+        pull: "Home.md" (v2)
+        pull: "sessions/session-01.md" (v1)
+        pull: "Bestiary.md" (v2)
+        pull: "characters/NPCs.md" (v2)
+        pull: "The Old Café.md" (v1)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged ".hidden.md"
+    assert_file_unchanged ".obsidian/app.json"
+    assert_success
+}
+
 @test "case collision" {
     create_file "home.md"
 

@@ -292,9 +292,6 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
         else:
             filename = uploaded_file.name
 
-        if "." not in filename or filename.endswith("."):
-            raise ValidationError("Filename must have an extension.")
-
         mime_type, _ = mimetypes.guess_type(filename)
         if mime_type is None:
             ext = "." + filename.rsplit(".", 1)[-1].lower()
