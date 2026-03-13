@@ -1,4 +1,6 @@
 @after
 
-- [ ] Configure email domain
-- [ ] Be able to send email to users
+Transactional email via Postmark with django-anymail.
+
+- [ ] configure SPF/DKIM and test
+- [ ] ensure email is sent

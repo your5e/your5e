@@ -21,4 +21,3 @@ NotebookPermission model:
         - slug is unique per owner, 'notes-2' enforced for clashing names
         - names can be updated, generating a new slug
 - [X] rename middle visibility to 'internal'
-- [ ] limit total notebook size

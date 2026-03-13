@@ -1,9 +1,9 @@
 @after setup.md
 
-Automate testing.
+Set up automatic deploys from Github tags.
 
-- [ ] Run tests in CI
+Migrations run in the container entrypoint before the app starts.
 
-Automate deployment.
-
-- [ ] Ship validated builds to production
+- [ ] build and push image on merge to main
+- [ ] containrrr/shepherd deploys from `:latest`, tag to trigger deploy
+- [ ] ensure rollbacks work on broken build and do not redeploy again immediately
