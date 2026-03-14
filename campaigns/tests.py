@@ -28,7 +28,7 @@ class CampaignMixin(UserMixin):
 
 
 @pytest.mark.django_db
-class TestCampaign(UserMixin):
+class TestCampaign(CampaignMixin):
     def test_slug_generated_from_name(self):
         campaign = Campaign.objects.create(
             owner=self.wendy,
@@ -70,6 +70,22 @@ class TestCampaign(UserMixin):
         campaign1 = Campaign.objects.create(owner=self.wendy, name="First Campaign")
         campaign2 = Campaign.objects.create(owner=self.wendy, name="Second Campaign")
         assert campaign1.join_slug != campaign2.join_slug
+
+    def test_has_content_false_for_owner_only(self):
+        assert self.owned_campaign.has_content() is False
+
+    def test_has_content_true_with_other_players(self):
+        self.owned_campaign.players.add(self.susan)
+        assert self.owned_campaign.has_content() is True
+
+    def test_has_content_true_with_notebooks(self):
+        notebook = Notebook.objects.create(name="Notes", owner=self.wendy)
+        CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=notebook,
+            linked_by=self.wendy,
+        )
+        assert self.owned_campaign.has_content() is True
 
 
 @pytest.mark.django_db
@@ -340,7 +356,19 @@ class TestCampaignLeaveView(CampaignMixin):
 @pytest.mark.django_db
 class TestCampaignDeleteView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
-    def test_owner_sees_confirmation_page(self, client):
+    def test_empty_campaign_deletes_immediately(self, client):
+        campaign_id = self.owned_campaign.id
+        response = client.post(
+            "/campaigns/delete",
+            {"campaign": self.owned_campaign.pk},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        assert not Campaign.objects.filter(id=campaign_id).exists()
+
+    @CampaignMixin.as_user("wendy")
+    def test_campaign_with_players_shows_confirmation(self, client):
+        self.owned_campaign.players.add(self.susan)
         response = client.post(
             "/campaigns/delete",
             {"campaign": self.owned_campaign.pk},
@@ -349,9 +377,32 @@ class TestCampaignDeleteView(CampaignMixin):
         assert response.status_code == HTTPStatus.OK
         assert "The Old Forest" in content
         assert "delete" in content.lower()
+        assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
 
     @CampaignMixin.as_user("wendy")
-    def test_owner_can_delete(self, client):
+    def test_campaign_with_notebooks_shows_confirmation(self, client):
+        notebook = Notebook.objects.create(
+            name="Campaign Notes",
+            owner=self.wendy,
+        )
+        CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=notebook,
+            linked_by=self.wendy,
+        )
+        response = client.post(
+            "/campaigns/delete",
+            {"campaign": self.owned_campaign.pk},
+        )
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "The Old Forest" in content
+        assert "delete" in content.lower()
+        assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
+
+    @CampaignMixin.as_user("wendy")
+    def test_campaign_with_content_can_delete_after_confirmation(self, client):
+        self.owned_campaign.players.add(self.susan)
         campaign_id = self.owned_campaign.id
         response = client.post(
             "/campaigns/delete",

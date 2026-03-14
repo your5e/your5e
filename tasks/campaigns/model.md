@@ -38,5 +38,5 @@ Campaign model:
         - owners can leave campaigns triggering this
 
 - [X] `/campaigns/create` is the form, not on the profile
-- [ ] deleting a campaign does not require confirmation when it has nothing attached
+- [X] deleting a campaign does not require confirmation when it has nothing attached
 - [ ] `/campaigns/` ... shows what?

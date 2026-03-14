@@ -326,7 +326,7 @@ class CampaignDeleteView(View):
         self.object = self.get_object(request)
         if not CampaignPermissions.is_owner(self.object, request.user):
             return HttpResponse(status=HTTPStatus.FORBIDDEN)
-        if "confirm" in request.POST:
+        if "confirm" in request.POST or not self.object.has_content():
             self.object.delete()
             return redirect("profile", username=request.user.username)
         return render(request, "campaigns/delete.html", {

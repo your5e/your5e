@@ -100,6 +100,13 @@ class Campaign(OwnedSlugMixin, models.Model):
             if not Campaign.objects.filter(join_slug=join_slug).exists():
                 return join_slug
 
+    def has_content(self):
+        if self.players.exclude(pk=self.owner_id).exists():
+            return True
+        if self.campaign_notebooks.exists():
+            return True
+        return False
+
 
 @receiver(post_delete, sender=User)
 def delete_orphaned_campaigns(sender, instance, **kwargs):
