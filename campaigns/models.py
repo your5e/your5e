@@ -103,9 +103,10 @@ class Campaign(OwnedSlugMixin, models.Model):
     def has_content(self):
         if self.players.exclude(pk=self.owner_id).exists():
             return True
-        if self.campaign_notebooks.exists():
-            return True
-        return False
+        return self.campaign_notebooks.filter(
+            notebook__page__isnull=False,
+            notebook__page__deleted_at__isnull=True,
+        ).exists()
 
 
 @receiver(post_delete, sender=User)

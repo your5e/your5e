@@ -7,6 +7,7 @@ from django.db import IntegrityError
 from campaigns.models import Campaign, CampaignNotebook
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
+from wikis.models import Page
 
 
 class CampaignMixin(UserMixin):
@@ -24,6 +25,57 @@ class CampaignMixin(UserMixin):
         self.other_campaign = Campaign.objects.create(
             owner=self.mary,
             name="The Eastern Road",
+        )
+        self.owned_campaign.players.add(self.susan)
+
+        self.wendys_notebook = Notebook.objects.create(
+            name="Wendy's Notes",
+            owner=self.wendy,
+            visibility=Notebook.Visibility.PRIVATE,
+        )
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Wendy's Notes",
+            created_by=self.wendy,
+        )
+        self.susans_notebook = Notebook.objects.create(
+            name="Susan's Guide",
+            owner=self.susan,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Susan's Guide",
+            created_by=self.susan,
+        )
+        self.marys_notebook = Notebook.objects.create(
+            name="Mary's Prayer",
+            owner=self.mary,
+            visibility=Notebook.Visibility.PRIVATE,
+        )
+        NotebookPermission.objects.create(
+            notebook=self.marys_notebook,
+            user=self.wendy,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        NotebookPermission.objects.create(
+            notebook=self.marys_notebook,
+            user=self.susan,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        self.hughs_notebook = Notebook.objects.create(
+            name="Hugh's Secrets",
+            owner=self.hugh,
+            visibility=Notebook.Visibility.PRIVATE,
+        )
+        self.empty_notebook = Notebook.objects.create(
+            name="Empty Notebook",
+            owner=self.wendy,
+            visibility=Notebook.Visibility.PRIVATE,
         )
 
 
@@ -72,14 +124,29 @@ class TestCampaign(CampaignMixin):
         assert campaign1.join_slug != campaign2.join_slug
 
     def test_has_content_false_for_owner_only(self):
-        assert self.owned_campaign.has_content() is False
+        assert self.other_campaign.has_content() is False
 
     def test_has_content_true_with_other_players(self):
         self.owned_campaign.players.add(self.susan)
         assert self.owned_campaign.has_content() is True
 
-    def test_has_content_true_with_notebooks(self):
+    def test_has_content_false_with_empty_notebooks(self):
+        CampaignNotebook.objects.create(
+            campaign=self.other_campaign,
+            notebook=self.empty_notebook,
+            linked_by=self.mary,
+        )
+        assert self.other_campaign.has_content() is False
+
+    def test_has_content_true_with_non_empty_notebooks(self):
         notebook = Notebook.objects.create(name="Notes", owner=self.wendy)
+        page = Page.objects.create(wiki=notebook)
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Notes",
+            created_by=self.wendy,
+        )
         CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=notebook,
@@ -326,15 +393,15 @@ class TestCampaignLeaveView(CampaignMixin):
         assert self.owned_campaign.owner == get_sentinel_user()
         assert self.wendy not in self.owned_campaign.players.all()
 
-    @CampaignMixin.as_user("wendy")
+    @CampaignMixin.as_user("mary")
     def test_owner_leave_without_players_deletes_campaign(self, client):
-        campaign_id = self.owned_campaign.id
+        campaign_id = self.other_campaign.id
         response = client.post(
             "/campaigns/leave",
-            {"campaign": self.owned_campaign.pk, "confirm": "true"},
+            {"campaign": self.other_campaign.pk, "confirm": "true"},
         )
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/profile/wendy/"
+        assert response.url == "/profile/mary/"
         assert not Campaign.objects.filter(id=campaign_id).exists()
 
     @CampaignMixin.as_user("mary")
@@ -355,15 +422,15 @@ class TestCampaignLeaveView(CampaignMixin):
 
 @pytest.mark.django_db
 class TestCampaignDeleteView(CampaignMixin):
-    @CampaignMixin.as_user("wendy")
+    @CampaignMixin.as_user("mary")
     def test_empty_campaign_deletes_immediately(self, client):
-        campaign_id = self.owned_campaign.id
+        campaign_id = self.other_campaign.id
         response = client.post(
             "/campaigns/delete",
-            {"campaign": self.owned_campaign.pk},
+            {"campaign": self.other_campaign.pk},
         )
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/profile/wendy/"
+        assert response.url == "/profile/mary/"
         assert not Campaign.objects.filter(id=campaign_id).exists()
 
     @CampaignMixin.as_user("wendy")
@@ -379,26 +446,6 @@ class TestCampaignDeleteView(CampaignMixin):
         assert "delete" in content.lower()
         assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
 
-    @CampaignMixin.as_user("wendy")
-    def test_campaign_with_notebooks_shows_confirmation(self, client):
-        notebook = Notebook.objects.create(
-            name="Campaign Notes",
-            owner=self.wendy,
-        )
-        CampaignNotebook.objects.create(
-            campaign=self.owned_campaign,
-            notebook=notebook,
-            linked_by=self.wendy,
-        )
-        response = client.post(
-            "/campaigns/delete",
-            {"campaign": self.owned_campaign.pk},
-        )
-        content = response.content.decode()
-        assert response.status_code == HTTPStatus.OK
-        assert "The Old Forest" in content
-        assert "delete" in content.lower()
-        assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
 
     @CampaignMixin.as_user("wendy")
     def test_campaign_with_content_can_delete_after_confirmation(self, client):
@@ -435,45 +482,42 @@ class TestCampaignDeleteView(CampaignMixin):
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
+    @CampaignMixin.as_user("mary")
+    def test_campaign_with_empty_notebooks_deletes_immediately(self, client):
+        CampaignNotebook.objects.create(
+            campaign=self.other_campaign,
+            notebook=self.empty_notebook,
+            linked_by=self.mary,
+        )
+        campaign_id = self.other_campaign.id
+        response = client.post(
+            "/campaigns/delete",
+            {"campaign": self.other_campaign.pk},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/mary/"
+        assert not Campaign.objects.filter(id=campaign_id).exists()
 
-class CampaignNotebookMixin(CampaignMixin):
-    @pytest.fixture(autouse=True)
-    def setup_notebooks(self, setup_campaigns):
-        self.owned_campaign.players.add(self.susan)
-        self.wendys_notebook = Notebook.objects.create(
-            name="Wendy's Notes",
-            owner=self.wendy,
-            visibility=Notebook.Visibility.PRIVATE,
+    @CampaignMixin.as_user("wendy")
+    def test_campaign_with_non_empty_notebooks_shows_confirmation(self, client):
+        CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
         )
-        self.susans_notebook = Notebook.objects.create(
-            name="Susan's Guide",
-            owner=self.susan,
-            visibility=Notebook.Visibility.PUBLIC,
+        response = client.post(
+            "/campaigns/delete",
+            {"campaign": self.owned_campaign.pk},
         )
-        self.marys_notebook = Notebook.objects.create(
-            name="Mary's Prayer",
-            owner=self.mary,
-            visibility=Notebook.Visibility.PRIVATE,
-        )
-        NotebookPermission.objects.create(
-            notebook=self.marys_notebook,
-            user=self.wendy,
-            role=NotebookPermission.Role.EDITOR,
-        )
-        NotebookPermission.objects.create(
-            notebook=self.marys_notebook,
-            user=self.susan,
-            role=NotebookPermission.Role.VIEWER,
-        )
-        self.hughs_notebook = Notebook.objects.create(
-            name="Hugh's Secrets",
-            owner=self.hugh,
-            visibility=Notebook.Visibility.PRIVATE,
-        )
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "The Old Forest" in content
+        assert "delete" in content.lower()
+        assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
 
 
 @pytest.mark.django_db
-class TestCampaignNotebook(CampaignNotebookMixin):
+class TestCampaignNotebook(CampaignMixin):
     def test_create_links_notebook_to_campaign(self):
         link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
@@ -528,8 +572,8 @@ class TestCampaignNotebook(CampaignNotebookMixin):
 
 
 @pytest.mark.django_db
-class TestCampaignNotebookLinkView(CampaignNotebookMixin):
-    @CampaignNotebookMixin.as_user("wendy")
+class TestCampaignNotebookLinkView(CampaignMixin):
+    @CampaignMixin.as_user("wendy")
     def test_owner_can_link_owned_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -542,7 +586,7 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
             linked_by=self.wendy,
         ).exists()
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_can_link_owned_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -555,7 +599,7 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
             linked_by=self.susan,
         ).exists()
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_player_can_link_public_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -568,7 +612,7 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
             linked_by=self.wendy,
         ).exists()
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_cannot_link_private_notebook_without_access(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -579,7 +623,7 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
             notebook=self.hughs_notebook,
         ).exists()
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_cannot_link_same_notebook_twice(self, client):
         CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
@@ -596,7 +640,7 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
             notebook=self.wendys_notebook,
         ).count() == 1
 
-    @CampaignNotebookMixin.as_user("hugh")
+    @CampaignMixin.as_user("hugh")
     def test_non_member_cannot_link_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -619,9 +663,9 @@ class TestCampaignNotebookLinkView(CampaignNotebookMixin):
 
 
 @pytest.mark.django_db
-class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
+class TestCampaignNotebookRemoveView(CampaignMixin):
     @pytest.fixture(autouse=True)
-    def setup_linked_notebooks(self, setup_notebooks):
+    def setup_linked_notebooks(self, setup_campaigns):
         self.wendys_link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.wendys_notebook,
@@ -633,7 +677,7 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
             linked_by=self.susan,
         )
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_campaign_owner_can_remove_any_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -642,7 +686,7 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
         assert response.status_code == HTTPStatus.FOUND
         assert not CampaignNotebook.objects.filter(pk=self.susans_link.pk).exists()
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_notebook_owner_can_remove_their_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -651,7 +695,7 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
         assert response.status_code == HTTPStatus.FOUND
         assert not CampaignNotebook.objects.filter(pk=self.susans_link.pk).exists()
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_linker_can_remove_notebook_they_linked(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -660,7 +704,7 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
         assert response.status_code == HTTPStatus.FOUND
         assert not CampaignNotebook.objects.filter(pk=self.susans_link.pk).exists()
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_cannot_remove_notebook_they_did_not_link_or_own(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -669,7 +713,7 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert CampaignNotebook.objects.filter(pk=self.wendys_link.pk).exists()
 
-    @CampaignNotebookMixin.as_user("hugh")
+    @CampaignMixin.as_user("hugh")
     def test_non_member_cannot_remove_notebook(self, client):
         response = client.post("/campaigns/notebooks", {
             "campaign": self.owned_campaign.pk,
@@ -688,9 +732,9 @@ class TestCampaignNotebookRemoveView(CampaignNotebookMixin):
 
 
 @pytest.mark.django_db
-class TestCampaignNotebookOrderView(CampaignNotebookMixin):
+class TestCampaignNotebookOrderView(CampaignMixin):
     @pytest.fixture(autouse=True)
-    def setup_ordered_notebooks(self, setup_notebooks):
+    def setup_ordered_notebooks(self, setup_campaigns):
         self.link1 = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.wendys_notebook,
@@ -702,7 +746,7 @@ class TestCampaignNotebookOrderView(CampaignNotebookMixin):
             linked_by=self.susan,
         )
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_owner_can_move_notebook_up(self, client):
         response = client.post(
             "/campaigns/notebooks",
@@ -713,7 +757,7 @@ class TestCampaignNotebookOrderView(CampaignNotebookMixin):
         self.link2.refresh_from_db()
         assert self.link2.order < self.link1.order
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_owner_can_move_notebook_down(self, client):
         response = client.post(
             "/campaigns/notebooks",
@@ -724,7 +768,7 @@ class TestCampaignNotebookOrderView(CampaignNotebookMixin):
         self.link2.refresh_from_db()
         assert self.link1.order > self.link2.order
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_cannot_reorder_notebooks(self, client):
         original_order1 = self.link1.order
         original_order2 = self.link2.order
@@ -738,7 +782,7 @@ class TestCampaignNotebookOrderView(CampaignNotebookMixin):
         assert self.link1.order == original_order1
         assert self.link2.order == original_order2
 
-    @CampaignNotebookMixin.as_user("hugh")
+    @CampaignMixin.as_user("hugh")
     def test_non_member_cannot_reorder_notebooks(self, client):
         response = client.post(
             "/campaigns/notebooks",
@@ -755,9 +799,9 @@ class TestCampaignNotebookOrderView(CampaignNotebookMixin):
 
 
 @pytest.mark.django_db
-class TestCampaignViewNotebooks(CampaignNotebookMixin):
+class TestCampaignViewNotebooks(CampaignMixin):
     @pytest.fixture(autouse=True)
-    def setup_linked_notebooks(self, setup_notebooks):
+    def setup_linked_notebooks(self, setup_campaigns):
         self.wendys_link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.wendys_notebook,
@@ -774,7 +818,7 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
             linked_by=self.wendy,
         )
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_owner_sees_all_accessible_notebooks(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -782,7 +826,7 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         assert html.escape("Susan's Guide") in content
         assert html.escape("Mary's Prayer") in content
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_sees_only_accessible_notebooks(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -790,13 +834,13 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         assert html.escape("Susan's Guide") in content
         assert html.escape("Mary's Prayer") in content
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_notebook_shows_owner(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "by wendy" in content or "by Wendy" in content
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_notebook_only_shows_editors_and_viewers_who_are_players(self, client):
         NotebookPermission.objects.create(
             notebook=self.wendys_notebook,
@@ -809,19 +853,19 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         assert "susan can see" in content
         assert "hugh" not in content
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_notebook_owner_sees_cannot_see_warning(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "susan cannot see" in content.lower()
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_non_owner_does_not_see_cannot_see_warning(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "cannot see" not in content.lower()
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_notebooks_appear_in_order(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -830,14 +874,14 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         prayer = content.find(html.escape("Mary's Prayer"))
         assert notes < guide < prayer
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_owner_sees_reorder_controls(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "move_notebook_up" in content
         assert "move_notebook_down" in content
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_first_notebook_has_no_up_button(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -845,7 +889,7 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         wendys_section = after_name.split("</li>")[0]
         assert "move_notebook_up" not in wendys_section
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_last_notebook_has_no_down_button(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -853,20 +897,20 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
         marys_section = after_name.split("</li>")[0]
         assert "move_notebook_down" not in marys_section
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_does_not_see_reorder_controls(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "move_notebook_up" not in content
         assert "move_notebook_down" not in content
 
-    @CampaignNotebookMixin.as_user("wendy")
+    @CampaignMixin.as_user("wendy")
     def test_owner_sees_link_notebook_dropdown(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         assert "link_notebook" in content
 
-    @CampaignNotebookMixin.as_user("susan")
+    @CampaignMixin.as_user("susan")
     def test_player_sees_link_notebook_dropdown(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
@@ -918,8 +962,8 @@ class TestCampaignOwnerDeletion(CampaignMixin):
         assert self.susan in self.owned_campaign.players.all()
 
     def test_campaign_deleted_when_owner_deleted_without_players(self):
-        campaign_id = self.owned_campaign.id
-        self.wendy.delete()
+        campaign_id = self.other_campaign.id
+        self.mary.delete()
         assert not Campaign.objects.filter(id=campaign_id).exists()
 
 

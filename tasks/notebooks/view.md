@@ -12,7 +12,7 @@ Views enforce permissions.
         - owner can change collaborator role, requires confirmation step
         - permissions only listed to other collaborators
 - [X] ensure non-owner cannot change notebook or collaborators
-- [ ] owner can delete notebook, requires confirmation step
+- [X] owner can delete notebook, requires confirmation step
         - empty it first?
         - what about collaborators?
 
