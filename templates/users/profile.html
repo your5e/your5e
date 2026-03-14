@@ -118,7 +118,7 @@
 </ul>
 {% endif %}
 
-<form method="post" action="{% url 'profile_campaigns' username=profile_user.username %}">
+<form method="post" action="{% url 'campaign_create' %}">
   {% csrf_token %}
   <p><input type="text" name="name" placeholder="Campaign name"></p>
   <button type="submit">Create campaign</button>

@@ -31,13 +31,8 @@
 <form method="post">
   {% csrf_token %}
   <p><label>Name: <input type="text" name="name" value="{{ campaign.name }}"></label></p>
-  <button type="submit">Rename</button>
-</form>
-
-<form method="post">
-  {% csrf_token %}
   <p><label>Description:<br><textarea name="description" rows="10" cols="60">{{ campaign.description }}</textarea></label></p>
-  <button type="submit">Update</button>
+  <button type="submit">Save</button>
 </form>
 {% endif %}
 

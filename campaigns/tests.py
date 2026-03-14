@@ -73,49 +73,30 @@ class TestCampaign(UserMixin):
 
 
 @pytest.mark.django_db
-class TestProfileCampaignsView(CampaignMixin):
-    @CampaignMixin.as_user("wendy")
-    def test_owner_can_create_campaign(self, client):
-        response = client.post(
-            "/profile/wendy/campaigns",
-            {"name": "New Campaign"},
-        )
+class TestCampaignCreateView(UserMixin):
+    def test_anonymous_get_redirected_to_login(self, client):
+        response = client.get("/campaigns/create")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/login?next=/campaigns/create"
+
+    def test_anonymous_post_redirected_to_login(self, client):
+        response = client.post("/campaigns/create", {"name": "New Campaign"})
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/login?next=/campaigns/create"
+
+    @UserMixin.as_user("wendy")
+    def test_shows_create_form(self, client):
+        response = client.get("/campaigns/create")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'name="name"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_user_can_create_campaign(self, client):
+        response = client.post("/campaigns/create", {"name": "New Campaign"})
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/campaigns/wendy/new-campaign"
         assert Campaign.objects.filter(name="New Campaign", owner=self.wendy).exists()
-
-    @CampaignMixin.as_user("wendy")
-    def test_other_user_cannot_create_campaign(self, client):
-        response = client.post(
-            "/profile/susan/campaigns",
-            {"name": "Hacked Campaign"},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_anonymous_cannot_create_campaign(self, client):
-        response = client.post(
-            "/profile/wendy/campaigns",
-            {"name": "Anonymous Campaign"},
-        )
-        assert response.status_code == HTTPStatus.UNAUTHORIZED
-
-    @CampaignMixin.as_user("wendy")
-    def test_cannot_delete_directly_from_profile(self, client):
-        response = client.post(
-            "/profile/wendy/campaigns",
-            {"delete": self.owned_campaign.id},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
-
-    @CampaignMixin.as_user("wendy")
-    def test_cannot_leave_directly_from_profile(self, client):
-        response = client.post(
-            "/profile/wendy/campaigns",
-            {"leave": self.joined_campaign.id},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert self.wendy in self.joined_campaign.players.all()
 
 
 @pytest.mark.django_db
@@ -172,37 +153,28 @@ class TestCampaignView(CampaignMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
     @CampaignMixin.as_user("wendy")
-    def test_owner_rename(self, client):
+    def test_owner_can_edit(self, client):
         response = client.post(
             "/campaigns/wendy/the-old-forest",
-            {"name": "The New Forest"},
+            {"name": "The New Forest", "description": "A dark and mysterious forest."},
         )
         self.owned_campaign.refresh_from_db()
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/campaigns/wendy/the-new-forest"
         assert self.owned_campaign.name == "The New Forest"
         assert self.owned_campaign.slug == "the-new-forest"
+        assert self.owned_campaign.description == "A dark and mysterious forest."
 
     @CampaignMixin.as_user("wendy")
-    def test_rename_slug_collision(self, client):
+    def test_edit_slug_collision(self, client):
         Campaign.objects.create(owner=self.wendy, name="Journey!")
         response = client.post(
             "/campaigns/wendy/the-old-forest",
-            {"name": "Journey?"},
+            {"name": "Journey?", "description": ""},
         )
         self.owned_campaign.refresh_from_db()
         assert response.url == "/campaigns/wendy/journey-2"
         assert self.owned_campaign.slug == "journey-2"
-
-    @CampaignMixin.as_user("wendy")
-    def test_owner_update_description(self, client):
-        response = client.post(
-            "/campaigns/wendy/the-old-forest",
-            {"description": "A dark and mysterious forest."},
-        )
-        self.owned_campaign.refresh_from_db()
-        assert response.status_code == HTTPStatus.FOUND
-        assert self.owned_campaign.description == "A dark and mysterious forest."
 
     @CampaignMixin.as_user("wendy")
     def test_owner_regenerate_join_slug(self, client):
@@ -248,11 +220,7 @@ class TestCampaignView(CampaignMixin):
         old_join_slug = self.joined_campaign.join_slug
         client.post(
             "/campaigns/susan/river-crossing",
-            {"name": "Hacked Name"},
-        )
-        client.post(
-            "/campaigns/susan/river-crossing",
-            {"description": "Hacked description"},
+            {"name": "Hacked Name", "description": "Hacked"},
         )
         client.post(
             "/campaigns/susan/river-crossing",

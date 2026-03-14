@@ -5,16 +5,11 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
-from campaigns.forms import (
-    CampaignDescriptionForm,
-    CampaignForm,
-    CampaignRenameForm,
-)
+from campaigns.forms import CampaignForm
 from campaigns.models import Campaign, CampaignNotebook
 from notebooks.models import Notebook
 from notebooks.views import NotebookPermissions
 from users.models import User, get_sentinel_user
-from users.views import ProfileObjectMixin
 
 
 class CampaignPermissions:
@@ -158,15 +153,11 @@ class CampaignView(CampaignObjectMixin, View):
             return HttpResponse(status=HTTPStatus.FORBIDDEN)
 
         if "name" in request.POST:
-            form = CampaignRenameForm(request.POST, instance=self.object)
+            form = CampaignForm(request.POST, instance=self.object)
             if form.is_valid():
                 campaign = form.save(commit=False)
                 campaign.slug = campaign.generate_unique_slug()
                 campaign.save()
-        elif "description" in request.POST:
-            form = CampaignDescriptionForm(request.POST, instance=self.object)
-            if form.is_valid():
-                form.save()
         elif "regenerate_join_slug" in request.POST:
             self.object.join_slug = self.object.generate_join_slug()
             self.object.save()
@@ -343,15 +334,23 @@ class CampaignDeleteView(View):
         })
 
 
-class ProfileCampaignsView(ProfileObjectMixin, View):
-    @ProfileObjectMixin.owner_required
-    def post(self, request, *args, **kwargs):
-        if "delete" in request.POST or "leave" in request.POST:
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+class CampaignCreateView(View):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.path)
+        return render(request, "campaigns/create.html", {
+            "form": CampaignForm(),
+        })
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.path)
         form = CampaignForm(request.POST)
         if form.is_valid():
             campaign = form.save(commit=False)
-            campaign.owner = self.object
+            campaign.owner = request.user
             campaign.save()
             return redirect(campaign)
-        return redirect("profile", username=self.object.username)
+        return render(request, "campaigns/create.html", {
+            "form": form,
+        })

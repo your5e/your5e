@@ -14,12 +14,12 @@ from api.notebooks.views import (
 )
 from api.views import PingView
 from campaigns.views import (
+    CampaignCreateView,
     CampaignDeleteView,
     CampaignJoinView,
     CampaignLeaveView,
     CampaignNotebooksView,
     CampaignView,
-    ProfileCampaignsView,
 )
 from help.views import HelpPageView
 from notebooks.views import (
@@ -135,12 +135,12 @@ urlpatterns = [
         name="profile_tokens",
         view=ProfileTokensView.as_view(),
     ),
-    path(
-        route="profile/<str:username>/campaigns",
-        name="profile_campaigns",
-        view=ProfileCampaignsView.as_view(),
-    ),
 
+    path(
+        route="campaigns/create",
+        name="campaign_create",
+        view=CampaignCreateView.as_view(),
+    ),
     path(
         route="campaigns/join-<str:join_slug>",
         name="campaign_join",
