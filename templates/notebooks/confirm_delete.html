@@ -7,11 +7,11 @@
 
 <p>Delete "{{ page.latest_version.display_name }}" from "{{ notebook.name }}"?</p>
 
-<form method="post" action="{% url 'notebook_delete' %}">
+<form method="post" action="{% url 'notebook_delete_page' %}">
   {% csrf_token %}
   <input type="hidden" name="notebook" value="{{ notebook.pk }}">
   <input type="hidden" name="page" value="{{ page.pk }}">
-  <input type="hidden" name="confirmed" value="true">
+  <input type="hidden" name="confirm" value="true">
   <button type="submit">Confirm</button>
 </form>
 

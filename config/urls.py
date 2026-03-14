@@ -25,6 +25,7 @@ from help.views import HelpPageView
 from notebooks.views import (
     NotebookCollaboratorsView,
     NotebookCreateView,
+    NotebookDeleteView,
     NotebookPageDeleteView,
     NotebookPageRestoreView,
     NotebookPageView,
@@ -195,6 +196,11 @@ urlpatterns = [
     path(
         route="notebooks/delete",
         name="notebook_delete",
+        view=NotebookDeleteView.as_view(),
+    ),
+    path(
+        route="notebooks/delete-page",
+        name="notebook_delete_page",
         view=NotebookPageDeleteView.as_view(),
     ),
     path(

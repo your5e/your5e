@@ -302,13 +302,13 @@ class NotebookMixin(UserMixin):
         assert '?edit">Edit' in content
         assert 'href="/notebooks/restore?page=' in content
         assert '<input type="file"' in content
-        assert 'action="/notebooks/delete"' in content
+        assert 'action="/notebooks/delete-page"' in content
 
     def assert_edit_controls_absent(self, content):
         assert '?edit">Edit' not in content
         assert 'href="/notebooks/restore?page=' not in content
         assert '<input type="file"' not in content
-        assert 'action="/notebooks/delete"' not in content
+        assert 'action="/notebooks/delete-page"' not in content
 
     def assert_page_edit_link_present(self, content):
         assert '?edit">Edit</a>' in content
@@ -330,14 +330,14 @@ class NotebookMixin(UserMixin):
 
     def assert_confirmation_form_present(self, content, action):
         assert f'action="{action}"' in content
-        assert 'name="confirmed"' in content
+        assert 'name="confirm"' in content
 
     def assert_edit_page_form_present(self, content):
         assert "<form" in content
         assert "<textarea" in content
         assert 'type="file"' in content
         assert 'type="submit"' in content
-        assert 'action="/notebooks/delete"' in content
+        assert 'action="/notebooks/delete-page"' in content
 
     def assert_versions_present(self, content, param_name, page, current=None):
         assert '<form ' in content
@@ -396,6 +396,31 @@ class TestNotebook(NotebookMixin):
     def test_get_folder_url_for_root_path(self):
         url = self.wendys_notebook.get_folder_url("notes")
         assert url == "/notebooks/wendy/heros-legendes/"
+
+    def test_has_content_with_pages(self):
+        assert self.wendys_notebook.has_content() is True
+
+    def test_has_content_when_empty(self):
+        empty_notebook = Notebook.objects.create(
+            name="Empty Notebook",
+            owner=self.wendy,
+        )
+        assert empty_notebook.has_content() is False
+
+    def test_has_content_with_only_deleted_pages(self):
+        notebook = Notebook.objects.create(
+            name="Deleted Only",
+            owner=self.wendy,
+        )
+        page = Page.objects.create(wiki=notebook)
+        page.update(
+            filename="draft.md",
+            mime_type="text/markdown",
+            data=b"# Draft",
+            created_by=self.wendy,
+        )
+        page.soft_delete()
+        assert notebook.has_content() is False
 
 
 @pytest.mark.django_db
@@ -725,7 +750,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
             "visibility": "public",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/wendy/heros-legendes/"
@@ -737,7 +762,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
             "visibility": "public",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.wendys_notebook.refresh_from_db()
@@ -748,7 +773,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
             "visibility": "public",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.wendys_notebook.refresh_from_db()
@@ -759,7 +784,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
             "visibility": "public",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.wendys_notebook.refresh_from_db()
@@ -769,7 +794,7 @@ class TestNotebookVisibilityView(NotebookMixin):
         response = client.post("/notebooks/visibility", {
             "notebook": self.wendys_notebook.pk,
             "visibility": "public",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.wendys_notebook.refresh_from_db()
@@ -801,7 +826,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "username": "hugh",
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == self.wendys_notebook.get_absolute_url()
@@ -828,7 +853,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
             "remove": str(self.susan.pk),
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == self.wendys_notebook.get_absolute_url()
@@ -856,7 +881,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "change_role": str(self.susan.pk),
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == self.wendys_notebook.get_absolute_url()
@@ -869,7 +894,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "username": "hugh",
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert not NotebookPermission.objects.filter(
@@ -882,7 +907,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
             "remove": str(self.mary.pk),
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert NotebookPermission.objects.filter(
@@ -896,7 +921,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "change_role": str(self.mary.pk),
             "role": "editor",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         permission = NotebookPermission.objects.get(
@@ -911,7 +936,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "username": "hugh",
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert not NotebookPermission.objects.filter(
@@ -924,7 +949,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
             "remove": str(self.susan.pk),
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert NotebookPermission.objects.filter(
@@ -938,7 +963,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "change_role": str(self.susan.pk),
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.susans_permission.refresh_from_db()
@@ -950,7 +975,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "username": "mary",
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
 
@@ -959,7 +984,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
             "remove": str(self.susan.pk),
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert NotebookPermission.objects.filter(
@@ -973,7 +998,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "change_role": str(self.susan.pk),
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         self.susans_permission.refresh_from_db()
@@ -984,7 +1009,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "username": "hugh",
             "role": "editor",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert not NotebookPermission.objects.filter(
@@ -996,7 +1021,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         response = client.post("/notebooks/collaborators", {
             "notebook": self.wendys_notebook.pk,
             "remove": str(self.susan.pk),
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert NotebookPermission.objects.filter(
@@ -1009,7 +1034,7 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "notebook": self.wendys_notebook.pk,
             "change_role": str(self.susan.pk),
             "role": "viewer",
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.susans_permission.refresh_from_db()
@@ -2067,23 +2092,23 @@ class TestNotebookPageDeleteView(NotebookMixin):
     @UserMixin.as_user("wendy")
     def test_delete_shows_confirmation(self, client):
         page = self.wendys_notebook.get_page(path="notes")
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
         })
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
-        self.assert_confirmation_form_present(content, "/notebooks/delete")
+        self.assert_confirmation_form_present(content, "/notebooks/delete-page")
         assert "notes" in content.lower()
 
     @UserMixin.as_user("wendy")
     def test_owner_can_delete_page(self, client):
         page = self.wendys_notebook.get_page(path="heroes/theron")
         assert page.deleted_at is None
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.SEE_OTHER
         assert response.url == "/notebooks/wendy/heros-legendes/heroes/"
@@ -2093,10 +2118,10 @@ class TestNotebookPageDeleteView(NotebookMixin):
     @UserMixin.as_user("susan")
     def test_editor_can_delete_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.SEE_OTHER
         page.refresh_from_db()
@@ -2105,10 +2130,10 @@ class TestNotebookPageDeleteView(NotebookMixin):
     @UserMixin.as_user("mary")
     def test_viewer_cannot_delete_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         page.refresh_from_db()
@@ -2117,10 +2142,10 @@ class TestNotebookPageDeleteView(NotebookMixin):
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_delete_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
         page.refresh_from_db()
@@ -2128,10 +2153,10 @@ class TestNotebookPageDeleteView(NotebookMixin):
 
     def test_anonymous_cannot_delete_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")
-        response = client.post("/notebooks/delete", {
+        response = client.post("/notebooks/delete-page", {
             "notebook": self.wendys_notebook.pk,
             "page": page.pk,
-            "confirmed": "true",
+            "confirm": "true",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         page.refresh_from_db()
@@ -2291,4 +2316,81 @@ class TestNotebookPageRestoreView(NotebookMixin):
         assert "existing" in content.lower()
         self.deleted_page.refresh_from_db()
         assert self.deleted_page.deleted_at is not None
+
+
+@pytest.mark.django_db
+class TestNotebookDeleteView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_empty_notebook_deletes_immediately(self, client):
+        empty_notebook = Notebook.objects.create(
+            name="Empty Notebook",
+            owner=self.wendy,
+        )
+        notebook_id = empty_notebook.id
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": empty_notebook.pk},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        assert not Notebook.objects.filter(id=notebook_id).exists()
+
+    @UserMixin.as_user("wendy")
+    def test_notebook_with_pages_shows_confirmation(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
+        self.assert_confirmation_form_present(
+            response.content.decode(),
+            "/notebooks/delete",
+        )
+
+    @UserMixin.as_user("wendy")
+    def test_notebook_with_pages_deletes_after_confirmation(self, client):
+        notebook_id = self.wendys_notebook.id
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/profile/wendy/"
+        assert not Notebook.objects.filter(id=notebook_id).exists()
+
+    @UserMixin.as_user("susan")
+    def test_editor_cannot_delete_notebook(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_delete_notebook(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_delete_notebook(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
+
+    def test_anonymous_cannot_delete_notebook(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
 

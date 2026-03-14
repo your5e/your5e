@@ -16,7 +16,7 @@
 <form method="post" action="{% url 'notebook_collaborators' %}">
   {% csrf_token %}
   <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <input type="hidden" name="confirmed" value="true">
+  <input type="hidden" name="confirm" value="true">
   {% if action == "add" %}
   <input type="hidden" name="username" value="{{ target_user.username }}">
   <input type="hidden" name="role" value="{{ role }}">

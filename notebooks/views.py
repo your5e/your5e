@@ -346,9 +346,9 @@ class NotebookVisibilityView(NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         visibility = request.POST.get("visibility")
-        confirmed = request.POST.get("confirmed") == "true"
+        confirm = request.POST.get("confirm") == "true"
 
-        if not confirmed:
+        if not confirm:
             return render(request, "notebooks/confirm_visibility.html", {
                 "notebook": self.object,
                 "visibility": visibility,
@@ -360,13 +360,26 @@ class NotebookVisibilityView(NotebookWriteMixin, View):
         return redirect(self.object)
 
 
+class NotebookDeleteView(NotebookWriteMixin, View):
+    @NotebookPermissions.owner_required
+    def post(self, request):
+        if "confirm" in request.POST or not self.object.has_content():
+            owner_username = self.object.owner.username
+            self.object.delete()
+            return redirect("profile", username=owner_username)
+
+        return render(request, "notebooks/confirm_delete_notebook.html", {
+            "notebook": self.object,
+        })
+
+
 class NotebookPageDeleteView(NotebookWriteMixin, View):
     @NotebookPermissions.edit_required
     def post(self, request):
         page = get_object_or_404(Page, pk=request.POST.get("page"))
-        confirmed = request.POST.get("confirmed") == "true"
+        confirm = request.POST.get("confirm") == "true"
 
-        if not confirmed:
+        if not confirm:
             return render(request, "notebooks/confirm_delete.html", {
                 "notebook": self.object,
                 "page": page,
@@ -456,23 +469,23 @@ class NotebookPageRestoreView(View):
 class NotebookCollaboratorsView(NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
-        confirmed = request.POST.get("confirmed") == "true"
+        confirm = request.POST.get("confirm") == "true"
 
         if "username" in request.POST:
-            return self.handle_add(request, confirmed)
+            return self.handle_add(request, confirm)
         elif "remove" in request.POST:
-            return self.handle_remove(request, confirmed)
+            return self.handle_remove(request, confirm)
         elif "change_role" in request.POST:
-            return self.handle_change_role(request, confirmed)
+            return self.handle_change_role(request, confirm)
 
         return redirect(self.object)
 
-    def handle_add(self, request, confirmed):
+    def handle_add(self, request, confirm):
         username = request.POST.get("username")
         role = request.POST.get("role")
         user = get_object_or_404(User, username=username)
 
-        if not confirmed:
+        if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
                 "action": "add",
@@ -488,11 +501,11 @@ class NotebookCollaboratorsView(NotebookWriteMixin, View):
 
         return redirect(self.object)
 
-    def handle_remove(self, request, confirmed):
+    def handle_remove(self, request, confirm):
         user_pk = request.POST.get("remove")
         user = get_object_or_404(User, pk=user_pk)
 
-        if not confirmed:
+        if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
                 "action": "remove",
@@ -506,12 +519,12 @@ class NotebookCollaboratorsView(NotebookWriteMixin, View):
 
         return redirect(self.object)
 
-    def handle_change_role(self, request, confirmed):
+    def handle_change_role(self, request, confirm):
         user_pk = request.POST.get("change_role")
         role = request.POST.get("role")
         user = get_object_or_404(User, pk=user_pk)
 
-        if not confirmed:
+        if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
                 "action": "change_role",

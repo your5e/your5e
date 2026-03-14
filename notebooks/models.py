@@ -84,6 +84,9 @@ class Notebook(OwnedSlugMixin, Wiki):
         self.slug = self.generate_unique_slug()
         self.save()
 
+    def has_content(self):
+        return self.page_set.filter(deleted_at__isnull=True).exists()
+
 
 class NotebookPermission(models.Model):
     class Role(models.TextChoices):
