@@ -110,16 +110,6 @@ class ProfileVisibilityView(ProfileObjectMixin, View):
         return redirect("profile", username=self.object.username)
 
 
-class ProfileNotebooksView(ProfileObjectMixin, View):
-    @ProfileObjectMixin.owner_required
-    def post(self, request, *args, **kwargs):
-        name = request.POST.get("notebook_name")
-        if name:
-            Notebook.objects.create(name=name, owner=self.object)
-
-        return redirect("profile", username=self.object.username)
-
-
 class ProfileTokensView(ProfileObjectMixin, View):
     @ProfileObjectMixin.owner_required
     def post(self, request, *args, **kwargs):

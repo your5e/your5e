@@ -97,11 +97,18 @@ Ensure the default is deny, override as stated:
 Refactor notebook creation into its own view at `/notebooks/create` so it can
 be used from both the profile page and campaign page.
 
-- [ ] create `/notebooks/create` view
-        - set description
+- [X] create `/notebooks/create` view
         - set visibility
         - set collaborators (list)
-        - requires confirmation
         - redirect to notebook
-- [ ] profile page and campaign page uses
-- [ ] notebook contains links to owner and to campaigns it appears in
+- [X] profile page and campaign page uses
+- [X] notebook contains links to owner and to campaigns it appears in
+- [X] description textarea, creates index.md by default
+
+
+# Notebook parent pages @phase
+
+We should not have dead pages in the URL hierarchy.
+
+- [ ] /notebooks/{user}/ lists that user's visible notebooks
+- [ ] /notebooks/ lists the system notebooks

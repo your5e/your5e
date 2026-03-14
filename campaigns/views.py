@@ -124,11 +124,17 @@ class CampaignView(CampaignObjectMixin, View):
                 "is_last": index == notebook_count - 1,
             })
 
+        other_players = [
+            p for p in players
+                if p != request.user
+        ]
+
         return render(request, "campaigns/campaign.html", {
             "campaign": self.object,
             "is_owner": is_owner,
             "is_unclaimed": is_unclaimed,
             "players": players,
+            "other_players": other_players,
             "notebook_data": notebook_data,
             "linkable_notebooks": linkable_notebooks,
         })

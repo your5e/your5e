@@ -86,9 +86,9 @@
 </ul>
 {% endif %}
 
-<form method="post" action="{% url 'profile_notebooks' username=profile_user.username %}">
+<form method="post" action="{% url 'notebook_create' %}">
   {% csrf_token %}
-  <p><input type="text" name="notebook_name"></p>
+  <p><input type="text" name="name" placeholder="Notebook name"></p>
   <button type="submit">Create notebook</button>
 </form>
 

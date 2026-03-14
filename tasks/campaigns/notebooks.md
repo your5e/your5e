@@ -27,8 +27,9 @@ CampaignNotebook:
         - notebook owner is shown a warning if the notebook is not visible
           to a user in the campaign
 
-- [ ] campaign page allows creating a notebook
+- [#] campaign page allows creating a notebook
         - dropdown for visibility
         - dropdown for player permissions
+        # cancelled, players are passed to the notebook creation form
 
 - [ ] suggest public notebooks @after ../notebooks/public/public.md

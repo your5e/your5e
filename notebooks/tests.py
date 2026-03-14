@@ -410,19 +410,17 @@ class TestProfileNotebooks(NotebookMixin):
     def test_own_profile_shows_create_notebook_form(self, client):
         response = client.get("/profile/wendy/")
         content = response.content.decode()
-        assert 'name="notebook_name"' in content
+        assert 'action="/notebooks/create"' in content
+        assert 'name="name"' in content
 
     @UserMixin.as_user("wendy")
-    def test_create_notebook(self, client):
-        response = client.post(
-            "/profile/wendy/notebooks",
-            {"notebook_name": "New Notebook"},
-        )
-        assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/profile/wendy/"
-        notebook = Notebook.objects.get(name="New Notebook")
-        assert notebook.owner == self.wendy
-        assert notebook.slug == "new-notebook"
+    def test_profile_form_submits_to_create_view(self, client):
+        response = client.post("/notebooks/create", {"name": "New Notebook"})
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'value="New Notebook"' in content
+        assert 'name="visibility"' in content
+        assert not Notebook.objects.filter(name="New Notebook").exists()
 
     @UserMixin.as_user("wendy")
     def test_other_profile_does_not_show_notebooks(self, client):
@@ -430,49 +428,139 @@ class TestProfileNotebooks(NotebookMixin):
         content = response.content.decode()
         assert "Campaign Notes" not in content
 
+
+@pytest.mark.django_db
+class TestNotebookCreateView(NotebookMixin):
     @UserMixin.as_user("wendy")
-    def test_cannot_create_notebook_on_other_profile(self, client):
-        response = client.post(
-            "/profile/susan/notebooks",
-            {"notebook_name": "Hacked Notebook"},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert not Notebook.objects.filter(name="Hacked Notebook").exists()
+    def test_get_shows_create_form(self, client):
+        response = client.get("/notebooks/create")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'name="name"' in content
+        assert 'name="visibility"' in content
 
-    @UserMixin.as_user("susan")
-    def test_editor_cannot_create_notebook_on_other_profile(self, client):
-        response = client.post(
-            "/profile/wendy/notebooks",
-            {"notebook_name": "Hacked Notebook"},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert not Notebook.objects.filter(name="Hacked Notebook").exists()
+    def test_anonymous_cannot_access_create_form(self, client):
+        response = client.get("/notebooks/create")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
 
-    @UserMixin.as_user("mary")
-    def test_viewer_cannot_create_notebook_on_other_profile(self, client):
-        response = client.post(
-            "/profile/wendy/notebooks",
-            {"notebook_name": "Hacked Notebook"},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert not Notebook.objects.filter(name="Hacked Notebook").exists()
+    @UserMixin.as_user("wendy")
+    def test_add_collaborator_shows_in_pending_list(self, client):
+        response = client.post("/notebooks/create", {
+            "add_collaborator": "true",
+            "collaborator_username": "susan",
+            "collaborator_role": "editor",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "susan" in content
+        assert "editor" in content
 
-    @UserMixin.as_user("hugh")
-    def test_non_collaborator_cannot_create_notebook_on_other_profile(self, client):
-        response = client.post(
-            "/profile/wendy/notebooks",
-            {"notebook_name": "Hacked Notebook"},
-        )
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert not Notebook.objects.filter(name="Hacked Notebook").exists()
+    @UserMixin.as_user("wendy")
+    def test_add_invalid_collaborator_shows_error(self, client):
+        response = client.post("/notebooks/create", {
+            "add_collaborator": "true",
+            "collaborator_username": "nonexistent",
+            "collaborator_role": "editor",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "error" in content.lower() or "not found" in content.lower()
+
+    @UserMixin.as_user("wendy")
+    def test_remove_pending_collaborator(self, client):
+        response = client.post("/notebooks/create", {
+            "remove_collaborator": str(self.susan.pk),
+            "pending_pk": [str(self.susan.pk)],
+            "pending_role": ["editor"],
+        })
+        assert response.status_code == HTTPStatus.OK
+        assert "susan" not in response.content.decode()
+
+    @UserMixin.as_user("wendy")
+    def test_create_notebook(self, client):
+        response = client.post("/notebooks/create", {
+            "name": "Adventure Log",
+            "visibility": "public",
+            "pending_pk": [str(self.susan.pk), str(self.mary.pk)],
+            "pending_role": ["editor", "viewer"],
+            "create": "true",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        notebook = Notebook.objects.get(name="Adventure Log")
+        assert notebook.owner == self.wendy
+        assert notebook.visibility == Notebook.Visibility.PUBLIC
+        assert response.url == notebook.get_absolute_url()
+
+        susan_perm = NotebookPermission.objects.get(notebook=notebook, user=self.susan)
+        assert susan_perm.role == NotebookPermission.Role.EDITOR
+
+        mary_perm = NotebookPermission.objects.get(notebook=notebook, user=self.mary)
+        assert mary_perm.role == NotebookPermission.Role.VIEWER
+
+    @UserMixin.as_user("wendy")
+    def test_create_requires_name(self, client):
+        response = client.post("/notebooks/create", {
+            "name": "",
+            "visibility": "private",
+            "create": "true",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "error" in content.lower() or "required" in content.lower()
+        assert not Notebook.objects.filter(name="").exists()
+
+    @UserMixin.as_user("wendy")
+    def test_prepopulated_collaborators_from_post(self, client):
+        response = client.post("/notebooks/create", {
+            "prepopulate_collaborator": [str(self.susan.pk), str(self.mary.pk)],
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "susan" in content
+        assert "mary" in content
 
     def test_anonymous_cannot_create_notebook(self, client):
-        response = client.post(
-            "/profile/wendy/notebooks",
-            {"notebook_name": "Hacked Notebook"},
-        )
+        response = client.post("/notebooks/create", {
+            "name": "Hacked Notebook",
+            "visibility": "private",
+            "create": "true",
+        })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert not Notebook.objects.filter(name="Hacked Notebook").exists()
+
+    @UserMixin.as_user("wendy")
+    def test_create_form_has_description_field(self, client):
+        response = client.get("/notebooks/create")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'name="description"' in content
+        assert "<textarea" in content
+
+    @UserMixin.as_user("wendy")
+    def test_create_creates_index_with_description(self, client):
+        response = client.post("/notebooks/create", {
+            "name": "Adventure Log",
+            "visibility": "public",
+            "description": "Welcome to the adventure.",
+            "create": "true",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        notebook = Notebook.objects.get(name="Adventure Log")
+        index_page = notebook.get_page(path="index")
+        assert index_page.latest_version.content.data == b"Welcome to the adventure.\n"
+
+    @UserMixin.as_user("wendy")
+    def test_create_creates_empty_index_when_no_description(self, client):
+        response = client.post("/notebooks/create", {
+            "name": "Empty Notebook",
+            "visibility": "private",
+            "description": "",
+            "create": "true",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        notebook = Notebook.objects.get(name="Empty Notebook")
+        index_page = notebook.get_page(path="index")
+        assert index_page.latest_version.content.data == b"\n"
 
 
 @pytest.mark.django_db
@@ -515,6 +603,51 @@ class TestNotebookView(NotebookMixin):
             response.content.decode(),
             self.wendys_notebook,
         )
+
+    @UserMixin.as_user("susan")
+    def test_notebook_shows_owner_link(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        header = content.split("<h2>")[0]
+        assert 'href="/profile/wendy/">wendy</a>' in header
+
+    @UserMixin.as_user("wendy")
+    def test_notebook_shows_campaign_link(self, client):
+        from campaigns.models import Campaign, CampaignNotebook
+        campaign = Campaign.objects.create(owner=self.wendy, name="The Great Quest")
+        CampaignNotebook.objects.create(
+            campaign=campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert 'href="/campaigns/wendy/the-great-quest"' in content
+        assert "The Great Quest" in content
+
+    @UserMixin.as_user("wendy")
+    def test_notebook_shows_multiple_campaign_links(self, client):
+        from campaigns.models import Campaign, CampaignNotebook
+        campaign = Campaign.objects.create(owner=self.wendy, name="The Great Quest")
+        CampaignNotebook.objects.create(
+            campaign=campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        second_campaign = Campaign.objects.create(
+            owner=self.susan,
+            name="Side Adventure",
+        )
+        second_campaign.players.add(self.wendy)
+        CampaignNotebook.objects.create(
+            campaign=second_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.susan,
+        )
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "The Great Quest" in content
+        assert "Side Adventure" in content
 
 
 @pytest.mark.django_db

@@ -120,4 +120,13 @@
   <button type="submit">Link</button>
 </form>
 {% endif %}
+
+<form method="post" action="{% url 'notebook_create' %}">
+  {% csrf_token %}
+  {% for player in other_players %}
+  <input type="hidden" name="prepopulate_collaborator" value="{{ player.pk }}">
+  {% endfor %}
+  <p><input type="text" name="name" placeholder="Notebook name"></p>
+  <button type="submit">Create notebook</button>
+</form>
 {% endblock %}

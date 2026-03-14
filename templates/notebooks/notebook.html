@@ -4,6 +4,7 @@
 
 {% block content %}
 <h1>{{ notebook.name }}</h1>
+<p>by <a href="/profile/{{ notebook.owner.username }}/">{{ notebook.owner.username }}</a>{% if campaigns %} in {% for campaign in campaigns %}<a href="{{ campaign.get_absolute_url }}">{{ campaign.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
 
 {% if index_content %}
 <div class="index-content">

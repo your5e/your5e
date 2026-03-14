@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
-from notebooks.forms import PageForm
+from campaigns.models import CampaignNotebook
+from notebooks.forms import CollaboratorForm, NotebookCreateForm, PageForm
 from notebooks.models import Notebook, NotebookPermission
 from users.models import User
 from wikis.models import Page
@@ -95,6 +96,126 @@ class NotebookWriteMixin:
         return get_object_or_404(Notebook, pk=self.request.POST.get("notebook"))
 
 
+class NotebookCreateView(View):
+    def get_pending_collaborators(self, pending_pks, pending_roles):
+        users = User.objects.in_bulk(pending_pks)
+        return [
+            (users[int(pk)], role)
+            for pk, role in zip(pending_pks, pending_roles, strict=True)
+            if int(pk) in users
+        ]
+
+    def get_context(
+        self, form, collaborator_form, pending_pks, pending_roles, error=None
+    ):
+        return {
+            "form": form,
+            "collaborator_form": collaborator_form,
+            "pending_collaborators": self.get_pending_collaborators(
+                pending_pks, pending_roles
+            ),
+            "error": error,
+        }
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+
+        form = NotebookCreateForm()
+        collaborator_form = CollaboratorForm()
+        context = self.get_context(form, collaborator_form, [], [])
+        return render(request, "notebooks/create.html", context)
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+
+        pending_pks = request.POST.getlist("pending_pk")
+        pending_roles = request.POST.getlist("pending_role")
+
+        for pk in request.POST.getlist("prepopulate_collaborator"):
+            if pk not in pending_pks:
+                pending_pks.append(pk)
+                pending_roles.append(NotebookPermission.Role.VIEWER)
+
+        actions = ("add_collaborator", "remove_collaborator", "create")
+        is_initial = not any(action in request.POST for action in actions)
+        if is_initial:
+            form = NotebookCreateForm(initial={"name": request.POST.get("name")})
+        else:
+            form = NotebookCreateForm(request.POST)
+        collaborator_form = CollaboratorForm()
+        error = None
+
+        if "add_collaborator" in request.POST:
+            collaborator_form = CollaboratorForm(request.POST)
+            if collaborator_form.is_valid():
+                username = collaborator_form.cleaned_data["collaborator_username"]
+                role = collaborator_form.cleaned_data["collaborator_role"]
+                try:
+                    user = User.objects.get(username=username)
+                    if str(user.pk) not in pending_pks:
+                        pending_pks.append(str(user.pk))
+                        pending_roles.append(role)
+                    collaborator_form = CollaboratorForm()
+                except User.DoesNotExist:
+                    error = f"User '{username}' not found"
+
+            context = self.get_context(
+                form, collaborator_form, pending_pks, pending_roles, error
+            )
+            return render(request, "notebooks/create.html", context)
+
+        if "remove_collaborator" in request.POST:
+            remove_pk = request.POST.get("remove_collaborator")
+            try:
+                idx = pending_pks.index(remove_pk)
+                pending_pks.pop(idx)
+                pending_roles.pop(idx)
+            except ValueError:
+                pass
+            context = self.get_context(
+                form, collaborator_form, pending_pks, pending_roles
+            )
+            return render(request, "notebooks/create.html", context)
+
+        if "create" in request.POST:
+            if not form.is_valid():
+                context = self.get_context(
+                    form, collaborator_form, pending_pks, pending_roles
+                )
+                return render(request, "notebooks/create.html", context)
+
+            notebook = Notebook.objects.create(
+                name=form.cleaned_data["name"],
+                owner=request.user,
+                visibility=form.cleaned_data["visibility"],
+            )
+
+            for user, role in self.get_pending_collaborators(
+                pending_pks, pending_roles
+            ):
+                NotebookPermission.objects.create(
+                    notebook=notebook,
+                    user=user,
+                    role=role,
+                )
+
+            description = form.cleaned_data["description"]
+            index_page = Page.objects.create(wiki=notebook)
+            index_page.update(
+                filename="index.md",
+                mime_type="text/markdown",
+                data=(description).encode("utf-8"),
+                created_by=request.user,
+            )
+
+            return redirect(notebook)
+
+        context = self.get_context(form, collaborator_form, pending_pks, pending_roles)
+        return render(request, "notebooks/create.html", context)
+
+
 class NotebookView(NotebookReadMixin, View):
     @NotebookPermissions.view_required
     def get(self, request, username, slug, path=""):
@@ -104,7 +225,10 @@ class NotebookView(NotebookReadMixin, View):
 
         # index.md is rendered inline, exclude from the file list
         index_path = (path + "/index").lstrip("/")
-        files = [f for f in contents["files"] if f.path != index_path]
+        files = [
+            f for f in contents["files"]
+                if f.path != index_path
+        ]
 
         index_exists = False
         try:
@@ -131,6 +255,13 @@ class NotebookView(NotebookReadMixin, View):
                 status=HTTPStatus.NOT_FOUND,
             )
 
+        campaigns = [
+            cn.campaign for cn in
+                CampaignNotebook.objects.filter(
+                    notebook=self.object
+                ).select_related("campaign")
+        ]
+
         context = {
             "notebook": self.object,
             "is_owner": is_owner,
@@ -138,6 +269,7 @@ class NotebookView(NotebookReadMixin, View):
             "folders": contents["folders"],
             "files": files,
             "index_exists": index_exists,
+            "campaigns": campaigns,
         }
 
         if user_can_edit:

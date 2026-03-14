@@ -24,6 +24,7 @@ from campaigns.views import (
 from help.views import HelpPageView
 from notebooks.views import (
     NotebookCollaboratorsView,
+    NotebookCreateView,
     NotebookPageDeleteView,
     NotebookPageRestoreView,
     NotebookPageView,
@@ -35,7 +36,6 @@ from notebooks.views import (
 from users.views import (
     PasswordChangeView,
     ProfileLinksView,
-    ProfileNotebooksView,
     ProfileRedirectView,
     ProfileTokensView,
     ProfileView,
@@ -131,11 +131,6 @@ urlpatterns = [
         view=PasswordChangeView.as_view(),
     ),
     path(
-        route="profile/<str:username>/notebooks",
-        name="profile_notebooks",
-        view=ProfileNotebooksView.as_view(),
-    ),
-    path(
         route="profile/<str:username>/tokens",
         name="profile_tokens",
         view=ProfileTokensView.as_view(),
@@ -172,6 +167,11 @@ urlpatterns = [
         view=CampaignView.as_view(),
     ),
 
+    path(
+        route="notebooks/create",
+        name="notebook_create",
+        view=NotebookCreateView.as_view(),
+    ),
     path(
         route="notebooks/rename",
         name="notebook_rename",

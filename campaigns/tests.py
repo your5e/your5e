@@ -855,6 +855,40 @@ class TestCampaignViewNotebooks(CampaignNotebookMixin):
 
 
 @pytest.mark.django_db
+class TestCampaignCreateNotebook(CampaignMixin):
+    @CampaignMixin.as_user("wendy")
+    def test_owner_sees_create_notebook_form(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' in content
+        assert 'name="name"' in content
+
+    @CampaignMixin.as_user("susan")
+    def test_player_sees_create_notebook_form(self, client):
+        self.owned_campaign.players.add(self.susan)
+        response = client.get("/campaigns/wendy/the-old-forest")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' in content
+        assert 'name="name"' in content
+
+    @CampaignMixin.as_user("wendy")
+    def test_create_notebook_form_prepopulates_players(self, client):
+        self.owned_campaign.players.add(self.susan, self.mary)
+        response = client.get("/campaigns/wendy/the-old-forest")
+        content = response.content.decode()
+        assert f'name="prepopulate_collaborator" value="{self.susan.pk}"' in content
+        assert f'name="prepopulate_collaborator" value="{self.mary.pk}"' in content
+
+    @CampaignMixin.as_user("wendy")
+    def test_create_notebook_form_excludes_current_user(self, client):
+        self.owned_campaign.players.add(self.susan)
+        response = client.get("/campaigns/wendy/the-old-forest")
+        content = response.content.decode()
+        assert f'name="prepopulate_collaborator" value="{self.wendy.pk}"' not in content
+        assert f'name="prepopulate_collaborator" value="{self.susan.pk}"' in content
+
+
+@pytest.mark.django_db
 class TestCampaignOwnerDeletion(CampaignMixin):
     def test_campaign_reassigned_to_sentinel_when_owner_deleted_with_players(self):
         from users.models import get_sentinel_user
