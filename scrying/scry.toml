@@ -1,0 +1,56 @@
+[widths]
+desktop = 1280
+tablet = 768
+mobile = 375
+
+[users]
+norm = "norm"
+wendy = "wendy"
+
+[pages.site-logout]
+user = "norm"
+path = "/logout"
+
+[pages.site-home]
+path = "/"
+
+[pages.site-login]
+path = "/login"
+
+[pages.help-index]
+path = "/help/"
+
+[pages.help-api]
+path = "/help/api/listing-notebooks"
+
+[pages.user-profile-anon]
+path = "/profile/norm"
+
+[pages.user-profile-other]
+user = "wendy"
+path = "/profile/norm"
+
+[pages.user-profile-owner]
+user = "norm"
+path = "/profile/norm"
+
+[pages.campaign-create]
+user = "norm"
+path = "/campaigns/create"
+
+[pages.campaign-view]
+user = "norm"
+path = "/campaigns/norm/the-long-road"
+
+[pages.campaign-created]
+user = "norm"
+path = "/campaigns/create"
+steps = [
+    { fill = { field = "name", value = "Some dungeons, some dragons" } },
+    { fill = { field = "description", value = "A test campaign" } },
+    { click = { text = "Create campaign", role = "button" } },
+]
+
+[pages.notebook-view]
+user = "norm"
+path = "/notebooks/norm/campaign-notes/"

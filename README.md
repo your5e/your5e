@@ -19,6 +19,9 @@ Development is done with docker, spinning up the stack is:
 
 # make the site available at http://localhost:5843/
 (computer)% make dev
+
+# update archival/testing screenshots
+(computer)% make scry
 ```
 
 Test data includes [a map](users/management/commands/random-hexmap-7.png) by

@@ -1,4 +1,4 @@
-.PHONY: clean dev lint-python makemigrations migrate reset setup test test-python test-integration test-server test-server-down
+.PHONY: clean dev lint-python makemigrations migrate reset scry setup test test-python test-integration test-server test-server-down
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -31,6 +31,11 @@ clean:
 
 reset: clean setup
 	docker compose down
+
+scry:
+	@ruff check scrying
+	rm -f scrying/*.png
+	python scrying/scry.py
 
 test-python: lint-python
 	docker compose exec $(EXEC_FLAGS) web pytest
