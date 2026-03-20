@@ -1,5 +1,7 @@
 import secrets
 
+import bleach
+import markdown
 from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -107,6 +109,12 @@ class Campaign(OwnedSlugMixin, models.Model):
             notebook__page__isnull=False,
             notebook__page__deleted_at__isnull=True,
         ).exists()
+
+    def description_html(self):
+        if not self.description:
+            return ""
+        clean = bleach.clean(self.description, tags=[], strip=True)
+        return markdown.markdown(clean)
 
 
 @receiver(post_delete, sender=User)

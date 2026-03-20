@@ -1,14 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}{% if is_old_version %}Version {{ page.number }} of {% endif %}{{ page.filename }} - {{ notebook.name }} - Your 5E{% endblock %}
+{% block title %}
+  {% if is_old_version %}Version {{ page.number }} of {% endif %}
+  {{ page.filename }} - {{ notebook.name }} - Your 5E
+{% endblock %}
 
-{% block content %}
-<article>
-<header>
-<p>v{{ page.number }} by {{ page.created_by.username }} on {{ page.created_at|date:"j M Y" }}</p>
-{% include "notebooks/includes/version_select.html" with versions=history selected=page param_name="version" %}
-{% if can_edit %}<p><a href="?edit">Edit</a></p>{% endif %}
-</header>
-{{ content|safe }}
-</article>
+{% block main_class %} class="notebook"{% endblock %}
+
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% with versions=history selected=page param_name="version" %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
+
+{% block page_content %}
+  <article>
+    <div class="user-content">
+      {{ content|safe }}
+    </div>
+  </article>
 {% endblock %}

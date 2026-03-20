@@ -4,8 +4,18 @@ tablet = 768
 mobile = 375
 
 [users]
+hugh = "hugh"
 norm = "norm"
+susan = "susan"
 wendy = "wendy"
+
+[pages.active-preview]
+skip = true
+user = "norm"
+base_url = "http://localhost:5843"
+path = "/notebooks/norm/campaign-notes/sessions/recaps/recap-session-01"
+widths = []
+add_widths = [{ name = "1024", value = 1024 }]
 
 [pages.site-logout]
 user = "norm"
@@ -34,23 +44,128 @@ path = "/profile/norm"
 user = "norm"
 path = "/profile/norm"
 
+[pages.user-password-change]
+user = "norm"
+path = "/profile/norm/password"
+
+[pages.campaigns-list]
+user = "norm"
+path = "/campaigns/"
+
 [pages.campaign-create]
 user = "norm"
 path = "/campaigns/create"
-
-[pages.campaign-view]
-user = "norm"
-path = "/campaigns/norm/the-long-road"
 
 [pages.campaign-created]
 user = "norm"
 path = "/campaigns/create"
 steps = [
     { fill = { field = "name", value = "Some dungeons, some dragons" } },
-    { fill = { field = "description", value = "A test campaign" } },
+    { fill = { field = "description", value = "A test campaign, for fighting **dragons**!" } },
     { click = { text = "Create campaign", role = "button" } },
 ]
+
+[pages.campaign-view]
+user = "norm"
+path = "/campaigns/norm/the-long-road"
+
+[pages.campaign-settings]
+user = "norm"
+path = "/campaigns/settings/norm/the-long-road"
+steps = [
+    { capture = { selector = "#invite-link", pattern = "(/campaigns/join-[^\\s]+)", as = "join_url" } },
+]
+
+[pages.campaign-join]
+user = "susan"
+path = "{join_url}"
+
+[pages.campaign-delete]
+user = "norm"
+path = "/campaigns/settings/norm/the-long-road"
+steps = [
+    { click = { text = "Delete campaign", role = "button" } },
+]
+
+[pages.campaign-leave]
+user = "susan"
+path = "/campaigns/wendy/secrets-of-the-tower"
+steps = [
+    { click = { text = "Leave campaign", role = "button" } },
+]
+
+[pages.notebooks-list]
+user = "norm"
+path = "/notebooks/"
 
 [pages.notebook-view]
 user = "norm"
 path = "/notebooks/norm/campaign-notes/"
+
+[pages.notebook-create]
+user = "norm"
+path = "/notebooks/create"
+
+[pages.notebook-create-page]
+user = "norm"
+path = "/notebooks/norm/campaign-notes/world-regions/northern-kingdoms/index?edit"
+
+[pages.notebook-deleted]
+user = "norm"
+path = "/notebooks/deleted/norm/campaign-notes/"
+
+[pages.notebook-settings]
+user = "norm"
+path = "/notebooks/settings/norm/campaign-notes/"
+
+[pages.notebook-delete]
+user = "norm"
+path = "/notebooks/settings/norm/campaign-notes/"
+steps = [
+    { click = { text = "Delete notebook", role = "button" } },
+]
+
+[pages.notebook-restore]
+user = "norm"
+path = "/notebooks/deleted/norm/campaign-notes/"
+steps = [
+    { click = { text = "Restore", role = "link" } },
+]
+
+[pages.notebook-collaborator-confirm]
+user = "norm"
+path = "/notebooks/settings/norm/campaign-notes/"
+steps = [
+    { form = { selector = "form:has(input[name='username'])" } },
+    { fill = { field = "username", value = "hugh" } },
+    { select = { field = "role", value = "viewer" } },
+    { click = { text = "Add", role = "button" } },
+]
+
+[pages.notebook-rename-confirm]
+user = "norm"
+path = "/notebooks/settings/norm/campaign-notes/"
+steps = [
+    { fill = { field = "name", value = "Campaign Notes Renamed" } },
+    { click = { text = "Rename", role = "button" } },
+]
+
+[pages.notebook-visibility-confirm]
+user = "norm"
+path = "/notebooks/settings/norm/campaign-notes/"
+steps = [
+    { form = { selector = "form[action*='visibility']" } },
+    { select = { field = "visibility", value = "public" } },
+    { click = { text = "Change", role = "button" } },
+]
+
+[pages.notebook-session]
+user = "norm"
+path = "/notebooks/norm/campaign-notes/sessions/session-01"
+
+[pages.notebook-session-edit]
+user = "norm"
+path = "/notebooks/norm/campaign-notes/sessions/session-01?edit"
+
+[pages.help-using-notebooks]
+path = "/help/using-notebooks"

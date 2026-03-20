@@ -47,6 +47,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -71,6 +72,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")

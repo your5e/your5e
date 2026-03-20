@@ -37,6 +37,7 @@ setup() {
             pull: "Bestiary.md" (v2)
             pull: "characters/NPCs.md" (v2)
             pull: "The Old Café.md" (v1)
+            pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 		EOF
         for i in $(seq 1 $pages_to_create); do
             printf 'pull: "page-%s.md" (v1)\n' "$i"
@@ -55,5 +56,6 @@ setup() {
     assert_file_downloaded "sessions/session-01.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     [ $status -eq 0 ]
 }

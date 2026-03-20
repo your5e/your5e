@@ -2,8 +2,16 @@
 
 {% block title %}{{ page.display_name }} - Help - Your 5E{% endblock %}
 
-{% block content %}
-<article>
-{{ content|safe }}
-</article>
+{% block page_breadcrumbs %}
+  <div class="page-header">
+    {% include "includes/breadcrumbs.html" %}
+  </div>
+{% endblock %}
+
+{% block page_content %}
+
+  <article class="site-content">
+    {{ content|safe }}
+  </article>
+
 {% endblock %}

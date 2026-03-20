@@ -39,7 +39,13 @@ class HelpPageView(View):
         version = page.latest_version
         content = version.render(base_url="/help/")
 
+        if path.endswith("/index") or path == "index":
+            breadcrumbs = wiki.breadcrumbs_for(version)[:-1]
+        else:
+            breadcrumbs = wiki.breadcrumbs_for(version)
+
         return render(request, "help/page.html", {
             "page": version,
             "content": content,
+            "breadcrumbs": breadcrumbs,
         })

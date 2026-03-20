@@ -4,3 +4,5 @@ __pycache__/
 *.token
 tests/*.token
 tests/seed.sql
+
+static/css/*.css*

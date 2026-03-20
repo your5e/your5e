@@ -1,0 +1,14 @@
+@use "../base/fonts" as *;
+
+.user-content {
+    font-family: $font-user;
+    // padding-block: 1em;
+
+    i, em {
+        font-family: $font-user-italic;
+    }
+
+    // h1:first-child {
+    //     // margin-top: 0;
+    // }
+}

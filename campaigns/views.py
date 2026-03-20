@@ -53,6 +53,27 @@ class CampaignObjectMixin:
         return get_object_or_404(Campaign, owner=owner, slug=self.kwargs["slug"])
 
 
+class CampaignSettingsView(CampaignObjectMixin, View):
+    def get(self, request, username, slug):
+        self.object = self.get_object()
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        if not CampaignPermissions.is_owner(self.object, request.user):
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
+        other_players = [p for p in self.object.players.all() if p != self.object.owner]
+
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "Settings"},
+        ]
+        return render(request, "campaigns/settings.html", {
+            "campaign": self.object,
+            "players": other_players,
+            "breadcrumbs": breadcrumbs,
+        })
+
+
 class CampaignView(CampaignObjectMixin, View):
     def get_visible_notebooks(self, user):
         links = self.object.campaign_notebooks.select_related(
@@ -126,6 +147,7 @@ class CampaignView(CampaignObjectMixin, View):
 
         return render(request, "campaigns/campaign.html", {
             "campaign": self.object,
+            "description_html": self.object.description_html(),
             "is_owner": is_owner,
             "is_unclaimed": is_unclaimed,
             "players": players,
@@ -184,11 +206,10 @@ class CampaignNotebooksView(View):
         if not request.user.is_authenticated:
             return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
 
-        is_member = self.object.players.filter(pk=request.user.pk).exists()
-        if not is_member:
+        if not CampaignPermissions.can_view(self.object, request.user):
             return HttpResponse(status=HTTPStatus.FORBIDDEN)
 
-        is_owner = self.object.owner == request.user
+        is_owner = CampaignPermissions.is_owner(self.object, request.user)
 
         if "link_notebook" in request.POST:
             notebook_id = request.POST["link_notebook"]
@@ -272,10 +293,12 @@ class CampaignJoinView(View):
         self.object = self.get_object()
         if not request.user.is_authenticated:
             return redirect_to_login(request.path)
-        is_member = self.object.players.filter(pk=request.user.pk).exists()
+        is_member = CampaignPermissions.can_view(self.object, request.user)
         return render(request, "campaigns/join.html", {
             "campaign": self.object,
             "is_member": is_member,
+            "players": list(self.object.players.all()),
+            "description_html": self.object.description_html(),
         })
 
     def post(self, request, *args, **kwargs):
@@ -310,9 +333,14 @@ class CampaignLeaveView(View):
                 self.object.delete()
             return redirect("profile", username=request.user.username)
         is_owner = CampaignPermissions.is_owner(self.object, request.user)
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "Leave"},
+        ]
         return render(request, "campaigns/leave.html", {
             "campaign": self.object,
             "is_owner": is_owner,
+            "breadcrumbs": breadcrumbs,
         })
 
 
@@ -329,8 +357,13 @@ class CampaignDeleteView(View):
         if "confirm" in request.POST or not self.object.has_content():
             self.object.delete()
             return redirect("profile", username=request.user.username)
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "Delete"},
+        ]
         return render(request, "campaigns/delete.html", {
             "campaign": self.object,
+            "breadcrumbs": breadcrumbs,
         })
 
 
@@ -353,4 +386,21 @@ class CampaignCreateView(View):
             return redirect(campaign)
         return render(request, "campaigns/create.html", {
             "form": form,
+        })
+
+
+class CampaignListView(View):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.path)
+        my_campaigns = Campaign.objects.filter(owner=request.user).prefetch_related(
+            "players"
+        )
+        other_campaigns = Campaign.objects.filter(
+            players=request.user
+        ).exclude(owner=request.user).prefetch_related("players", "owner")
+        return render(request, "campaigns/list.html", {
+            "my_campaigns": my_campaigns,
+            "other_campaigns": other_campaigns,
+            "form": CampaignForm(),
         })

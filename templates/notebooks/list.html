@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Notebooks - Your 5E{% endblock %}
+
+{% block page_content %}
+  <h1>Notebooks</h1>
+
+  <h2>My notebooks</h2>
+  {% if my_notebooks %}
+    <ul>
+      {% for notebook in my_notebooks %}
+        <li>
+          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
+          {% if notebook.campaign_notebooks.exists %}
+            (campaigns: {% for cn in notebook.campaign_notebooks.all %}{% if not forloop.first %}, {% endif %}<a
+              href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% endfor %})
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No notebooks yet.</p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'notebook_create' %}" class="button">Create a new notebook</a>
+  </p>
+
+  <h2>Other notebooks</h2>
+  {% if other_notebooks %}
+    <ul>
+      {% for notebook in other_notebooks %}
+        <li>
+          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
+          (owner: <a href="/profile/{{ notebook.owner.username }}/"
+             >{{ notebook.owner.username }}</a>{% if notebook.campaign_notebooks.exists %},
+           campaigns: {% for cn in notebook.campaign_notebooks.all %}{% if not forloop.first %}, {% endif %}
+             <a href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% endfor %}{% endif %})
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>None.</p>
+  {% endif %}
+{% endblock %}

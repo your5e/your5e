@@ -92,3 +92,16 @@ class TestNotebookView(NotebookMixin):
         content = response.content.decode()
         assert "The Great Quest" in content
         assert "Side Adventure" in content
+
+    @UserMixin.as_user("wendy")
+    def test_subfolder_index_shows_breadcrumbs_with_display_names(self, client):
+        response = client.get(
+            "/notebooks/wendy/heros-legendes/world-regions/northern-kingdoms/"
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert ">World Regions</a>" in content
+        assert ">Northern Kingdoms</a>" in content
+        breadcrumb_section = content.split("breadcrumb")[1].split("</nav>")[0]
+        assert "world-regions" not in breadcrumb_section
+        assert "northern-kingdoms" not in breadcrumb_section

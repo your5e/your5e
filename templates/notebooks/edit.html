@@ -1,40 +1,106 @@
 {% extends "base.html" %}
 
-{% block title %}Edit {{ version.filename }} - {{ notebook.name }} - Your 5E{% endblock %}
+{% block title %}
+  {% if page %}Edit{% else %}Create{% endif %}
+  {{ editing_name|default:notebook.name }} - {{ notebook.name }} - Your 5E
+{% endblock %}
 
-{% block content %}
-<article>
-<h1>Edit {{ version.display_name }}</h1>
-{% if conflict_url %}
-<p class="error">A page already exists at <a href="{{ conflict_url }}">{{ conflict_filename }}</a>.</p>
-{% endif %}
-{% if form.non_field_errors %}
-<ul class="errors">
-{% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-</ul>
-{% endif %}
-<form method="post">
-{% csrf_token %}
-{% include "notebooks/includes/page_form_fields.html" %}
-<p>
-<input type="submit" value="Save">
-</p>
-</form>
+{% block main_class %} class="notebook edit"{% endblock %}
 
-<h2>Replace with file</h2>
-<form method="post" action="{% url 'notebook_upload' %}" enctype="multipart/form-data">
-{% csrf_token %}
-<input type="hidden" name="notebook" value="{{ notebook.pk }}">
-<input type="hidden" name="filename" value="{{ version.filename }}">
-<p>
-{{ form.file.label_tag }}<br>
-{{ form.file }}
-</p>
-<p>
-<input type="submit" value="Upload">
-</p>
-</form>
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
 
-{% include "notebooks/includes/delete_form.html" with page_pk=page.pk %}
-</article>
+{% block page_breadcrumbs %}
+  {% with is_editing=True editing=editing_name page_url=editing_url hide_controls=True %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
+
+{% block page_content %}
+  <h1>
+    {% if page %}Edit{% else %}Create{% endif %}
+    "{{ editing_name|default:notebook.name }}"
+  </h1>
+
+  {% if conflict_url %}
+    <p class="error">
+      A page already exists at
+      <a href="{{ conflict_url }}">{{ conflict_filename }}</a>.
+    </p>
+  {% endif %}
+
+  {% if form.non_field_errors %}
+    <ul class="errors">
+      {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post"{% if form_action %} action="{{ form_action }}"{% endif %} class="edit-form">
+    {% csrf_token %}
+    <p>
+      {{ form.filename.label_tag }}<br>
+      {{ form.filename }}
+      {% if form.filename.errors %}
+        <span class="error">{{ form.filename.errors.0 }}</span>
+      {% endif %}
+    </p>
+    <p>
+      {{ form.content.label_tag }}
+    </p>
+    <div id="overtype-editor" hidden></div>
+    <textarea id="id_content" name="content" rows="20" cols="80">{{ form.content.value|default:'' }}</textarea>
+    {% if form.content.errors %}
+      <span class="error">{{ form.content.errors.0 }}</span>
+    {% endif %}
+    <input type="submit" value="Save" class="primary">
+  </form>
+
+  <hr>
+  <p>
+    {% if page %}Replace the content of this page by uploading a file.
+    The filename will be preserved.{% else %}Set the content of this page
+    by uploading a file.{% endif %}
+  </p>
+  <form method="post" action="{% url 'notebook_upload' %}" enctype="multipart/form-data" class="upload-form">
+    {% csrf_token %}
+    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+    {{ form.file }}
+    <button type="submit">Upload text...</button>
+  </form>
+
+  {% if page %}
+    <hr>
+    <p>
+      Deleting a page removes it from the notebook. This cannot be undone.
+    </p>
+    {% include "notebooks/includes/delete_form.html" with page_pk=page.pk %}
+  {% endif %}
+
+  {% load static %}
+  <script src="{% static 'js/overtype.js' %}"></script>
+  <script>
+  const textarea = document.getElementById('id_content');
+  const container = document.getElementById('overtype-editor');
+  try {
+    const tb = toolbarButtons;
+    const [editor] = new OverType('#overtype-editor', {
+      value: textarea.value,
+      toolbar: true,
+      toolbarButtons: [
+        tb.h1, tb.h2, tb.h3, tb.separator,
+        tb.bold, tb.italic, tb.code, tb.link, tb.separator,
+        tb.bulletList, tb.orderedList, tb.separator,
+        tb.quote
+      ],
+      onChange: (value) => { textarea.value = value; }
+    });
+    container.hidden = false;
+    textarea.hidden = true;
+  } catch (e) {
+    console.error('OverType failed:', e);
+  }
+  </script>
 {% endblock %}

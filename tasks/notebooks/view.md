@@ -51,6 +51,7 @@ View a page, either Markdown converted to HTML, or the raw uploaded file.
 - [X] ensure links in Markdown are resolving correctly
         - relative to current "directory"
         - absolute paths relative to notebook
+- [X] sanitise HTML in wiki content before markdown rendering
 
 
 # Notebook edit @phase
@@ -137,9 +138,19 @@ as this would block users from creating pages at that path.
 - [X] refactor notebook tests into smaller, focused test files
 
 
+# Notebook navigation @phase
+
+Per-notebook nagivation stripe for control options. Second stripe for
+breadcrumbs.
+
+- [X] Add nagivation stripe
+- [X] Add breadcrumbs
+
+
 # Notebook parent pages @phase
 
 We should not have dead pages in the URL hierarchy.
 
-- [ ] /notebooks/{user}/ lists that user's visible notebooks
-- [ ] /notebooks/ lists the system notebooks
+- [X] `/notebooks/{user}/` redirects to list
+- [X] `/notebooks/` lists the notebooks the user owns and can edit
+- [ ] somewhere to list the system notebooks

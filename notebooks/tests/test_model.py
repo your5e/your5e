@@ -65,3 +65,12 @@ class TestNotebook(NotebookMixin):
         )
         page.soft_delete()
         assert notebook.has_content() is False
+
+    def test_breadcrumbs_for(self):
+        page = self.wendys_notebook.get_page(path="heroes/theron")
+        crumbs = self.wendys_notebook.breadcrumbs_for(page.latest_version)
+        assert crumbs == [
+            {"name": "Héros & Légendes", "url": "/notebooks/wendy/heros-legendes/"},
+            {"name": "heroes", "url": "/notebooks/wendy/heros-legendes/heroes/"},
+            {"name": "theron", "url": "/notebooks/wendy/heros-legendes/heroes/theron"},
+        ]

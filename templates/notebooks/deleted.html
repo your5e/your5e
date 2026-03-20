@@ -2,20 +2,31 @@
 
 {% block title %}Deleted Pages - {{ notebook.name }} - Your 5E{% endblock %}
 
-{% block content %}
-<h1>Deleted Pages</h1>
-<p><a href="{{ notebook.get_absolute_url }}">Back to {{ notebook.name }}</a></p>
+{% block main_class %} class="notebook settings"{% endblock %}
 
-{% if deleted_pages %}
-<ul>
-{% for page in deleted_pages %}
-  <li>
-    {{ page.filename }}
-    <a href="{% url 'notebook_restore' %}?page={{ page.page.uuid }}">Restore</a>
-  </li>
-{% endfor %}
-</ul>
-{% else %}
-<p>No deleted pages.</p>
-{% endif %}
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% with current_page="deleted pages" hide_controls=True %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
+
+{% block page_content %}
+  <h1>Deleted Pages</h1>
+
+  {% if deleted_pages %}
+    <ul>
+      {% for page in deleted_pages %}
+        <li>
+          {{ page.filename }}
+          <a href="{% url 'notebook_restore' %}?page={{ page.page.uuid }}">Restore</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No deleted pages.</p>
+  {% endif %}
 {% endblock %}

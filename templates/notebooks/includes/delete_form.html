@@ -1,6 +1,6 @@
-<form method="post" action="{% url 'notebook_delete_page' %}">
+<form method="post" action="{% url 'notebook_delete_page' %}" class="delete-form">
   {% csrf_token %}
   <input type="hidden" name="notebook" value="{{ notebook.pk }}">
   <input type="hidden" name="page" value="{{ page_pk }}">
-  <button type="submit">Delete</button>
+  <button type="submit" class="danger">Delete</button>
 </form>

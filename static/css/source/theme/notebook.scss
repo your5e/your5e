@@ -1,0 +1,102 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+@use "../base/utilities" as *;
+@use "typography" as *;
+
+main.notebook {
+    .notebook-nav {
+        float: right;
+        overflow-wrap: break-word;
+
+        font-family: $font-site;
+        font-size: $size-long-primer;
+        line-height: 1.2;
+        color: color-mix(in srgb, $colour-text 60%, white);
+
+        margin: 0 calc(-1 * var(--indent)) 1em 1.5em;
+        padding: 1em var(--indent) 1em 1em;
+
+        border: 1px solid $colour-subtle-border;
+        border-width: 0 0 1px 1px;
+
+        min-width: 15%;
+        max-width: 33%;
+
+        h2 {
+            @include visually-hidden;
+        }
+
+        h3, ul {
+            margin: 0;
+            padding-left: $size-long-primer;
+        }
+
+        h3 {
+            margin-top: 0.5em;
+        }
+
+        h3:first-of-type {
+            margin-top: 0;
+        }
+
+        ul {
+            list-style: square;
+        }
+
+        li {
+            margin: 0;
+            padding: 0;
+        }
+
+        li::marker {
+            color: color-mix(in srgb, $colour-text 30%, white);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+        a:hover,
+        a:focus {
+            text-decoration: underline;
+        }
+
+        span.editing {
+            font-style: italic;
+            outline: 1px solid red;
+        }
+
+        a.button {
+            margin: 0.5em 0 0 $size-long-primer;
+        }
+    }
+
+    .notebook-header {
+        border-bottom: 1px solid $colour-subtle-border;
+        background: $colour-subtle;
+        font-family: $font-site;
+        font-size: $size-small-pica;
+
+        a {
+            color: inherit;
+        }
+
+        .notebook-name {
+            margin: 0;
+            font-size: $size-double-small-pica;
+            font-weight: bold;
+            line-height: 1.25;
+        }
+
+        .notebook-meta {
+            margin: 0;
+            line-height: 1.25;
+        }
+    }
+
+    .page-header select,
+    .page-header button,
+    .page-header a.button {
+        font-size: $size-long-primer;
+    }
+}

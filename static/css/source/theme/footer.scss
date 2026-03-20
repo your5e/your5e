@@ -1,0 +1,8 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+
+body > footer {
+    background-color: $colour-footer;
+    color: $colour-footer-text;
+    font-family: $font-site;
+}

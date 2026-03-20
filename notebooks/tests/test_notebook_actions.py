@@ -13,7 +13,7 @@ from . import NotebookMixin
 @pytest.mark.django_db
 class TestNotebookSettingsView(NotebookMixin):
     @UserMixin.as_user("wendy")
-    def test_owner_can_access_settings(self, client):
+    def test_owner_sees_modification_options(self, client):
         response = client.get("/notebooks/settings/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
@@ -23,8 +23,15 @@ class TestNotebookSettingsView(NotebookMixin):
         assert 'action="/notebooks/delete"' in content
         assert 'value="Héros &amp; Légendes"' in content
         assert 'value="private" selected' in content
-        assert "<li>\n    susan (editor)" in content
-        assert "<li>\n    mary (viewer)" in content
+        normalised = " ".join(content.split())
+        assert (
+            'susan</a> <select name="role"> <option value="editor" selected>'
+            in normalised
+        )
+        assert (
+            'mary</a> <select name="role"> <option value="editor" >Editor</option>'
+            ' <option value="viewer" selected>' in normalised
+        )
 
     @UserMixin.as_user("susan")
     def test_editor_cannot_access_settings(self, client):
@@ -82,11 +89,8 @@ class TestNotebookDeletedPagesView(NotebookMixin):
     def test_index_links_to_deleted_pages_view(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
-        assert "<h1>Héros &amp; Légendes</h1>" in content
-        assert (
-            '<a href="/notebooks/deleted/wendy/heros-legendes/">Deleted Pages</a>'
-            in content
-        )
+        assert '<p class="notebook-name">Héros &amp; Légendes</p>' in content
+        assert 'href="/notebooks/deleted/wendy/heros-legendes/"' in content
 
 
 @pytest.mark.django_db
@@ -99,7 +103,7 @@ class TestNotebookPageCreateView(NotebookMixin):
         assert 'name="filename"' in content
         assert 'name="content"' in content
         assert 'name="file"' in content
-        assert 'action="/notebooks/wendy/heros-legendes/index"' in content
+        assert 'action="/notebooks/wendy/heros-legendes/new-page"' in content
         assert 'action="/notebooks/upload"' in content
         assert f'name="notebook" value="{self.wendys_notebook.pk}"' in content
 
@@ -608,10 +612,9 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             notebook=self.wendys_notebook,
             user=self.hugh,
         ).exists()
-        self.assert_confirmation_form_present(
-            response.content.decode(),
-            "/notebooks/collaborators",
-        )
+        content = response.content.decode()
+        self.assert_notebook_header_present(content, self.wendys_notebook)
+        self.assert_confirmation_form_present(content, "/notebooks/collaborators")
 
     @UserMixin.as_user("wendy")
     def test_add_collaborator_confirmed(self, client):
@@ -636,10 +639,9 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "remove": str(self.susan.pk),
         })
         assert response.status_code == HTTPStatus.OK
-        self.assert_confirmation_form_present(
-            response.content.decode(),
-            "/notebooks/collaborators",
-        )
+        content = response.content.decode()
+        self.assert_notebook_header_present(content, self.wendys_notebook)
+        self.assert_confirmation_form_present(content, "/notebooks/collaborators")
 
     @UserMixin.as_user("wendy")
     def test_remove_collaborator_confirmed(self, client):
@@ -663,10 +665,9 @@ class TestNotebookCollaboratorsView(NotebookMixin):
             "role": "viewer",
         })
         assert response.status_code == HTTPStatus.OK
-        self.assert_confirmation_form_present(
-            response.content.decode(),
-            "/notebooks/collaborators",
-        )
+        content = response.content.decode()
+        self.assert_notebook_header_present(content, self.wendys_notebook)
+        self.assert_confirmation_form_present(content, "/notebooks/collaborators")
 
     @UserMixin.as_user("wendy")
     def test_change_collaborator_role_confirmed(self, client):
@@ -869,10 +870,9 @@ class TestNotebookVisibilityView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         self.wendys_notebook.refresh_from_db()
         assert self.wendys_notebook.visibility == Notebook.Visibility.PRIVATE
-        self.assert_confirmation_form_present(
-            response.content.decode(),
-            "/notebooks/visibility",
-        )
+        content = response.content.decode()
+        self.assert_notebook_header_present(content, self.wendys_notebook)
+        self.assert_confirmation_form_present(content, "/notebooks/visibility")
 
     @UserMixin.as_user("wendy")
     def test_visibility_change_confirmed(self, client):
@@ -1020,3 +1020,12 @@ class TestNotebookRenameView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "/notebooks/settings/wendy/heros-legendes/" in content
+
+    @UserMixin.as_user("wendy")
+    def test_unchanged_name_redirects_to_settings(self, client):
+        response = client.post(
+            "/notebooks/rename",
+            {"notebook": self.wendys_notebook.pk, "name": "Héros & Légendes"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/settings/wendy/heros-legendes/"

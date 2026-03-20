@@ -1,4 +1,4 @@
-.PHONY: clean dev lint-python makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down
+.PHONY: clean css dev lint-django makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -11,8 +11,9 @@ EXEC_FLAGS ?=
 dev:
 	docker compose up --build
 
-lint-python:
+lint-django:
 	docker compose exec $(EXEC_FLAGS) web ruff check .
+	awk -v max=120 -f tests/check-line-length.awk templates/**/*.html static/css/source/**/*.scss
 
 makemigrations:
 	docker compose exec $(EXEC_FLAGS) web python manage.py makemigrations
@@ -29,11 +30,14 @@ setup:
 clean:
 	docker compose down -v
 
+css:
+	docker compose exec $(EXEC_FLAGS) web sass static/css/source/screen.scss static/css/screen.css
+
 reset: clean setup
 	docker compose down
 
 scry:
-	@ruff check scrying
+	ruff check scrying
 	rm -f scrying/*.png
 	python scrying/scry.py
 
@@ -48,12 +52,12 @@ server-tests:
 server-tests-down:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
 
-test-django: lint-python
+test-django: lint-django
 	docker compose exec $(EXEC_FLAGS) web pytest
 
 test-sync-integration:
 	shellcheck tests/*.sh
-	awk 'length > 88 { print FILENAME ":" FNR ": " length " chars > 88"; print; err=1 } END { exit err }' tests/*.sh
+	awk -f tests/check-line-length.awk tests/*.sh
 	bats tests/*.bats
 
 test: test-django test-sync-integration

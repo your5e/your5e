@@ -1,0 +1,15 @@
+.breadcrumb ol {
+    display: flex;
+    gap: 0.5em;
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+.breadcrumb li + li::before {
+    display: inline-block;
+    margin-right: 0.5em;
+    transform: rotate(15deg);
+    height: 0.8em;
+    content: "";
+}

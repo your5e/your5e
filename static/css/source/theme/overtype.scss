@@ -1,0 +1,17 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+@use "typography" as *;
+
+#overtype-editor {
+    border: 1px solid $colour-subtle-border;
+    background: $colour-subtle;
+}
+
+#overtype-editor .overtype-input,
+#overtype-editor .overtype-preview {
+    font-family: $font-mono;
+}
+
+#overtype-editor .overtype-toolbar {
+    font-size: $size-long-primer;
+}

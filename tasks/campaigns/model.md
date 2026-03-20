@@ -37,6 +37,4 @@ Campaign model:
         - any player can claim the campaign and become the new owner
         - owners can leave campaigns triggering this
 
-- [X] `/campaigns/create` is the form, not on the profile
 - [X] deleting a campaign does not require confirmation when it has nothing attached
-- [ ] `/campaigns/` ... shows what?

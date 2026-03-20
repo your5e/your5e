@@ -54,6 +54,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_state_matches_fixture
     assert_success
 }
@@ -78,6 +79,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -100,6 +102,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -123,6 +126,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -147,6 +151,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -202,6 +207,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -324,6 +330,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -352,6 +359,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -371,6 +379,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -394,6 +403,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -418,6 +428,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -443,6 +454,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -466,6 +478,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -490,6 +503,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -512,6 +526,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -552,6 +567,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -606,6 +622,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -646,6 +663,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -690,6 +708,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -713,6 +732,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -733,6 +753,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -754,6 +775,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -778,6 +800,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -803,6 +826,7 @@ setup() {
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -828,6 +852,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -854,6 +879,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -881,6 +907,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -909,6 +936,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -933,6 +961,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -958,6 +987,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -981,6 +1011,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -1006,6 +1037,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -1029,6 +1061,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -1053,6 +1086,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 

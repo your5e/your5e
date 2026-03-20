@@ -1,0 +1,41 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+@use "typography" as *;
+
+body > header {
+    background-color: $colour-header;
+    color: $colour-header-text;
+    font-family: $font-site;
+
+    > a {
+        font-family: $font-brand;
+        font-size: $size-double-great-primer;
+        font-weight: bold;
+        line-height: 1;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+    a.user {
+        font-weight: bold;
+    }
+
+    nav {
+        font-size: $size-long-primer;
+
+        li + li::before {
+            content: "·";
+        }
+
+        button {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            font: inherit;
+            padding: 0;
+        }
+    }
+}

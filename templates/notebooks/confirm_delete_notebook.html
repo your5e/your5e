@@ -2,17 +2,31 @@
 
 {% block title %}Delete {{ notebook.name }} - Your 5E{% endblock %}
 
-{% block content %}
-<h1>Delete {{ notebook.name }}</h1>
+{% block main_class %} class="notebook settings"{% endblock %}
 
-<p>This will permanently delete the notebook and all its pages.</p>
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
 
-<form method="post" action="{% url 'notebook_delete' %}">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <input type="hidden" name="confirm" value="true">
-  <button type="submit">Delete notebook</button>
-</form>
+{% block page_breadcrumbs %}
+  {% with current_page="delete notebook" hide_controls=True %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
 
-<p><a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
+{% block page_content %}
+  <h2>Delete notebook</h2>
+
+  <p>This will permanently delete the notebook and all its pages.</p>
+
+  <form method="post" action="{% url 'notebook_delete' %}">
+    {% csrf_token %}
+    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+    <input type="hidden" name="confirm" value="true">
+    <button type="submit" class="danger">Delete notebook</button>
+  </form>
+
+  <p class='cancel'>
+    <a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}">Cancel</a>
+  </p>
 {% endblock %}

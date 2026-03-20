@@ -1,0 +1,14 @@
+@use "../base/colours" as *;
+
+.breadcrumb li + li::before {
+    border-right: 0.1em solid currentcolor;
+}
+
+.breadcrumb a {
+    color: $colour-text;
+}
+
+.breadcrumb [aria-current="page"] {
+    font-weight: 700;
+    text-decoration: none;
+}

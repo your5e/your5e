@@ -1,0 +1,116 @@
+@charset "UTF-8";
+@import url("https://fonts.googleapis.com/css?family=Vollkorn:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,400i,600,700") screen;
+@import url("https://fonts.googleapis.com/css?family=Lora:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=IBM+Plex+Mono:400,600") screen;
+
+:root {
+    --font-brand:
+        "Vollkorn",
+        Georgia,
+        serif;
+
+    --font-site:
+        "IBM Plex Sans",
+        system-ui,
+        sans-serif;
+
+    --font-user:
+        "Lora",
+        "Libre Baskerville",
+        Georgia,
+        serif;
+
+    --font-mono:
+        "IBM Plex Mono",
+        ui-monospace,
+        monospace;
+}
+
+body {
+    margin: 0;
+    min-width: fit-content;
+    font-family: var(--font-site);
+    line-height: 1.5;
+}
+
+@media (min-width: 480px) {
+    .site-content,
+    .user-content {
+        font-size: 18px;
+    }
+}
+
+body > header {
+    background-color: #88cc55;
+    font-family: var(--font-site);
+    padding: 0.5em 1em;
+}
+
+body > header > a {
+    font-family: var(--font-brand);
+    font-size: 2.5em;
+}
+
+body > header a {
+    color: inherit;
+    text-decoration: none;
+}
+
+body > header nav {
+    display: flex;
+    justify-content: space-between;
+}
+
+body > header nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+body > header nav li {
+    display: inline;
+}
+
+body > header nav li + li::before {
+    content: "\00b7";
+    padding: 0 0.5em;
+}
+
+body > header nav form {
+    display: inline;
+}
+
+body > header nav button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+}
+
+main {
+    padding: 0 1em;
+}
+
+.user-content {
+    font-family: var(--font-user);
+}
+
+.user-content em {
+    font-family: "Libre Baskerville";
+}
+
+.user-content em strong,
+.user-content strong em {
+    font-weight: 600;
+    font-style: italic;
+}
+
+
+code,
+pre,
+kbd {
+    font-family: var(--font-mono);
+}

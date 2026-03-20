@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - {{ campaign.name }} - Your 5E{% endblock %}
+
+{% block main_class %} class="campaign settings"{% endblock %}
+
+{% block page_context %}
+  {% include "campaigns/includes/campaign_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% include "campaigns/includes/page_header.html" %}
+{% endblock %}
+
+{% block page_content %}
+  <form method="post" action="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">
+    {% csrf_token %}
+    <p>
+      <label>
+        Name:
+        <input type="text" name="name" value="{{ campaign.name }}">
+      </label>
+    </p>
+    <p>
+      <label>
+        Description:<br>
+        <div id="overtype-editor" hidden></div>
+        <textarea id="id_description" name="description" rows="10" cols="60">{{ campaign.description }}</textarea>
+      </label>
+    </p>
+    <button type="submit">Save</button>
+  </form>
+
+  {% load static %}
+  <script src="{% static 'js/overtype.js' %}"></script>
+  <script>
+  const textarea = document.getElementById('id_description');
+  const container = document.getElementById('overtype-editor');
+  try {
+    const tb = toolbarButtons;
+    const [editor] = new OverType('#overtype-editor', {
+      value: textarea.value,
+      toolbar: true,
+      toolbarButtons: [
+        tb.h1, tb.h2, tb.h3, tb.separator,
+        tb.bold, tb.italic, tb.code, tb.link, tb.separator,
+        tb.bulletList, tb.orderedList, tb.separator,
+        tb.quote
+      ],
+      onChange: (value) => { textarea.value = value; }
+    });
+    container.hidden = false;
+    textarea.hidden = true;
+  } catch (e) {
+    console.error('OverType failed:', e);
+  }
+  </script>
+
+  <h2>Players</h2>
+  {% if players %}
+    <ul>
+      {% for player in players %}
+        <li>
+          <a href="{% url 'profile' username=player.username %}">{{ player.username }}</a>
+          <form method="post" action="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">
+            {% csrf_token %}
+            <input type="hidden" name="remove_player" value="{{ player.pk }}">
+            <button type="submit">Remove</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No other players.</p>
+  {% endif %}
+  <p>
+    Share this link to invite new players to the campaign:
+  </p>
+  <p>
+    <code id="invite-link">{{ request.scheme }}://{{ request.get_host }}/campaigns/join-{{ campaign.join_slug }}</code>
+  </p>
+  <form method="post" action="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">
+    {% csrf_token %}
+    <input type="hidden" name="regenerate_join_slug" value="true">
+    <button type="submit">Generate new link</button>
+  </form>
+
+  <script>
+  (function() {
+    const code = document.getElementById('invite-link');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Copy';
+    button.style.marginRight = '1em';
+    button.addEventListener('click', function() {
+      navigator.clipboard.writeText(code.textContent);
+      this.textContent = 'Copied!';
+      setTimeout(() => { this.textContent = 'Copy'; }, 2000);
+    });
+    code.before(button);
+  })();
+  </script>
+
+  <hr>
+
+  <h2>Delete campaign</h2>
+  <p>This will remove the campaign permanently.</p>
+  <form method="post" action="{% url 'campaign_delete' %}">
+    {% csrf_token %}
+    <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+    <button type="submit" class="danger">Delete campaign</button>
+  </form>
+{% endblock %}

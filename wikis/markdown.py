@@ -1,6 +1,7 @@
 import re
 from posixpath import normpath
 
+import bleach
 import markdown
 
 
@@ -56,9 +57,10 @@ def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
 
     base_url = base_url.rstrip("/")
 
+    text = bleach.clean(text, tags=[], strip=True)
     text = re.sub(r"!\[\[([^\]]+)\]\]", replace_image_embed, text)
     text = re.sub(r"\[\[([^\]]+)\]\]", replace_wikilink, text)
-    html = markdown.markdown(text, extensions=["fenced_code"])
+    html = markdown.markdown(text, extensions=["fenced_code", "tables"])
     html = re.sub(r'(href|src)="([^"]+)"', replace_url, html)
 
     return html

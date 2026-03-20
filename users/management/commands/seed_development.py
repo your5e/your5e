@@ -211,6 +211,18 @@ class Command(BaseCommand):
             created_by=norm,
         )
 
+        region_page = Page.objects.create(wiki=notebook)
+        region_page.update(
+            filename="World Regions/Northern Kingdoms/Frosthold.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Frosthold
+
+                A fortress city in the frozen north.
+            """).encode(),
+            created_by=norm,
+        )
+
         deleted_page = Page.objects.create(wiki=notebook)
         deleted_page.update(
             filename="Old Notes.md",
@@ -287,14 +299,25 @@ class Command(BaseCommand):
         norms_campaign = Campaign.objects.create(
             name="The Long Road",
             owner=norm,
-            description="A journey across the realm.",
+            description=dedent("""\
+                A journey across the realm.
+
+                The party must travel from **Millbrook** to the distant city of
+                *Thornhaven*, facing dangers along the way.
+            """).strip(),
         )
         norms_campaign.players.add(wendy)
 
         wendys_campaign = Campaign.objects.create(
             name="Secrets of the Tower",
             owner=wendy,
-            description="Mysteries await in the ancient tower.",
+            description=dedent("""\
+                Mysteries await in the ancient tower.
+
+                - Explore the ruins
+                - Uncover the secrets
+                - Survive the guardians
+            """).strip(),
         )
         wendys_campaign.players.add(norm)
         wendys_campaign.players.add(susan)

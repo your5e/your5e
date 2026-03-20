@@ -344,6 +344,17 @@ class TestVersion(WikiMixin):
         html = page.latest_version.render(base_url="/wiki")
         assert 'href="/wiki/getting-started"' in html
 
+    def test_render_strips_html_tags(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="With HTML.md",
+            mime_type="text/markdown",
+            data=b"<div>block</div><b>bold</b><sup>super</sup><x>custom</x>",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>blockboldsupercustom</p>"
+
 
 @pytest.mark.django_db
 class TestPage(WikiMixin):

@@ -9,8 +9,9 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 DEFAULT_TIMEOUT = 2000
+DEFAULT_BASE_URL = "http://localhost:5844"
 verbose = False
-base_url = "http://localhost:5844"
+captured = {}
 
 
 def log(msg):
@@ -44,13 +45,13 @@ def load_config():
         return tomllib.load(handle)
 
 
-def login(page, username, password):
+def login(page, username, password, login_base_url):
     log(f"logging in as {username}")
-    page.goto(base_url + "/login")
+    page.goto(login_base_url + "/login")
     page.fill('input[name="username"]', username)
     page.fill('input[name="password"]', password)
     page.click('button[type="submit"]')
-    page.wait_for_url(base_url + "/**")
+    page.wait_for_url(login_base_url + "/**")
     log(f"logged in, now at {page.url}")
 
 
@@ -89,6 +90,40 @@ def execute_steps(page, steps):
                     locator.fill(value, timeout=timeout)
                 except PlaywrightError:
                     raise StepError(f'fill field "{field}" not found') from None
+            elif step_type == "capture":
+                selector = params["selector"]
+                attr = params.get("attr")
+                pattern = params.get("pattern")
+                name = params["as"]
+                log(f"capture {name} from {selector}")
+                locator = scope.locator(selector)
+                try:
+                    locator.wait_for(timeout=timeout)
+                    if attr:
+                        value = locator.get_attribute(attr)
+                    else:
+                        value = locator.text_content()
+                    if pattern:
+                        match = re.search(pattern, value)
+                        if match:
+                            value = match.group(1)
+                        else:
+                            raise StepError(
+                                f'capture pattern "{pattern}" did not match'
+                            )
+                    captured[name] = value
+                    log(f"captured {name} = {value}")
+                except PlaywrightError:
+                    raise StepError(f'capture "{selector}" not found') from None
+            elif step_type == "select":
+                field = params["field"]
+                value = params["value"]
+                log(f"select {field} = {value}")
+                locator = scope.locator(f'[name="{field}"]')
+                try:
+                    locator.select_option(value, timeout=timeout)
+                except PlaywrightError:
+                    raise StepError(f'select field "{field}" not found') from None
             elif step_type == "click":
                 if "text" in params:
                     text = params["text"]
@@ -182,6 +217,10 @@ def main():
         help="skip database reset",
     )
     parser.add_argument(
+        "-w", "--width",
+        help="only capture specific width (e.g. desktop)",
+    )
+    parser.add_argument(
         "pages",
         nargs="*",
         help="specific pages to screenshot",
@@ -198,6 +237,7 @@ def main():
     users = config.get("users", {})
     all_pages = config.get("pages", {})
     current_user = None
+    current_base_url = None
 
     pages = all_pages
     if args.pages:
@@ -211,21 +251,32 @@ def main():
         page = browser.new_page()
 
         for name, spec in pages.items():
+            if spec.get("skip"):
+                log(f"skipping {name}")
+                continue
+
             required_user = spec.get("user")
+            page_base_url = spec.get("base_url", DEFAULT_BASE_URL)
             log(f"processing {name} (user={required_user})")
 
             try:
-                if required_user != current_user:
+                needs_login = (
+                    required_user != current_user
+                    or page_base_url != current_base_url
+                )
+                if needs_login:
                     if current_user is not None:
                         logout(page)
                     if required_user is not None:
                         password = users[required_user]
-                        login(page, required_user, password)
+                        login(page, required_user, password, page_base_url)
                     current_user = required_user
+                    current_base_url = page_base_url
 
                 if "path" in spec:
-                    log(f"goto {spec['path']}")
-                    page.goto(base_url + spec["path"])
+                    path = spec["path"].format(**captured)
+                    log(f"goto {path}")
+                    page.goto(page_base_url + path)
                     log(f"now at {page.url}")
                 if "steps" in spec:
                     execute_steps(page, spec["steps"])
@@ -241,6 +292,9 @@ def main():
 
                 for extra in spec.get("add_widths", []):
                     widths[extra["name"]] = extra["value"]
+
+                if args.width:
+                    widths = {k: v for k, v in widths.items() if k == args.width}
 
                 screenshot(page, name, widths)
 

@@ -1294,9 +1294,9 @@ function hash_file {
 }
 
 function log_watch_event {
-    [[ $verbose -eq 1 ]] \
-        && echo "$(date +%H:%M:%S) watch: $1" \
-        || :
+    if [[ $verbose -eq 1 ]]; then
+        echo "$(date +%H:%M:%S) watch: $1"
+    fi
 }
 
 function remove_file {

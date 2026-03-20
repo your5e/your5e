@@ -1,0 +1,96 @@
+@use "../base/colours" as *;
+@use "../theme/typography" as *;
+
+main.notebook {
+    .notebook-header {
+        box-sizing: border-box;
+        width: calc(100% + 2 * var(--indent));
+        margin-left: calc(-1 * var(--indent));
+        padding: 0.8em var(--indent);
+
+        .notebook-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notebook-actions {
+            display: flex;
+            gap: 0.5em;
+        }
+    }
+
+    .page-header .page-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+
+        form {
+            margin: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 0.5em;
+        }
+    }
+
+    &.edit {
+        padding-bottom: 1em;
+
+        .upload-form {
+            display: flex;
+            align-items: stretch;
+            gap: 0.5em;
+            margin: $one-line;
+
+            button {
+                display: flex;
+                align-items: center;
+            }
+        }
+    }
+
+    hr {
+        width: 66%;
+        height: 2px;
+        margin: 2em 0;
+        border: none;
+        background-color: $colour-danger;
+    }
+
+
+    &.settings {
+        h2 {
+            margin-bottom: 0;
+        }
+
+        p {
+            margin-top: 0;
+        }
+        p.cancel {
+            margin-top: 2em;
+        }
+
+        form {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.5em;
+        }
+
+        input[type="text"] {
+            width: auto;
+        }
+
+        /*
+        ul {
+            list-style: disc;
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+        */
+
+    }
+}

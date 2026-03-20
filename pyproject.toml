@@ -3,6 +3,7 @@ name = "your5e"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "bleach>=6.0",
     "django>=5.1",
     "django-rest-knox>=5.0",
     "djangorestframework>=3.15",

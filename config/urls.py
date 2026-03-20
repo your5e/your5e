@@ -1,16 +1,18 @@
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.urls import path, re_path
+from django.urls import path, re_path, reverse_lazy
 from django.views.generic import RedirectView
 
 from api.notebooks.views import (
     NotebookInternalView,
-    NotebookListView,
     NotebookPagesView,
     NotebookPrivateView,
     NotebookPublicView,
     NotebookUserView,
     PageContentView,
+)
+from api.notebooks.views import (
+    NotebookListView as ApiNotebookListView,
 )
 from api.views import PingView
 from campaigns.views import (
@@ -18,7 +20,9 @@ from campaigns.views import (
     CampaignDeleteView,
     CampaignJoinView,
     CampaignLeaveView,
+    CampaignListView,
     CampaignNotebooksView,
+    CampaignSettingsView,
     CampaignView,
 )
 from help.views import HelpPageView
@@ -27,6 +31,7 @@ from notebooks.views import (
     NotebookCreateView,
     NotebookDeletedPagesView,
     NotebookDeleteView,
+    NotebookListView,
     NotebookPageCreateView,
     NotebookPageDeleteView,
     NotebookPageRestoreView,
@@ -70,7 +75,7 @@ urlpatterns = [
     path(
         route="api/notebooks/",
         name="api_notebooks",
-        view=NotebookListView.as_view(),
+        view=ApiNotebookListView.as_view(),
     ),
     path(
         route="api/notebooks/public",
@@ -141,6 +146,15 @@ urlpatterns = [
     ),
 
     path(
+        route="campaigns/",
+        name="campaign_list",
+        view=CampaignListView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/",
+        view=RedirectView.as_view(url=reverse_lazy("campaign_list"), permanent=False),
+    ),
+    path(
         route="campaigns/create",
         name="campaign_create",
         view=CampaignCreateView.as_view(),
@@ -166,11 +180,25 @@ urlpatterns = [
         view=CampaignNotebooksView.as_view(),
     ),
     path(
+        route="campaigns/settings/<str:username>/<str:slug>",
+        name="campaign_settings",
+        view=CampaignSettingsView.as_view(),
+    ),
+    path(
         route="campaigns/<str:username>/<str:slug>",
         name="campaign",
         view=CampaignView.as_view(),
     ),
 
+    path(
+        route="notebooks/",
+        name="notebook_list",
+        view=NotebookListView.as_view(),
+    ),
+    path(
+        route="notebooks/<str:username>/",
+        view=RedirectView.as_view(url=reverse_lazy("notebook_list"), permanent=False),
+    ),
     path(
         route="notebooks/create",
         name="notebook_create",

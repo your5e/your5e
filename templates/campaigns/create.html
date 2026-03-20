@@ -2,12 +2,14 @@
 
 {% block title %}Create Campaign - Your 5E{% endblock %}
 
-{% block content %}
-<h1>Create Campaign</h1>
+{% block page_content %}
 
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Create campaign</button>
-</form>
+  <h1>Create Campaign</h1>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create campaign</button>
+  </form>
+
 {% endblock %}

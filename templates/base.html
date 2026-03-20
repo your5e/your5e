@@ -1,27 +1,62 @@
+{% load static %}
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Your 5E{% endblock %}</title>
-</head>
-<body>
-  <nav>
-    <ul>
-      <li><a href="{% url 'help' path='' %}">Help</a></li>
-    {% if user.is_authenticated %}
-      <li><a href="{% url 'profile' username=user.username %}">{{ user.username }}</a></li>
-      <li>
-        <form method="post" action="{% url 'logout' %}">
-          {% csrf_token %}
-          <button type="submit">Logout</button>
-        </form>
-      </li>
-    {% else %}
-      <li><a href="{% url 'login' %}">Login</a></li>
-    {% endif %}
-    </ul>
-  </nav>
-  {% block content %}{% endblock %}
-</body>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Your 5E{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/screen.css' %}">
+  </head>
+  <body>
+
+    <header>
+      <a href="/">your5e.com</a>
+      <nav>
+        <ul>
+          {% if user.is_authenticated %}
+            <li>
+              <a class="user" href="{% url 'profile' username=user.username %}">{{ user.username }}</a>
+            </li>
+            <li>
+              <a href="{% url 'campaign_list' %}">Campaigns</a>
+            </li>
+            <li>
+              <a href="{% url 'notebook_list' %}">Notebooks</a>
+            </li>
+            <li>
+              <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit">Logout</button>
+              </form>
+            </li>
+          {% else %}
+            <li>
+              <a href="{% url 'login' %}">Login</a>
+            </li>
+          {% endif %}
+        </ul>
+        <ul>
+          <li>
+            <a href="{% url 'help' path='' %}">Help</a>
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main{% block main_class %}{% endblock %}>
+      <header>
+        {% block page_context %}{% endblock %}
+        {% block page_breadcrumbs %}{% endblock %}
+      </header>
+      <div class="page-content">
+        {% block page_content %}{% endblock %}
+      </div>
+    </main>
+
+    <footer>
+      <p>© 2026 your5e</p>
+    </footer>
+
+  </body>
 </html>

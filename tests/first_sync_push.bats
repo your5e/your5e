@@ -35,6 +35,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -65,6 +66,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -78,6 +80,7 @@ setup() {
     assert_file_downloaded "Bestiary.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -94,6 +97,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -117,6 +121,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -129,6 +134,7 @@ setup() {
     assert_file_downloaded "Bestiary.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -146,6 +152,7 @@ setup() {
         pull: ERROR cannot pull "Bestiary.md", blocked by local directory
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -158,6 +165,7 @@ setup() {
     assert_file_downloaded "sessions/session-01.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -177,6 +185,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -200,6 +209,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -212,6 +222,7 @@ setup() {
     assert_file_downloaded "Bestiary.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }
 
@@ -229,6 +240,7 @@ setup() {
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
+        pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -241,5 +253,6 @@ setup() {
     assert_file_downloaded "Bestiary.md"
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
+    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
     assert_success
 }

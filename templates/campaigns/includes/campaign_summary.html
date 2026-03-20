@@ -1,0 +1,17 @@
+{% if description_html %}
+  <div class="user-content">
+    {{ description_html|safe }}
+  </div>
+{% endif %}
+
+<h2>Players</h2>
+<ul>
+  {% for player in players %}
+    <li>
+      {{ player.username }}
+      {% if player == campaign.owner %}
+        (owner)
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>

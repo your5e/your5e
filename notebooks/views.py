@@ -7,11 +7,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
-from campaigns.models import CampaignNotebook
 from notebooks.forms import CollaboratorForm, NotebookCreateForm, PageForm
 from notebooks.models import Notebook, NotebookPermission
 from users.models import User
-from wikis.models import Page
+from wikis.models import Page, Version
 
 MIME_TYPE_FALLBACKS = {
     ".md": "text/markdown",
@@ -101,11 +100,49 @@ class NotebookSettingsMixin:
         collaborators = NotebookPermission.objects.filter(
             notebook=self.object
         ).select_related("user")
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
         return {
             "notebook": self.object,
             "collaborators": collaborators,
             "visibility_choices": Notebook.Visibility.choices,
+            "create_page_url": create_page_url,
             **kwargs,
+        }
+
+
+class NotebookEditMixin:
+    def get_edit_context(self, path, filename, version=None):
+        if version:
+            source = version
+        else:
+            source = Version(path=path, filename=filename)
+        is_index = path == "index" or path.endswith("/index")
+
+        if is_index:
+            breadcrumbs = self.object.breadcrumbs_for(source)[:-1]
+            parts = filename.split("/")
+            if len(parts) >= 2:
+                editing_name = parts[-2]
+            else:
+                editing_name = self.object.name
+        else:
+            breadcrumbs = self.object.breadcrumbs_for(source)
+            editing_name = source.display_name
+
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
+
+        return {
+            "notebook": self.object,
+            "breadcrumbs": breadcrumbs,
+            "editing_name": editing_name,
+            "editing_url": self.object.get_absolute_url() + path,
+            "create_page_url": create_page_url,
         }
 
 
@@ -232,8 +269,6 @@ class NotebookCreateView(View):
 class NotebookView(NotebookReadMixin, View):
     @NotebookPermissions.view_required
     def get(self, request, username, slug, path=""):
-        is_owner = request.user == self.object.owner
-        user_can_edit = NotebookPermissions.can_edit(self.object, request.user)
         contents = self.object.contents_in(path)
 
         # index.md is rendered inline, exclude from the file list
@@ -253,7 +288,7 @@ class NotebookView(NotebookReadMixin, View):
         # an index only "exists" if there is content below
         if not files and not contents["folders"] and not index_exists:
             context = {"notebook": self.object, "path": path}
-            if user_can_edit:
+            if NotebookPermissions.can_edit(self.object, request.user):
                 filename = self.object.suggest_filename(index_path)
                 context["form"] = PageForm(initial={"filename": filename})
                 context["form_action"] = reverse("notebook_page", kwargs={
@@ -268,22 +303,41 @@ class NotebookView(NotebookReadMixin, View):
                 status=HTTPStatus.NOT_FOUND,
             )
 
-        campaigns = [
-            cn.campaign for cn in
-                CampaignNotebook.objects.filter(
-                    notebook=self.object
-                ).select_related("campaign")
-        ]
+        if path:
+            representative = self.object.latest_versions().filter(
+                path__startswith=path + "/"
+            ).first()
+            path_depth = len(path.split("/"))
+            breadcrumbs = self.object.breadcrumbs_for(representative)[:path_depth + 1]
+            current_page = breadcrumbs[-1]["name"]
+        else:
+            current_page = ""
+            breadcrumbs = [
+                {"name": self.object.name, "url": self.object.get_absolute_url()},
+            ]
+
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
+        if path:
+            create_page_url += f"?folder={path}"
 
         context = {
             "notebook": self.object,
-            "is_owner": is_owner,
-            "can_edit": user_can_edit,
             "folders": contents["folders"],
             "files": files,
             "index_exists": index_exists,
-            "campaigns": campaigns,
+            "breadcrumbs": breadcrumbs,
+            "current_page": current_page,
+            "create_base": self.object.get_absolute_url() + (path + "/").lstrip("/"),
+            "create_page_url": create_page_url,
         }
+
+        if not path:
+            context["recent_pages"] = (
+                self.object.latest_versions().order_by("-created_at")[:5]
+            )
 
         if index_page:
             try:
@@ -304,10 +358,14 @@ class NotebookView(NotebookReadMixin, View):
 class NotebookSettingsView(NotebookSettingsMixin, NotebookReadMixin, View):
     @NotebookPermissions.owner_required
     def get(self, request, username, slug):
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "Settings"},
+        ]
         return render(
             request,
             "notebooks/settings.html",
-            self.get_context_data(),
+            self.get_context_data(breadcrumbs=breadcrumbs),
         )
 
 
@@ -315,28 +373,61 @@ class NotebookDeletedPagesView(NotebookReadMixin, View):
     @NotebookPermissions.edit_required
     def get(self, request, username, slug):
         deleted_pages = self.object.deleted_pages()
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "Deleted pages"},
+        ]
         return render(
             request,
             "notebooks/deleted.html",
             {
                 "notebook": self.object,
                 "deleted_pages": deleted_pages,
+                "create_page_url": create_page_url,
+                "breadcrumbs": breadcrumbs,
             },
         )
 
 
-class NotebookPageCreateView(NotebookReadMixin, View):
+class NotebookPageCreateView(NotebookEditMixin, NotebookReadMixin, View):
     @NotebookPermissions.edit_required
     def get(self, request, username, slug):
-        form = PageForm()
-        return render(
-            request,
-            "notebooks/create_page.html",
-            {
-                "notebook": self.object,
-                "form": form,
-            },
-        )
+        folder = request.GET.get("folder", "")
+
+        # find a unique "new-page" path
+        base_path = (folder + "/new-page").lstrip("/")
+        path = base_path
+        counter = 2
+        while True:
+            try:
+                self.object.get_page(path=path)
+                path = f"{base_path}-{counter}"
+                counter += 1
+            except Page.DoesNotExist:
+                break
+
+        filename = self.object.suggest_filename(path)
+        form = PageForm(initial={"filename": filename})
+
+        context = self.get_edit_context(path, filename)
+        context["breadcrumbs"].append({"name": "create"})
+        context.update({
+            "page": None,
+            "version": None,
+            "form": form,
+            "history": [],
+            "form_action": reverse("notebook_page", kwargs={
+                "username": username,
+                "slug": slug,
+                "path": path,
+            }),
+        })
+
+        return render(request, "notebooks/edit.html", context)
 
 
 class NotebookUploadView(NotebookWriteMixin, View):
@@ -384,6 +475,13 @@ class NotebookRenameView(NotebookWriteMixin, View):
         if not name:
             return redirect(self.object)
 
+        if name == self.object.name:
+            return redirect(
+                "notebook_settings",
+                username=self.object.owner.username,
+                slug=self.object.slug,
+            )
+
         if not confirm:
             return render(request, "notebooks/confirm_rename.html", {
                 "notebook": self.object,
@@ -420,8 +518,13 @@ class NotebookDeleteView(NotebookWriteMixin, View):
             self.object.delete()
             return redirect("profile", username=owner_username)
 
+        breadcrumbs = [
+            {"name": self.object.name, "url": self.object.get_absolute_url()},
+            {"name": "delete"},
+        ]
         return render(request, "notebooks/confirm_delete_notebook.html", {
             "notebook": self.object,
+            "breadcrumbs": breadcrumbs,
         })
 
 
@@ -466,6 +569,21 @@ class NotebookPageRestoreView(View):
             "path": page.latest_version.path,
         })
 
+    def get_restore_context(self, notebook, page, form):
+        breadcrumbs = notebook.breadcrumbs_for(page.latest_version)
+        breadcrumbs.append({"name": "restore"})
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": notebook.owner.username,
+            "slug": notebook.slug,
+        })
+        return {
+            "notebook": notebook,
+            "page": page,
+            "form": form,
+            "breadcrumbs": breadcrumbs,
+            "create_page_url": create_page_url,
+        }
+
     def get(self, request):
         from notebooks.forms import RestoreForm
 
@@ -478,11 +596,11 @@ class NotebookPageRestoreView(View):
             return denied
 
         form = RestoreForm()
-        return render(request, "notebooks/restore.html", {
-            "notebook": notebook,
-            "page": page,
-            "form": form,
-        })
+        return render(
+            request,
+            "notebooks/restore.html",
+            self.get_restore_context(notebook, page, form),
+        )
 
     def post(self, request):
         from notebooks.forms import RestoreForm
@@ -497,11 +615,12 @@ class NotebookPageRestoreView(View):
 
         form = RestoreForm(request.POST)
         if not form.is_valid():
-            return render(request, "notebooks/restore.html", {
-                "notebook": notebook,
-                "page": page,
-                "form": form,
-            }, status=HTTPStatus.BAD_REQUEST)
+            return render(
+                request,
+                "notebooks/restore.html",
+                self.get_restore_context(notebook, page, form),
+                status=HTTPStatus.BAD_REQUEST,
+            )
 
         filename = form.cleaned_data.get("filename") or None
         try:
@@ -509,11 +628,12 @@ class NotebookPageRestoreView(View):
         except ValidationError as e:
             for message in e.messages:
                 form.add_error("filename", message)
-            return render(request, "notebooks/restore.html", {
-                "notebook": notebook,
-                "page": page,
-                "form": form,
-            }, status=HTTPStatus.CONFLICT)
+            return render(
+                request,
+                "notebooks/restore.html",
+                self.get_restore_context(notebook, page, form),
+                status=HTTPStatus.CONFLICT,
+            )
 
         return redirect(notebook)
 
@@ -607,7 +727,7 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View)
         return redirect(self.object)
 
 
-class NotebookPageView(NotebookReadMixin, View):
+class NotebookPageView(NotebookEditMixin, NotebookReadMixin, View):
     @NotebookPermissions.view_required
     def get(self, request, username, slug, path):
         if path.endswith(".md"):
@@ -621,13 +741,28 @@ class NotebookPageView(NotebookReadMixin, View):
         try:
             page = self.object.get_page(path=path)
         except Page.DoesNotExist:
-            context = {"notebook": self.object, "path": path}
-            if NotebookPermissions.can_edit(self.object, request.user):
-                filename = self.object.suggest_filename(path)
-                context["form"] = PageForm(initial={"filename": filename})
+            if not NotebookPermissions.can_edit(self.object, request.user):
+                return render(
+                    request,
+                    "notebooks/not_found.html",
+                    {"notebook": self.object, "path": path},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+
+            filename = self.object.suggest_filename(path)
+            form = PageForm(initial={"filename": filename})
+
+            context = self.get_edit_context(path, filename)
+            context["breadcrumbs"].append({"name": "create"})
+            context.update({
+                "page": None,
+                "version": None,
+                "form": form,
+                "history": [],
+            })
             return render(
                 request,
-                "notebooks/not_found.html",
+                "notebooks/edit.html",
                 context,
                 status=HTTPStatus.NOT_FOUND,
             )
@@ -650,12 +785,16 @@ class NotebookPageView(NotebookReadMixin, View):
                 filename = filename[:-3]
 
             form = PageForm(initial={"filename": filename, "content": content})
-            return render(request, "notebooks/edit.html", {
-                "notebook": self.object,
+
+            context = self.get_edit_context(version.path, version.filename, version)
+            context["breadcrumbs"].append({"name": "edit"})
+            context.update({
                 "page": page,
                 "version": version,
                 "form": form,
+                "history": page.history(),
             })
+            return render(request, "notebooks/edit.html", context)
 
         history = page.history()
         version_number = request.GET.get("version")
@@ -668,13 +807,20 @@ class NotebookPageView(NotebookReadMixin, View):
         content = version.render(base_url=self.object.get_absolute_url())
 
         if isinstance(content, str):
+            breadcrumbs = self.object.breadcrumbs_for(version)
+
+            create_page_url = reverse("notebook_create_page", kwargs={
+                "username": self.object.owner.username,
+                "slug": self.object.slug,
+            })
             return render(request, "notebooks/page.html", {
                 "notebook": self.object,
                 "page": version,
+                "breadcrumbs": breadcrumbs,
                 "content": content,
                 "history": history,
                 "is_old_version": is_old_version,
-                "can_edit": NotebookPermissions.can_edit(self.object, request.user),
+                "create_page_url": create_page_url,
             })
         return HttpResponse(content, content_type=version.mime_type)
 
@@ -685,13 +831,19 @@ class NotebookPageView(NotebookReadMixin, View):
             version = page.latest_version
             mime_type = version.mime_type
             default_filename = version.filename
+            current_page = version.display_name
         except Page.DoesNotExist:
             page = None
             version = None
             mime_type = "text/markdown"
             default_filename = None
+            current_page = path
 
         form = PageForm(request.POST)
+        create_page_url = reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
         if not form.is_valid():
             return render(
                 request,
@@ -701,6 +853,8 @@ class NotebookPageView(NotebookReadMixin, View):
                     "page": page,
                     "version": version,
                     "form": form,
+                    "current_page": current_page,
+                    "create_page_url": create_page_url,
                 },
                 status=HTTPStatus.BAD_REQUEST,
             )
@@ -726,6 +880,8 @@ class NotebookPageView(NotebookReadMixin, View):
                     "page": page,
                     "version": version,
                     "form": form,
+                    "current_page": current_page,
+                    "create_page_url": create_page_url,
                 },
                 status=HTTPStatus.BAD_REQUEST,
             )
@@ -753,6 +909,8 @@ class NotebookPageView(NotebookReadMixin, View):
                 "page": page,
                 "version": page.latest_version,
                 "form": form,
+                "current_page": current_page,
+                "create_page_url": create_page_url,
             }
             for message in e.messages:
                 if "already exists" in message:
@@ -786,3 +944,23 @@ class NotebookPageView(NotebookReadMixin, View):
             "path": new_path,
         })
         return redirect(url)
+
+
+class NotebookListView(View):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+
+        my_notebooks = Notebook.objects.filter(owner=request.user).order_by(
+            "name"
+        ).prefetch_related("campaign_notebooks__campaign")
+        other_notebooks = Notebook.objects.filter(
+            notebookpermission__user=request.user
+        ).exclude(owner=request.user).distinct().order_by("name").prefetch_related(
+            "campaign_notebooks__campaign", "owner"
+        )
+
+        return render(request, "notebooks/list.html", {
+            "my_notebooks": my_notebooks,
+            "other_notebooks": other_notebooks,
+        })

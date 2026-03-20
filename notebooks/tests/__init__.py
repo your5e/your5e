@@ -124,6 +124,14 @@ class NotebookMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        region_page = Page.objects.create(wiki=self.wendys_notebook)
+        region_page.update(
+            filename="World Regions/Northern Kingdoms/Frosthold.md",
+            mime_type="text/markdown",
+            data=b"# Frosthold\n\nA fortress city in the frozen north.",
+            created_by=self.wendy,
+        )
+
         page_with_wikilinks = Page.objects.create(wiki=self.wendys_notebook)
         page_with_wikilinks.update(
             filename="links.md",
@@ -293,22 +301,37 @@ class NotebookMixin(UserMixin):
         assert 'href="/notebooks/settings/' not in content
 
     def assert_edit_controls_present(self, content):
-        assert '?edit">Edit' in content
+        normalised = " ".join(content.split())
+        assert (
+            '<input type="hidden" name="edit"> <button type="submit">Edit</button>'
+            in normalised
+        )
         assert '/notebooks/deleted/' in content
         assert '/notebooks/create-page/' in content
-        assert 'action="/notebooks/delete-page"' in content
 
     def assert_edit_controls_absent(self, content):
-        assert '?edit">Edit' not in content
+        normalised = " ".join(content.split())
+        assert (
+            '<input type="hidden" name="edit"> <button type="submit">Edit</button>'
+            not in normalised
+        )
         assert 'href="/notebooks/restore?page=' not in content
         assert '/notebooks/create-page/' not in content
         assert 'action="/notebooks/delete-page"' not in content
 
     def assert_page_edit_link_present(self, content):
-        assert '?edit">Edit</a>' in content
+        normalised = " ".join(content.split())
+        assert (
+            '<input type="hidden" name="edit"> <button type="submit">Edit</button>'
+            in normalised
+        )
 
     def assert_page_edit_link_absent(self, content):
-        assert '?edit">Edit</a>' not in content
+        normalised = " ".join(content.split())
+        assert (
+            '<input type="hidden" name="edit"> <button type="submit">Edit</button>'
+            not in normalised
+        )
 
     def assert_create_form_present(self, content):
         assert 'name="filename"' in content
@@ -326,6 +349,10 @@ class NotebookMixin(UserMixin):
         assert f'action="{action}"' in content
         assert 'name="confirm"' in content
 
+    def assert_notebook_header_present(self, content, notebook):
+        assert '<div class="notebook-header">' in content
+        assert f'<p class="notebook-name">{html.escape(notebook.name)}</p>' in content
+
     def assert_edit_page_form_present(self, content):
         assert "<form" in content
         assert "<textarea" in content
@@ -334,23 +361,15 @@ class NotebookMixin(UserMixin):
         assert 'action="/notebooks/delete-page"' in content
 
     def assert_versions_present(self, content, param_name, page, current=None):
-        assert '<form ' in content
         assert f'name="{param_name}"' in content
-        assert '<button' in content
+        normalised = " ".join(content.split())
         if current is None:
             current = page.latest_version
         for version in page.history():
             option_value = f'<option value="{version.number}"'
+            assert option_value in normalised
             if version == current:
-                assert option_value not in content
-            else:
-                date = version.created_at.strftime("%-d %b %Y")
-                expected = (
-                    f'<option value="{version.number}">'
-                    f'v{version.number} by {version.created_by.username} on {date}'
-                    f'</option>'
-                )
-                assert expected in content
+                assert f'<option value="{version.number}" selected>' in normalised
 
     def assert_versions_absent(self, content, param_name):
         assert param_name not in content

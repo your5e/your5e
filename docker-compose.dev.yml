@@ -25,3 +25,9 @@ services:
       DB_PASSWORD: "your5e"
       DB_HOST: "db"
       DB_PORT: "5432"
+
+  sass:
+    build: .
+    volumes:
+      - .:/app
+    command: sass --watch static/css/source/screen.scss:static/css/screen.css

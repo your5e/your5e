@@ -1,0 +1,32 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+@use "typography" as *;
+
+html {
+    font-size: $base-font-size;
+}
+
+body {
+    color: $colour-text;
+    font-family: $font-site;
+    line-height: 1.5;
+}
+
+@media (min-width: 480px) {
+    .site-content,
+    .user-content {
+        font-size: $base-font-size;
+    }
+}
+
+code,
+pre,
+kbd {
+    font-family: $font-mono;
+}
+
+.page-header {
+    border-bottom: 1px solid $colour-subtle-border;
+    font-family: $font-site;
+    font-size: $size-small-pica;
+}

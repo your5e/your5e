@@ -350,6 +350,7 @@ class TestNotebookPages(NotebookApiMixin):
         assert filenames == [
             "Session One.md",
             "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
             "villains/necromancer.md",
             "heroes/index.md",
             "heroes/shield.png",
@@ -404,7 +405,7 @@ class TestNotebookPages(NotebookApiMixin):
         assert response.status_code == HTTPStatus.OK
         results = response.json()["results"]
 
-        page = results[8]
+        page = results[9]
         assert TIMESTAMP_PATTERN.match(page["updated_at"])
         assert page == {
             "uuid": page["uuid"],
@@ -419,7 +420,7 @@ class TestNotebookPages(NotebookApiMixin):
             "content_hash": "679db08be18d05d1eb7ca05ddf83b19a7a6cd676bd3b9ae368106ea35d1ba726",  # noqa: E501
         }
 
-        deleted = results[5]
+        deleted = results[6]
         assert TIMESTAMP_PATTERN.match(deleted["deleted_at"])
         assert deleted == {
             "uuid": deleted["uuid"],

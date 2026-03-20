@@ -1,0 +1,49 @@
+@use "../base/colours" as *;
+@use "../theme/typography" as *;
+
+main.campaign {
+    .campaign-header {
+        box-sizing: border-box;
+        width: calc(100% + 2 * var(--indent));
+        margin-left: calc(-1 * var(--indent));
+        padding: 0.8em var(--indent);
+
+        .campaign-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .campaign-actions {
+            display: flex;
+            gap: 0.5em;
+        }
+    }
+
+    hr {
+        width: 66%;
+        height: 2px;
+        margin: 2em 0;
+        border: none;
+        background-color: $colour-danger;
+    }
+
+    &.settings {
+        h2 {
+            margin-bottom: 0;
+        }
+
+        p {
+            margin-top: 0;
+        }
+
+        input[type="text"] {
+            width: auto;
+        }
+
+        li form {
+            display: inline;
+            margin-left: 0.5em;
+        }
+    }
+}

@@ -2,153 +2,155 @@
 
 {% block title %}{{ profile_user }} - Your 5E{% endblock %}
 
-{% block content %}
-{% if show_details %}
-<h1>{{ profile_user.name|default:profile_user.username }}</h1>
+{% block page_content %}
 
-{% if profile_user.description %}
-{{ profile_user.description|linebreaks }}
-{% endif %}
+  {% if show_details %}
+    <h1>{{ profile_user.name|default:profile_user.username }}</h1>
 
-{% if profile_links %}
-<ul>
-{% for link in profile_links %}
-  <li><a href="{{ link.url }}" rel="me">{{ link.label }}</a></li>
-{% endfor %}
-</ul>
-{% endif %}
+    {% if profile_user.description %}
+      {{ profile_user.description|linebreaks }}
+    {% endif %}
 
-{% else %}
-<h1>{{ profile_user.username }}</h1>
-{% endif %}
+    {% if profile_links %}
+      <ul>
+        {% for link in profile_links %}
+          <li><a href="{{ link.url }}" rel="me">{{ link.label }}</a></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
 
-{% if is_own_profile %}
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Save</button>
-</form>
+  {% else %}
+    <h1>{{ profile_user.username }}</h1>
+  {% endif %}
 
-<h2>Visibility</h2>
-{% if profile_user.is_public %}
-<p>Your profile is public.</p>
-<form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
-  {% csrf_token %}
-  <input type="hidden" name="public" value="false">
-  <button type="submit">Make profile private</button>
-</form>
-{% else %}
-<p>Your profile is private.</p>
-<form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
-  {% csrf_token %}
-  <input type="hidden" name="public" value="true">
-  <button type="submit">Make profile public</button>
-</form>
-{% endif %}
+  {% if is_own_profile %}
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Save</button>
+    </form>
 
-<h2>Links</h2>
-{% if profile_links %}
-<ul>
-{% for link in profile_links %}
-  <li>
-    <a href="{{ link.url }}">{{ link.label }}</a>
+    <h2>Visibility</h2>
+    {% if profile_user.is_public %}
+      <p>Your profile is public.</p>
+      <form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
+        {% csrf_token %}
+        <input type="hidden" name="public" value="false">
+        <button type="submit">Make profile private</button>
+      </form>
+    {% else %}
+      <p>Your profile is private.</p>
+      <form method="post" action="{% url 'profile_visibility' username=profile_user.username %}">
+        {% csrf_token %}
+        <input type="hidden" name="public" value="true">
+        <button type="submit">Make profile public</button>
+      </form>
+    {% endif %}
+
+    <h2>Links</h2>
+    {% if profile_links %}
+      <ul>
+        {% for link in profile_links %}
+          <li>
+            <a href="{{ link.url }}">{{ link.label }}</a>
+            <form method="post" action="{% url 'profile_links' username=profile_user.username %}">
+              {% csrf_token %}
+              <input type="hidden" name="delete" value="{{ link.id }}">
+              <button type="submit">Delete</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
     <form method="post" action="{% url 'profile_links' username=profile_user.username %}">
       {% csrf_token %}
-      <input type="hidden" name="delete" value="{{ link.id }}">
-      <button type="submit">Delete</button>
+      {{ link_form.as_p }}
+      <button type="submit">Add link</button>
     </form>
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
 
-<form method="post" action="{% url 'profile_links' username=profile_user.username %}">
-  {% csrf_token %}
-  {{ link_form.as_p }}
-  <button type="submit">Add link</button>
-</form>
-
-<h2>Notebooks</h2>
-{% if notebooks %}
-<ul>
-{% for notebook in notebooks %}
-  <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a></li>
-{% endfor %}
-</ul>
-{% endif %}
-
-{% if shared_notebooks %}
-<h3>Shared with you</h3>
-<ul>
-{% for notebook in shared_notebooks %}
-  <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a> ({{ notebook.owner.username }})</li>
-{% endfor %}
-</ul>
-{% endif %}
-
-<form method="post" action="{% url 'notebook_create' %}">
-  {% csrf_token %}
-  <p><input type="text" name="name" placeholder="Notebook name"></p>
-  <button type="submit">Create notebook</button>
-</form>
-
-<h2>Campaigns</h2>
-{% if campaigns %}
-<ul>
-{% for campaign in campaigns %}
-  <li>
-    <a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">{{ campaign.name }}</a>
-    {% if campaign.owner == profile_user %}
-    (owner)
-    <form method="post" action="{% url 'campaign_delete' %}" style="display:inline">
-      {% csrf_token %}
-      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
-      <button type="submit">Delete</button>
-    </form>
-    {% else %}
-    ({{ campaign.owner.username }})
+    <h2>Notebooks</h2>
+    {% if notebooks %}
+      <ul>
+        {% for notebook in notebooks %}
+          <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a></li>
+        {% endfor %}
+      </ul>
     {% endif %}
-    <form method="post" action="{% url 'campaign_leave' %}" style="display:inline">
+
+    {% if shared_notebooks %}
+      <h3>Shared with you</h3>
+      <ul>
+        {% for notebook in shared_notebooks %}
+          <li><a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a> ({{ notebook.owner.username }})</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" action="{% url 'notebook_create' %}">
       {% csrf_token %}
-      <input type="hidden" name="campaign" value="{{ campaign.pk }}">
-      <button type="submit">Leave</button>
+      <p><input type="text" name="name" placeholder="Notebook name"></p>
+      <button type="submit">Create notebook</button>
     </form>
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
 
-<form method="post" action="{% url 'campaign_create' %}">
-  {% csrf_token %}
-  <p><input type="text" name="name" placeholder="Campaign name"></p>
-  <button type="submit">Create campaign</button>
-</form>
+    <h2>Campaigns</h2>
+    {% if campaigns %}
+      <ul>
+        {% for campaign in campaigns %}
+          <li>
+            <a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">{{ campaign.name }}</a>
+            {% if campaign.owner == profile_user %}
+              (owner)
+              <form method="post" action="{% url 'campaign_delete' %}" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+                <button type="submit">Delete</button>
+              </form>
+            {% else %}
+              ({{ campaign.owner.username }})
+            {% endif %}
+            <form method="post" action="{% url 'campaign_leave' %}" style="display:inline">
+              {% csrf_token %}
+              <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+              <button type="submit">Leave</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
 
-<h2>API Tokens</h2>
-{% if token_created %}
-<p><strong>Copy this now:</strong> <code>{{ token_created }}</code></p>
-{% endif %}
-{% if tokens %}
-<ul>
-{% for token in tokens %}
-  <li>
-    {{ token.name|default:"Unnamed token" }} ({{ token.created|date:"j M Y" }})
+    <form method="post" action="{% url 'campaign_create' %}">
+      {% csrf_token %}
+      <p><input type="text" name="name" placeholder="Campaign name"></p>
+      <button type="submit">Create campaign</button>
+    </form>
+
+    <h2>API Tokens</h2>
+    {% if token_created %}
+      <p><strong>Copy this now:</strong> <code>{{ token_created }}</code></p>
+    {% endif %}
+    {% if tokens %}
+      <ul>
+        {% for token in tokens %}
+          <li>
+            {{ token.name|default:"Unnamed token" }} ({{ token.created|date:"j M Y" }})
+            <form method="post" action="{% url 'profile_tokens' username=profile_user.username %}">
+              {% csrf_token %}
+              <input type="hidden" name="delete" value="{{ token.pk }}">
+              <button type="submit">Delete</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
     <form method="post" action="{% url 'profile_tokens' username=profile_user.username %}">
       {% csrf_token %}
-      <input type="hidden" name="delete" value="{{ token.pk }}">
-      <button type="submit">Delete</button>
+      <p><input type="text" name="name" placeholder="Token name (optional)"></p>
+      <button type="submit">Create token</button>
     </form>
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
 
-<form method="post" action="{% url 'profile_tokens' username=profile_user.username %}">
-  {% csrf_token %}
-  <p><input type="text" name="name" placeholder="Token name (optional)"></p>
-  <button type="submit">Create token</button>
-</form>
+    <p><a href="{% url 'password_change' username=profile_user.username %}">Change password</a></p>
+  {% endif %}
 
-<p><a href="{% url 'password_change' username=profile_user.username %}">Change password</a></p>
-{% endif %}
 {% endblock %}

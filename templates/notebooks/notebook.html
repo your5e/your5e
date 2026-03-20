@@ -1,56 +1,71 @@
 {% extends "base.html" %}
+{% load notebook_permissions %}
 
 {% block title %}{{ notebook.name }} - Your 5E{% endblock %}
 
-{% block content %}
-<h1>{{ notebook.name }}</h1>
-<p>by <a href="/profile/{{ notebook.owner.username }}/">{{ notebook.owner.username }}</a>{% if campaigns %} in {% for campaign in campaigns %}<a href="{{ campaign.get_absolute_url }}">{{ campaign.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
+{% block main_class %} class="notebook"{% endblock %}
 
-{% if index_content %}
-<div class="index-content">
-<header>
-<p>v{{ index_version.number }} by {{ index_version.created_by.username }} on {{ index_version.created_at|date:"j M Y" }}</p>
-{% include "notebooks/includes/version_select.html" with versions=index_history selected=index_version param_name="index_version" %}
-</header>
-{{ index_content|safe }}
-</div>
-{% endif %}
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
 
-{% if folders %}
-<h2>Folders</h2>
-<ul>
-{% for folder in folders %}
-  <li><a href="{{ folder.href }}/">{{ folder.name }}</a></li>
-{% endfor %}
-</ul>
-{% endif %}
+{% block page_breadcrumbs %}
+  {% with versions=index_history selected=index_version param_name="index_version" %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
 
-{% if files %}
-<h2>Pages</h2>
-<ul>
-{% for file in files %}
-  <li>
-    <a href="{{ notebook.get_absolute_url }}{{ file.path }}">{{ file.display_name }}</a>
-    {% if can_edit %}
-    <a href="{{ notebook.get_absolute_url }}{{ file.path }}?edit">edit</a>
-    {% include "notebooks/includes/delete_form.html" with page_pk=file.page.pk %}
-    {% endif %}
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
+{% block page_content %}
+  {% if folders or files %}
+    <nav class="notebook-nav">
+      <h2>
+        {% if not current_page or current_page == "index" %}
+          {{ notebook.name }}
+        {% else %}
+          {{ current_page }}
+        {% endif %}
+        navigation
+      </h2>
+      {% if folders %}
+        <h3>Folders</h3>
+        <ul>
+          {% for folder in folders %}
+            <li>
+              <a href="{{ notebook.get_absolute_url }}{{ folder.href }}/">{{ folder.name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
 
-{% if can_edit %}
-<p><a href="{% url 'notebook_create_page' username=notebook.owner.username slug=notebook.slug %}">Create page</a></p>
-{% if index_exists %}
-<p><a href="index?edit">Edit index.md</a></p>
-{% else %}
-<p><a href="index">Create index.md</a></p>
-{% endif %}
-<p><a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}">Deleted Pages</a></p>
-{% endif %}
+      {% if files %}
+        <h3>Pages</h3>
+        <ul>
+          {% for file in files %}
+            <li>
+              <a href="{{ notebook.get_absolute_url }}{{ file.path }}">{{ file.display_name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
 
-{% if is_owner %}
-<p><a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}">Settings</a></p>
-{% endif %}
+      {% if recent_pages %}
+        <h3>Recent</h3>
+        <ul>
+          {% for page in recent_pages %}
+            <li>
+              <a href="{{ notebook.get_absolute_url }}{{ page.path }}">{{ page.display_name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+  {% if index_content %}
+    <article>
+      <div class="user-content">
+        {{ index_content|safe }}
+      </div>
+    </article>
+  {% endif %}
 {% endblock %}

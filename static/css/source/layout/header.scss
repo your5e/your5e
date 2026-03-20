@@ -1,0 +1,26 @@
+body > header {
+    padding: 0.5em var(--indent);
+}
+
+body > header nav {
+    display: flex;
+    justify-content: space-between;
+}
+
+body > header nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+body > header nav li {
+    display: inline;
+}
+
+body > header nav li + li::before {
+    padding: 0 0.5em;
+}
+
+body > header nav form {
+    display: inline;
+}

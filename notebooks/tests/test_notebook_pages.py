@@ -126,11 +126,12 @@ class TestNotebookPageView(NotebookMixin):
         )
 
     @UserMixin.as_user("wendy")
-    def test_view_page_hides_version_select_when_single_version(self, client):
+    def test_view_page_shows_version_select_with_single_version(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/notes")
         content = response.content.decode()
         self.assert_page_heading_present(content, "Notes")
-        self.assert_versions_absent(content, "version")
+        page = self.wendys_notebook.get_page(path="notes")
+        self.assert_versions_present(content, "version", page)
 
     @UserMixin.as_user("wendy")
     def test_view_page_shows_version_select_in_form(self, client):
@@ -837,11 +838,15 @@ class TestNotebookIndexPage(NotebookMixin):
         assert ">index<" not in content.lower()
 
     @UserMixin.as_user("susan")
-    def test_index_page_hides_version_select_when_single_version(self, client):
+    def test_index_page_shows_version_select_with_single_version(self, client):
         response = client.get("/notebooks/susan/campaign-notes/npcs/")
         content = response.content.decode()
         assert self.susans_npcs_index_text in content
-        self.assert_versions_absent(content, "index_version")
+        self.assert_versions_present(
+            content,
+            "index_version",
+            self.susans_notebook.get_page(path="npcs/index"),
+        )
 
     @UserMixin.as_user("wendy")
     def test_index_page_shows_version_select_in_form(self, client):
@@ -889,7 +894,11 @@ class TestNotebookIndexPage(NotebookMixin):
         response = client.get("/notebooks/wendy/heros-legendes/villains/")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
-        assert "Create index" in content
+        normalised = " ".join(content.split())
+        assert (
+            '<a href="/notebooks/wendy/heros-legendes/villains/index?edit"'
+            ' class="button">Create</a>' in normalised
+        )
         assert "Edit index" not in content
 
     @UserMixin.as_user("susan")
@@ -897,7 +906,11 @@ class TestNotebookIndexPage(NotebookMixin):
         response = client.get("/notebooks/wendy/heros-legendes/villains/")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
-        assert "Create index" in content
+        normalised = " ".join(content.split())
+        assert (
+            '<a href="/notebooks/wendy/heros-legendes/villains/index?edit"'
+            ' class="button">Create</a>' in normalised
+        )
 
     @UserMixin.as_user("mary")
     def test_viewer_does_not_see_create_index_link(self, client):

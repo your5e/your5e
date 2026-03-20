@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Campaigns - Your 5E{% endblock %}
+
+{% block page_content %}
+  <h1>Campaigns</h1>
+
+  <h2>My campaigns</h2>
+  {% if my_campaigns %}
+    <ul>
+      {% for campaign in my_campaigns %}
+        <li>
+          <a href="{{ campaign.get_absolute_url }}">{{ campaign.name }}</a>
+          (players: {% for player in campaign.players.all %}{% if not forloop.first %}, {% endif %}<a
+            href="/profile/{{ player.username }}/">{{ player.username }}</a>{% endfor %})
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No campaigns yet.</p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'campaign_create' %}" class="button">Create a new campaign</a>
+  </p>
+
+  <h2>Other campaigns</h2>
+  {% if other_campaigns %}
+    <ul>
+      {% for campaign in other_campaigns %}
+        <li>
+          <a href="{{ campaign.get_absolute_url }}">{{ campaign.name }}</a>
+          (owner: <a href="/profile/{{ campaign.owner.username }}/">{{ campaign.owner.username }}</a>,
+          players: {% for player in campaign.players.all %}{% if not forloop.first %}, {% endif %}<a
+            href="/profile/{{ player.username }}/">{{ player.username }}</a>{% endfor %})
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>None.</p>
+  {% endif %}
+{% endblock %}

@@ -154,6 +154,25 @@ class Wiki(models.Model):
 
         return "/".join(result)
 
+    def breadcrumbs_for(self, version):
+        base_url = self.get_absolute_url()
+        crumbs = [{"name": self.name, "url": base_url}]
+
+        path_parts = version.path.split("/")
+        filename_parts = version.filename.split("/")
+
+        for i in range(len(path_parts)):
+            is_last = i == len(path_parts) - 1
+            if is_last:
+                name = version.display_name
+                url = base_url + "/".join(path_parts)
+            else:
+                name = filename_parts[i]
+                url = base_url + "/".join(path_parts[:i + 1]) + "/"
+            crumbs.append({"name": name, "url": url})
+
+        return crumbs
+
 
 class Page(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)

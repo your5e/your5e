@@ -1,0 +1,82 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+@use "typography" as *;
+
+input,
+textarea,
+select {
+    border: 1px solid $colour-subtle-border;
+    border-radius: 0;
+    font-family: $font-site;
+    font-size: inherit;
+    padding: 0.3em 0.5em;
+}
+
+input[type="file"]::file-selector-button {
+    background-color: transparent;
+    border: 1px solid $colour-subtle-border;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: $font-site;
+    font-size: inherit;
+    padding: 0.3em 0.8em;
+}
+
+textarea {
+    font-family: $font-mono;
+}
+
+button,
+input[type="submit"],
+a.button {
+    display: inline-block;
+    background-color: transparent;
+    border: 1px solid $colour-subtle-border;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: $font-site;
+    font-size: inherit;
+    padding: 0.3em 0.8em;
+    text-decoration: none;
+    color: inherit;
+}
+button:hover,
+button:focus,
+input[type="submit"]:hover,
+input[type="submit"]:focus,
+a.button:hover,
+a.button:focus {
+    background-color: $colour-subtle-border;
+    color: $colour-subtle;
+    text-decoration: none !important;
+}
+
+button.primary,
+input[type="submit"].primary {
+    background-color: $colour-header;
+    border-color: $colour-header;
+    color: $colour-header-text;
+    font-size: $size-great-primer;
+    font-weight: bold;
+}
+button.primary:hover,
+button.primary:focus,
+input[type="submit"].primary:hover,
+input[type="submit"].primary:focus {
+    background-color: $colour-header-text;
+    color: $colour-header;
+}
+
+button.danger,
+input[type="submit"].danger {
+    background-color: $colour-danger;
+    border-color: $colour-danger;
+    color: $colour-danger-text;
+}
+button.danger:hover,
+button.danger:focus,
+input[type="submit"].danger:hover,
+input[type="submit"].danger:focus {
+    background-color: $colour-danger-text;
+    color: $colour-danger;
+}

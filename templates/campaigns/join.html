@@ -2,17 +2,25 @@
 
 {% block title %}Join {{ campaign.name }} - Your 5E{% endblock %}
 
-{% block content %}
-<h1>{{ campaign.name }}</h1>
+{% block main_class %} class="campaign"{% endblock %}
 
-{% if is_member %}
-<p>You are already a member of this campaign.</p>
-<p><a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">Go to campaign</a></p>
-{% else %}
-<p>You have been invited to join this campaign.</p>
-<form method="post">
-  {% csrf_token %}
-  <button type="submit">Join</button>
-</form>
-{% endif %}
+{% block page_context %}
+  {% include "campaigns/includes/campaign_header.html" %}
+{% endblock %}
+
+{% block page_content %}
+  {% include "campaigns/includes/campaign_summary.html" %}
+
+  {% if is_member %}
+    <p>You are already a member of this campaign.</p>
+    <p>
+      <a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}">Go to campaign</a>
+    </p>
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit">Join this campaign</button>
+    </form>
+  {% endif %}
+
 {% endblock %}

@@ -1,0 +1,33 @@
+@charset "UTF-8";
+
+@import url("https://fonts.googleapis.com/css?family=Vollkorn:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=IBM+Plex+Sans:400,400i,600,700") screen;
+@import url("https://fonts.googleapis.com/css?family=Lora:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700,700i") screen;
+@import url("https://fonts.googleapis.com/css?family=IBM+Plex+Mono:400,600") screen;
+
+$font-brand:
+    "Vollkorn",
+    Georgia,
+    serif;
+
+$font-site:
+    "IBM Plex Sans",
+    system-ui,
+    sans-serif;
+
+$font-user:
+    "Lora",
+    "Libre Baskerville",
+    Georgia,
+    serif;
+
+$font-user-italic:
+    "Libre Baskerville",
+    Georgia,
+    serif;
+
+$font-mono:
+    "IBM Plex Mono",
+    ui-monospace,
+    monospace;

@@ -2,35 +2,48 @@
 
 {% block title %}Restore {{ page.latest_version.filename }} - {{ notebook.name }}{% endblock %}
 
-{% block content %}
-<h1>Restore page</h1>
+{% block main_class %} class="notebook settings"{% endblock %}
 
-<p>Restore <strong>{{ page.latest_version.filename }}</strong> to {{ notebook.name }}.</p>
+{% block page_context %}
+  {% include "notebooks/includes/notebook_header.html" %}
+{% endblock %}
 
-<form method="post">
-  {% csrf_token %}
-  <input type="hidden" name="page" value="{{ page.uuid }}">
+{% block page_breadcrumbs %}
+  {% with current_page="restore" hide_controls=True %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
 
-  {% if form.errors %}
-  <ul class="errorlist">
-    {% for field in form %}
-      {% for error in field.errors %}
-      <li>{{ error }}</li>
-      {% endfor %}
-    {% endfor %}
-    {% for error in form.non_field_errors %}
-    <li>{{ error }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+{% block page_content %}
+  <h2>Restore page</h2>
 
-  <p>
-    <label for="id_filename">Restore to:</label>
-    {{ form.filename }}
-  </p>
-  <p class="help">Leave blank to restore to the original location ({{ page.latest_version.filename }}).</p>
+  <p>Restore <strong>{{ page.latest_version.filename }}</strong> to {{ notebook.name }}.</p>
 
-  <button type="submit">Restore</button>
-  <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}">Cancel</a>
-</form>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="page" value="{{ page.uuid }}">
+
+    {% if form.errors %}
+      <ul class="errorlist">
+        {% for field in form %}
+          {% for error in field.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <p>
+      <label for="id_filename">Restore to:</label>
+      {{ form.filename }}
+    </p>
+    <p class="help">Leave blank to restore to the original location ({{ page.latest_version.filename }}).</p>
+
+    <button type="submit">Restore</button>
+    <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}">Cancel</a>
+  </form>
+
 {% endblock %}
