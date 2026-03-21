@@ -289,25 +289,21 @@ class NotebookMixin(UserMixin):
             assert f'href="{notebook.get_absolute_url()}{page_path}"' not in content
 
     def assert_can_manage(self, content):
-        assert 'action="/notebooks/rename"' in content
-        assert 'action="/notebooks/visibility"' in content
-        assert 'action="/notebooks/collaborators"' in content
+        assert 'href="/notebooks/settings/' in content
 
     def assert_cannot_manage(self, content):
-        assert 'action="/notebooks/rename"' not in content
-        assert 'action="/notebooks/visibility"' not in content
-        assert 'action="/notebooks/collaborators"' not in content
+        assert 'href="/notebooks/settings/' not in content
 
     def assert_edit_controls_present(self, content):
         assert '?edit">Edit' in content
-        assert 'href="/notebooks/restore?page=' in content
-        assert '<input type="file"' in content
+        assert '/notebooks/deleted/' in content
+        assert '/notebooks/create-page/' in content
         assert 'action="/notebooks/delete-page"' in content
 
     def assert_edit_controls_absent(self, content):
         assert '?edit">Edit' not in content
         assert 'href="/notebooks/restore?page=' not in content
-        assert '<input type="file"' not in content
+        assert '/notebooks/create-page/' not in content
         assert 'action="/notebooks/delete-page"' not in content
 
     def assert_page_edit_link_present(self, content):
@@ -681,7 +677,11 @@ class TestNotebookRenameView(NotebookMixin):
     def test_owner_can_rename_notebook(self, client):
         response = client.post(
             "/notebooks/rename",
-            {"notebook": self.wendys_notebook.pk, "name": "Session Notes"},
+            {
+                "notebook": self.wendys_notebook.pk,
+                "name": "Session Notes",
+                "confirm": "true",
+            },
         )
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/wendy/session-notes/"
@@ -727,6 +727,30 @@ class TestNotebookRenameView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.wendys_notebook.refresh_from_db()
         assert self.wendys_notebook.name == "Héros & Légendes"
+
+    @UserMixin.as_user("wendy")
+    def test_rename_shows_confirmation(self, client):
+        response = client.post(
+            "/notebooks/rename",
+            {"notebook": self.wendys_notebook.pk, "name": "Session Notes"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        self.wendys_notebook.refresh_from_db()
+        assert self.wendys_notebook.name == "Héros & Légendes"
+        self.assert_confirmation_form_present(
+            response.content.decode(),
+            "/notebooks/rename",
+        )
+
+    @UserMixin.as_user("wendy")
+    def test_cancel_rename_redirects_to_settings(self, client):
+        response = client.post(
+            "/notebooks/rename",
+            {"notebook": self.wendys_notebook.pk, "name": "Session Notes"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "/notebooks/settings/wendy/heros-legendes/" in content
 
 
 @pytest.mark.django_db
@@ -799,6 +823,16 @@ class TestNotebookVisibilityView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.wendys_notebook.refresh_from_db()
         assert self.wendys_notebook.visibility == Notebook.Visibility.PRIVATE
+
+    @UserMixin.as_user("wendy")
+    def test_cancel_visibility_change_redirects_to_settings(self, client):
+        response = client.post("/notebooks/visibility", {
+            "notebook": self.wendys_notebook.pk,
+            "visibility": "public",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "/notebooks/settings/wendy/heros-legendes/" in content
 
 
 @pytest.mark.django_db
@@ -1039,6 +1073,134 @@ class TestNotebookCollaboratorsView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         self.susans_permission.refresh_from_db()
         assert self.susans_permission.role == NotebookPermission.Role.EDITOR
+
+    @UserMixin.as_user("wendy")
+    def test_empty_username_redisplays_settings_with_error(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wendys_notebook.pk,
+            "username": "",
+            "role": "viewer",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'action="/notebooks/rename"' in content
+        assert "No username provided" in content
+
+    @UserMixin.as_user("wendy")
+    def test_unknown_username_redisplays_settings_with_error(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wendys_notebook.pk,
+            "username": "nonexistent",
+            "role": "viewer",
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'action="/notebooks/rename"' in content
+        assert "User &#x27;nonexistent&#x27; not found" in content
+
+
+@pytest.mark.django_db
+class TestNotebookSettingsView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_owner_can_access_settings(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'action="/notebooks/rename"' in content
+        assert 'action="/notebooks/visibility"' in content
+        assert 'action="/notebooks/collaborators"' in content
+        assert 'action="/notebooks/delete"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_settings_shows_current_name(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert 'value="Héros &amp; Légendes"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_settings_shows_current_visibility(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert 'value="private" selected' in content
+
+    @UserMixin.as_user("wendy")
+    def test_settings_shows_collaborators(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "susan" in content
+        assert "editor" in content
+        assert "mary" in content
+        assert "viewer" in content
+
+    @UserMixin.as_user("susan")
+    def test_editor_cannot_access_settings(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_access_settings(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_access_settings(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_access_settings(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+
+class TestNotebookDeletedPagesView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_owner_can_access_deleted_pages(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_access_deleted_pages(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_access_deleted_pages(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_access_deleted_pages(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_access_deleted_pages(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @UserMixin.as_user("wendy")
+    def test_shows_deleted_page_details(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "old-draft.md" in content
+
+    @UserMixin.as_user("wendy")
+    def test_shows_restore_links(self, client):
+        response = client.get("/notebooks/deleted/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert f"/notebooks/restore?page={self.deleted_page.uuid}" in content
+
+    @UserMixin.as_user("wendy")
+    def test_index_does_not_show_deleted_pages(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "old-draft.md" not in content
+        assert "<h2>Deleted" not in content
+
+    @UserMixin.as_user("wendy")
+    def test_index_shows_link_to_deleted_pages(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "/notebooks/deleted/wendy/heros-legendes/" in content
 
 
 @pytest.mark.django_db
@@ -2394,3 +2556,46 @@ class TestNotebookDeleteView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert Notebook.objects.filter(id=self.wendys_notebook.id).exists()
 
+    @UserMixin.as_user("wendy")
+    def test_cancel_delete_redirects_to_settings(self, client):
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": self.wendys_notebook.pk},
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "/notebooks/settings/wendy/heros-legendes/" in content
+
+
+@pytest.mark.django_db
+class TestNotebookPageCreateView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_owner_can_access_create_page(self, client):
+        response = client.get("/notebooks/create-page/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'name="filename"' in content
+        assert 'name="content"' in content
+        assert 'name="file"' in content
+        assert 'action="/notebooks/wendy/heros-legendes/index"' in content
+        assert 'action="/notebooks/upload"' in content
+        assert f'name="notebook" value="{self.wendys_notebook.pk}"' in content
+
+    @UserMixin.as_user("susan")
+    def test_editor_can_access_create_page(self, client):
+        response = client.get("/notebooks/create-page/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+
+    @UserMixin.as_user("mary")
+    def test_viewer_cannot_access_create_page(self, client):
+        response = client.get("/notebooks/create-page/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_cannot_access_create_page(self, client):
+        response = client.get("/notebooks/create-page/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_access_create_page(self, client):
+        response = client.get("/notebooks/create-page/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED

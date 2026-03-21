@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Confirm visibility change - Your 5E{% endblock %}
+{% block title %}Confirm rename - Your 5E{% endblock %}
 
 {% block content %}
-<h1>Confirm visibility change</h1>
+<h1>Confirm rename</h1>
 
-<p>Change visibility of "{{ notebook.name }}" from {{ notebook.visibility }} to {{ visibility }}?</p>
+<p>Rename "{{ notebook.name }}" to "{{ name }}"?</p>
 
-<form method="post" action="{% url 'notebook_visibility' %}">
+<form method="post" action="{% url 'notebook_rename' %}">
   {% csrf_token %}
   <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <input type="hidden" name="visibility" value="{{ visibility }}">
+  <input type="hidden" name="name" value="{{ name }}">
   <input type="hidden" name="confirm" value="true">
   <button type="submit">Confirm</button>
 </form>

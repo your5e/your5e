@@ -1,4 +1,4 @@
-.PHONY: clean dev lint-python makemigrations migrate reset scry setup test test-python test-integration test-server test-server-down
+.PHONY: clean dev lint-python makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -37,10 +37,7 @@ scry:
 	rm -f scrying/*.png
 	python scrying/scry.py
 
-test-python: lint-python
-	docker compose exec $(EXEC_FLAGS) web pytest
-
-test-server:
+server-tests:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) up --build -d --wait
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py migrate
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py seed_development
@@ -48,12 +45,15 @@ test-server:
 		-c "DROP DATABASE IF EXISTS your5e_seed" \
 		-c "CREATE DATABASE your5e_seed WITH TEMPLATE your5e_test"
 
-test-server-down:
+server-tests-down:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
 
-test-integration:
+test-django: lint-python
+	docker compose exec $(EXEC_FLAGS) web pytest
+
+test-sync-integration:
 	shellcheck tests/*.sh
 	awk 'length > 88 { print FILENAME ":" FNR ": " length " chars > 88"; print; err=1 } END { exit err }' tests/*.sh
 	bats tests/*.bats
 
-test: test-python test-integration
+test: test-django test-sync-integration

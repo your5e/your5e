@@ -31,6 +31,6 @@
   <p class="help">Leave blank to restore to the original location ({{ page.latest_version.filename }}).</p>
 
   <button type="submit">Restore</button>
-  <a href="{{ notebook.get_absolute_url }}">Cancel</a>
+  <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}">Cancel</a>
 </form>
 {% endblock %}

@@ -25,11 +25,14 @@ from help.views import HelpPageView
 from notebooks.views import (
     NotebookCollaboratorsView,
     NotebookCreateView,
+    NotebookDeletedPagesView,
     NotebookDeleteView,
+    NotebookPageCreateView,
     NotebookPageDeleteView,
     NotebookPageRestoreView,
     NotebookPageView,
     NotebookRenameView,
+    NotebookSettingsView,
     NotebookUploadView,
     NotebookView,
     NotebookVisibilityView,
@@ -207,6 +210,21 @@ urlpatterns = [
         route="notebooks/restore",
         name="notebook_restore",
         view=NotebookPageRestoreView.as_view(),
+    ),
+    path(
+        route="notebooks/settings/<str:username>/<str:slug>/",
+        name="notebook_settings",
+        view=NotebookSettingsView.as_view(),
+    ),
+    path(
+        route="notebooks/deleted/<str:username>/<str:slug>/",
+        name="notebook_deleted",
+        view=NotebookDeletedPagesView.as_view(),
+    ),
+    path(
+        route="notebooks/create-page/<str:username>/<str:slug>/",
+        name="notebook_create_page",
+        view=NotebookPageCreateView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/",

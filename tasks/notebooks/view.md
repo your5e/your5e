@@ -106,6 +106,37 @@ be used from both the profile page and campaign page.
 - [X] description textarea, creates index.md by default
 
 
+# Notebook management views @phase
+
+The notebook index page was a placeholder to test functionality, but for real
+use it has too many responsibilities.
+
+Notebooks support user-specified paths, so management views cannot use URLs
+under the notebook's base path (e.g. `/notebooks/<user>/<slug>/settings/`)
+as this would block users from creating pages at that path.
+
+- [X] create and use NotebookSettingsView
+        - collaborator management
+        - visibility controls
+        - rename notebook
+        - delete notebook
+        - remove existing from index page
+- [X] adding an empty collaborator is not an error, redirect back to settings
+- [X] adding an unknown collaborator is a correctable error,
+      redraw form with error not 404
+- [X] not deleting a notebook redirects back to settings
+- [X] not changing visibility redirects back to settings
+- [X] renaming notebook requires confirmation, cancel redirects back to settings
+- [X] create and use NotebookDeletedPagesView
+        - lists deleted page details and provide restore buttons
+        - remove existing from index page
+- [X] create and use NotebookPageCreateView
+        - create new markdown page
+        - upload new file
+        - remove existing from index page
+- [ ] refactor notebook tests into smaller, focused test files
+
+
 # Notebook parent pages @phase
 
 We should not have dead pages in the URL hierarchy.

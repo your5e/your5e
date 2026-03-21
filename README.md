@@ -11,14 +11,17 @@ Development is done with docker, spinning up the stack is:
 # reset the development database
 (computer)% make reset
 
-# make the server for running integration tests available
-(computer)% make test-server
-(computer)% make test-integration
-...
-(computer)% make test-server-down
-
 # make the site available at http://localhost:5843/
 (computer)% make dev
+
+# run tests on the website
+(computer)% make test-django
+
+# make the server for running integration tests available
+(computer)% make server-tests
+(computer)% make test-sync-integration
+...
+(computer)% make server-tests-down
 
 # update archival/testing screenshots
 (computer)% make scry

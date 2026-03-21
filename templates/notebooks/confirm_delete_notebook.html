@@ -14,5 +14,5 @@
   <button type="submit">Delete notebook</button>
 </form>
 
-<p><a href="{% url 'notebook' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
+<p><a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}">Cancel</a></p>
 {% endblock %}

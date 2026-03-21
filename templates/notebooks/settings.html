@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - {{ notebook.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+<p><a href="{{ notebook.get_absolute_url }}">Back to {{ notebook.name }}</a></p>
+
+<h2>Rename</h2>
+<form method="post" action="{% url 'notebook_rename' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <p><input type="text" name="name" value="{{ notebook.name }}"></p>
+  <button type="submit">Rename</button>
+</form>
+
+<h2>Visibility</h2>
+<p>Currently: {{ notebook.visibility }}</p>
+<form method="post" action="{% url 'notebook_visibility' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <select name="visibility">
+    {% for value, label in visibility_choices %}
+    <option value="{{ value }}"{% if notebook.visibility == value %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Change visibility</button>
+</form>
+
+<h2>Collaborators</h2>
+{% if collaborators %}
+<ul>
+{% for permission in collaborators %}
+  <li>
+    {{ permission.user.username }} ({{ permission.role }})
+    <form method="post" action="{% url 'notebook_collaborators' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <input type="hidden" name="remove" value="{{ permission.user.pk }}">
+      <button type="submit">Remove</button>
+    </form>
+    <form method="post" action="{% url 'notebook_collaborators' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
+      <select name="role">
+        <option value="editor"{% if permission.role == "editor" %} selected{% endif %}>Editor</option>
+        <option value="viewer"{% if permission.role == "viewer" %} selected{% endif %}>Viewer</option>
+      </select>
+      <button type="submit">Change role</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" action="{% url 'notebook_collaborators' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <p>
+    <input type="text" name="username" placeholder="Username">
+    <select name="role">
+      <option value="editor">Editor</option>
+      <option value="viewer">Viewer</option>
+    </select>
+  </p>
+  <button type="submit">Add collaborator</button>
+</form>
+
+<h2>Delete Notebook</h2>
+<form method="post" action="{% url 'notebook_delete' %}">
+  {% csrf_token %}
+  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+  <button type="submit">Delete notebook</button>
+</form>
+{% endblock %}

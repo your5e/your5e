@@ -96,6 +96,19 @@ class NotebookWriteMixin:
         return get_object_or_404(Notebook, pk=self.request.POST.get("notebook"))
 
 
+class NotebookSettingsMixin:
+    def get_context_data(self, **kwargs):
+        collaborators = NotebookPermission.objects.filter(
+            notebook=self.object
+        ).select_related("user")
+        return {
+            "notebook": self.object,
+            "collaborators": collaborators,
+            "visibility_choices": Notebook.Visibility.choices,
+            **kwargs,
+        }
+
+
 class NotebookCreateView(View):
     def get_pending_collaborators(self, pending_pks, pending_roles):
         users = User.objects.in_bulk(pending_pks)
@@ -272,9 +285,6 @@ class NotebookView(NotebookReadMixin, View):
             "campaigns": campaigns,
         }
 
-        if user_can_edit:
-            context["deleted_pages"] = self.object.deleted_pages()
-
         if index_page:
             try:
                 index_version = index_page.get_version(
@@ -288,12 +298,45 @@ class NotebookView(NotebookReadMixin, View):
             context["index_version"] = index_version
             context["index_history"] = index_page.history()
 
-        if is_owner:
-            context["collaborators"] = NotebookPermission.objects.filter(
-                notebook=self.object
-            ).select_related("user")
-
         return render(request, "notebooks/notebook.html", context)
+
+
+class NotebookSettingsView(NotebookSettingsMixin, NotebookReadMixin, View):
+    @NotebookPermissions.owner_required
+    def get(self, request, username, slug):
+        return render(
+            request,
+            "notebooks/settings.html",
+            self.get_context_data(),
+        )
+
+
+class NotebookDeletedPagesView(NotebookReadMixin, View):
+    @NotebookPermissions.edit_required
+    def get(self, request, username, slug):
+        deleted_pages = self.object.deleted_pages()
+        return render(
+            request,
+            "notebooks/deleted.html",
+            {
+                "notebook": self.object,
+                "deleted_pages": deleted_pages,
+            },
+        )
+
+
+class NotebookPageCreateView(NotebookReadMixin, View):
+    @NotebookPermissions.edit_required
+    def get(self, request, username, slug):
+        form = PageForm()
+        return render(
+            request,
+            "notebooks/create_page.html",
+            {
+                "notebook": self.object,
+                "form": form,
+            },
+        )
 
 
 class NotebookUploadView(NotebookWriteMixin, View):
@@ -336,9 +379,18 @@ class NotebookRenameView(NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         name = request.POST.get("name")
-        if name:
-            self.object.rename(name)
+        confirm = request.POST.get("confirm") == "true"
 
+        if not name:
+            return redirect(self.object)
+
+        if not confirm:
+            return render(request, "notebooks/confirm_rename.html", {
+                "notebook": self.object,
+                "name": name,
+            })
+
+        self.object.rename(name)
         return redirect(self.object)
 
 
@@ -466,7 +518,7 @@ class NotebookPageRestoreView(View):
         return redirect(notebook)
 
 
-class NotebookCollaboratorsView(NotebookWriteMixin, View):
+class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         confirm = request.POST.get("confirm") == "true"
@@ -483,7 +535,22 @@ class NotebookCollaboratorsView(NotebookWriteMixin, View):
     def handle_add(self, request, confirm):
         username = request.POST.get("username")
         role = request.POST.get("role")
-        user = get_object_or_404(User, username=username)
+
+        if not username:
+            return render(
+                request,
+                "notebooks/settings.html",
+                self.get_context_data(error="No username provided"),
+            )
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return render(
+                request,
+                "notebooks/settings.html",
+                self.get_context_data(error=f"User '{username}' not found"),
+            )
 
         if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {

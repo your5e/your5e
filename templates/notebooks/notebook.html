@@ -40,96 +40,17 @@
 </ul>
 {% endif %}
 
-{% if deleted_pages %}
-<h2>Deleted Pages</h2>
-<ul>
-{% for page in deleted_pages %}
-  <li>
-    {{ page.filename }}
-    <a href="{% url 'notebook_restore' %}?page={{ page.page.uuid }}">Restore</a>
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
-
 {% if can_edit %}
-<h2>Upload</h2>
-<form method="post" action="{% url 'notebook_upload' %}" enctype="multipart/form-data">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <p>
-    <input type="file" name="file">
-    <input type="text" name="filename" placeholder="Filename (optional)">
-  </p>
-  <button type="submit">Upload</button>
-</form>
+<p><a href="{% url 'notebook_create_page' username=notebook.owner.username slug=notebook.slug %}">Create page</a></p>
 {% if index_exists %}
 <p><a href="index?edit">Edit index.md</a></p>
 {% else %}
 <p><a href="index">Create index.md</a></p>
 {% endif %}
+<p><a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}">Deleted Pages</a></p>
 {% endif %}
 
 {% if is_owner %}
-<h2>Rename</h2>
-<form method="post" action="{% url 'notebook_rename' %}">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <p><input type="text" name="name" value="{{ notebook.name }}"></p>
-  <button type="submit">Rename</button>
-</form>
-
-<h2>Visibility</h2>
-<p>Currently: {{ notebook.visibility }}</p>
-<form method="post" action="{% url 'notebook_visibility' %}">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <select name="visibility">
-    <option value="private"{% if notebook.visibility == "private" %} selected{% endif %}>Private</option>
-    <option value="internal"{% if notebook.visibility == "internal" %} selected{% endif %}>Internal</option>
-    <option value="public"{% if notebook.visibility == "public" %} selected{% endif %}>Public</option>
-  </select>
-  <button type="submit">Change visibility</button>
-</form>
-
-<h2>Collaborators</h2>
-{% if collaborators %}
-<ul>
-{% for permission in collaborators %}
-  <li>
-    {{ permission.user.username }} ({{ permission.role }})
-    <form method="post" action="{% url 'notebook_collaborators' %}">
-      {% csrf_token %}
-      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-      <input type="hidden" name="remove" value="{{ permission.user.pk }}">
-      <button type="submit">Remove</button>
-    </form>
-    <form method="post" action="{% url 'notebook_collaborators' %}">
-      {% csrf_token %}
-      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-      <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
-      <select name="role">
-        <option value="editor"{% if permission.role == "editor" %} selected{% endif %}>Editor</option>
-        <option value="viewer"{% if permission.role == "viewer" %} selected{% endif %}>Viewer</option>
-      </select>
-      <button type="submit">Change role</button>
-    </form>
-  </li>
-{% endfor %}
-</ul>
-{% endif %}
-
-<form method="post" action="{% url 'notebook_collaborators' %}">
-  {% csrf_token %}
-  <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-  <p>
-    <input type="text" name="username" placeholder="Username">
-    <select name="role">
-      <option value="editor">Editor</option>
-      <option value="viewer">Viewer</option>
-    </select>
-  </p>
-  <button type="submit">Add collaborator</button>
-</form>
+<p><a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}">Settings</a></p>
 {% endif %}
 {% endblock %}

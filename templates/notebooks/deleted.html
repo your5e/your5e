@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Deleted Pages - {{ notebook.name }} - Your 5E{% endblock %}
+
+{% block content %}
+<h1>Deleted Pages</h1>
+<p><a href="{{ notebook.get_absolute_url }}">Back to {{ notebook.name }}</a></p>
+
+{% if deleted_pages %}
+<ul>
+{% for page in deleted_pages %}
+  <li>
+    {{ page.filename }}
+    <a href="{% url 'notebook_restore' %}?page={{ page.page.uuid }}">Restore</a>
+  </li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No deleted pages.</p>
+{% endif %}
+{% endblock %}
