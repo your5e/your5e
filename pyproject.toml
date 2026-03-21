@@ -25,6 +25,7 @@ python_files = ["tests.py", "test_*.py", "*_tests.py"]
 [tool.ruff]
 line-length = 88
 extend-exclude = ["migrations"]
+preview = true
 
 [tool.ruff.lint]
 select = [

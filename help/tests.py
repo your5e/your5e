@@ -83,6 +83,7 @@ class TestSyncApiDocs:
         guide = wiki.get_page(path="campaigns/guide")
         assert b"Campaign Guide" in guide.latest_version.content.data
 
+
 @pytest.mark.django_db
 class TestHelpPageView:
     @pytest.fixture

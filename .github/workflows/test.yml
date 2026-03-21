@@ -15,7 +15,7 @@ jobs:
         run: make setup EXEC_FLAGS=-T
 
       - name: Run Python tests
-        run: make test-python EXEC_FLAGS=-T
+        run: make test-django EXEC_FLAGS=-T
 
       - name: Install bats
         run: |
@@ -23,10 +23,10 @@ jobs:
           sudo apt-get install -y bats
 
       - name: Start test server
-        run: make test-server
+        run: make server-tests
 
       - name: Run integration tests
-        run: make test-integration
+        run: make test-sync-integration
 
       - name: Stop test server
-        run: make test-server-down
+        run: make server-tests-down

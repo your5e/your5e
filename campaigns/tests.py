@@ -446,7 +446,6 @@ class TestCampaignDeleteView(CampaignMixin):
         assert "delete" in content.lower()
         assert Campaign.objects.filter(id=self.owned_campaign.id).exists()
 
-
     @CampaignMixin.as_user("wendy")
     def test_campaign_with_content_can_delete_after_confirmation(self, client):
         self.owned_campaign.players.add(self.susan)

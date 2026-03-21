@@ -134,7 +134,7 @@ as this would block users from creating pages at that path.
         - create new markdown page
         - upload new file
         - remove existing from index page
-- [ ] refactor notebook tests into smaller, focused test files
+- [X] refactor notebook tests into smaller, focused test files
 
 
 # Notebook parent pages @phase
