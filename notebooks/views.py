@@ -7,8 +7,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
+from campaigns.models import Campaign, CampaignNotebook
+from campaigns.permissions import CampaignPermissions
 from notebooks.forms import CollaboratorForm, NotebookCreateForm, PageForm
 from notebooks.models import Notebook, NotebookPermission
+from notebooks.permissions import NotebookPermissions
 from users.models import User
 from wikis.models import Page, Version
 
@@ -18,70 +21,6 @@ MIME_TYPE_FALLBACKS = {
 }
 DEFAULT_MIME_TYPE = "application/octet-stream"
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
-
-
-class NotebookPermissions:
-    @staticmethod
-    def get_permission(notebook, user):
-        if not user.is_authenticated:
-            return None
-        try:
-            permission = NotebookPermission.objects.get(notebook=notebook, user=user)
-            return permission.role
-        except NotebookPermission.DoesNotExist:
-            return None
-
-    @staticmethod
-    def can_view(notebook, user):
-        if notebook.visibility == Notebook.Visibility.PUBLIC:
-            return True
-        if notebook.visibility == Notebook.Visibility.INTERNAL:
-            return user.is_authenticated
-        if user.is_authenticated and user == notebook.owner:
-            return True
-        return NotebookPermissions.get_permission(notebook, user) is not None
-
-    @staticmethod
-    def can_edit(notebook, user):
-        if user.is_authenticated and user == notebook.owner:
-            return True
-        return (
-            NotebookPermissions.get_permission(notebook, user)
-            == NotebookPermission.Role.EDITOR
-        )
-
-    @staticmethod
-    def view_required(method):
-        def wrapper(self, request, *args, **kwargs):
-            self.object = self.get_object()
-            if not NotebookPermissions.can_view(self.object, request.user):
-                if not request.user.is_authenticated:
-                    return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
-            return method(self, request, *args, **kwargs)
-        return wrapper
-
-    @staticmethod
-    def edit_required(method):
-        def wrapper(self, request, *args, **kwargs):
-            self.object = self.get_object()
-            if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-            if not NotebookPermissions.can_edit(self.object, request.user):
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
-            return method(self, request, *args, **kwargs)
-        return wrapper
-
-    @staticmethod
-    def owner_required(method):
-        def wrapper(self, request, *args, **kwargs):
-            self.object = self.get_object()
-            if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-            if request.user != self.object.owner:
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
-            return method(self, request, *args, **kwargs)
-        return wrapper
 
 
 class NotebookReadMixin:
@@ -156,7 +95,13 @@ class NotebookCreateView(View):
         ]
 
     def get_context(
-        self, form, collaborator_form, pending_pks, pending_roles, error=None
+        self,
+        form,
+        collaborator_form,
+        pending_pks,
+        pending_roles,
+        error=None,
+        campaign_id=None,
     ):
         return {
             "form": form,
@@ -165,6 +110,7 @@ class NotebookCreateView(View):
                 pending_pks, pending_roles
             ),
             "error": error,
+            "campaign_id": campaign_id,
         }
 
     def get(self, request):
@@ -182,6 +128,7 @@ class NotebookCreateView(View):
 
         pending_pks = request.POST.getlist("pending_pk")
         pending_roles = request.POST.getlist("pending_role")
+        campaign_id = request.POST.get("campaign")
 
         for pk in request.POST.getlist("prepopulate_collaborator"):
             if pk not in pending_pks:
@@ -212,7 +159,12 @@ class NotebookCreateView(View):
                     error = f"User '{username}' not found"
 
             context = self.get_context(
-                form, collaborator_form, pending_pks, pending_roles, error
+                form,
+                collaborator_form,
+                pending_pks,
+                pending_roles,
+                error,
+                campaign_id,
             )
             return render(request, "notebooks/create.html", context)
 
@@ -225,14 +177,22 @@ class NotebookCreateView(View):
             except ValueError:
                 pass
             context = self.get_context(
-                form, collaborator_form, pending_pks, pending_roles
+                form,
+                collaborator_form,
+                pending_pks,
+                pending_roles,
+                campaign_id=campaign_id,
             )
             return render(request, "notebooks/create.html", context)
 
         if "create" in request.POST:
             if not form.is_valid():
                 context = self.get_context(
-                    form, collaborator_form, pending_pks, pending_roles
+                    form,
+                    collaborator_form,
+                    pending_pks,
+                    pending_roles,
+                    campaign_id=campaign_id,
                 )
                 return render(request, "notebooks/create.html", context)
 
@@ -251,6 +211,15 @@ class NotebookCreateView(View):
                     role=role,
                 )
 
+            if campaign_id:
+                campaign = Campaign.objects.filter(pk=campaign_id).first()
+                if campaign and CampaignPermissions.can_view(campaign, request.user):
+                    CampaignNotebook.objects.create(
+                        campaign=campaign,
+                        notebook=notebook,
+                        linked_by=request.user,
+                    )
+
             description = form.cleaned_data["description"]
             index_page = Page.objects.create(wiki=notebook)
             index_page.update(
@@ -262,7 +231,13 @@ class NotebookCreateView(View):
 
             return redirect(notebook)
 
-        context = self.get_context(form, collaborator_form, pending_pks, pending_roles)
+        context = self.get_context(
+            form,
+            collaborator_form,
+            pending_pks,
+            pending_roles,
+            campaign_id=campaign_id,
+        )
         return render(request, "notebooks/create.html", context)
 
 

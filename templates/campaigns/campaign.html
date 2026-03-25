@@ -106,6 +106,7 @@
 
   <form method="post" action="{% url 'notebook_create' %}">
     {% csrf_token %}
+    <input type="hidden" name="campaign" value="{{ campaign.pk }}">
     {% for player in other_players %}
       <input type="hidden" name="prepopulate_collaborator" value="{{ player.pk }}">
     {% endfor %}

@@ -1,6 +1,6 @@
 from django import template
 
-from campaigns.views import CampaignPermissions
+from campaigns.permissions import CampaignPermissions
 
 register = template.Library()
 

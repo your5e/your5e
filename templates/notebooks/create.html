@@ -25,6 +25,9 @@
 
   <form method="post" action="{% url 'notebook_create' %}">
     {% csrf_token %}
+    {% if campaign_id %}
+      <input type="hidden" name="campaign" value="{{ campaign_id }}">
+    {% endif %}
     <p>
       {{ form.name.label_tag }}<br>
       {{ form.name }}

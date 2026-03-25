@@ -7,7 +7,7 @@ an actual campaign page.
 - [X] campaign description should be treated as Markdown
         - displays with the user content font
         - edits with the overtype editor
-- [ ] creating a notebook from here should link it to the campaign
+- [X] creating a notebook from here should link it to the campaign
 
 Add more views.
 

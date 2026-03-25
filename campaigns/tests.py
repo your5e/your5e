@@ -1018,6 +1018,31 @@ class TestCampaignCreateNotebook(CampaignMixin):
         assert f'name="prepopulate_collaborator" value="{self.wendy.pk}"' not in content
         assert f'name="prepopulate_collaborator" value="{self.susan.pk}"' in content
 
+    @CampaignMixin.as_user("wendy")
+    def test_create_notebook_links_to_campaign(self, client):
+        # POST from campaign page asserts campaign
+        response = client.post("/notebooks/create", {
+            "campaign": str(self.owned_campaign.pk),
+        })
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert f'name="campaign" value="{self.owned_campaign.pk}"' in content
+
+        # submitting that form creates linked notebook
+        response = client.post("/notebooks/create", {
+            "name": "Quest Log",
+            "visibility": "private",
+            "campaign": str(self.owned_campaign.pk),
+            "create": "true",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        notebook = Notebook.objects.get(name="Quest Log")
+        link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign,
+            notebook=notebook,
+        )
+        assert link.linked_by == self.wendy
+
 
 @pytest.mark.django_db
 class TestCampaignOwnerDeletion(CampaignMixin):

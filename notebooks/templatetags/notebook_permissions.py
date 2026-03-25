@@ -1,6 +1,6 @@
 from django import template
 
-from notebooks.views import NotebookPermissions
+from notebooks.permissions import NotebookPermissions
 
 register = template.Library()
 

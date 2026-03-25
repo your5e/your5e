@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from api.exceptions import APIError
 from api.views import AuthenticatedAPIView
 from notebooks.models import Notebook, NotebookPermission
-from notebooks.views import NotebookPermissions
+from notebooks.permissions import NotebookPermissions
 from users.models import User
 
 PAGE_SIZE = 50
