@@ -22,7 +22,9 @@ services:
       retries: 10
 
   web-test:
-    build: .
+    build:
+      context: .
+      target: dev
     depends_on:
       db-test:
         condition: service_healthy

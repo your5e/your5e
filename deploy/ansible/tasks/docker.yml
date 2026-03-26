@@ -1,0 +1,66 @@
+- name: Install required packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+
+- name: Add Docker GPG key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /usr/share/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker repository
+  apt_repository:
+    repo: deb [signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_facts["distribution_release"] }} stable
+    state: present
+
+- name: Install Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Start and enable Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Install Docker SDK for Python
+  apt:
+    name:
+      - python3-docker
+      - python3-jsondiff
+    state: present
+
+- name: Add admin user to docker group
+  user:
+    name: norm
+    groups: docker
+    append: true
+
+- name: Initialise Docker Swarm
+  docker_swarm:
+    state: present
+
+- name: Create Traefik network
+  docker_network:
+    name: traefik-public
+    driver: overlay
+    attachable: true
+
+- name: Create backend network
+  docker_network:
+    name: backend
+    driver: overlay
+    attachable: true

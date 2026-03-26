@@ -1,0 +1,4 @@
+all:
+  hosts:
+    your5e:
+      ansible_host: 116.203.31.74

@@ -1,0 +1,44 @@
+services:
+  web:
+    image: ghcr.io/your5e/your5e:latest
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      ALLOWED_HOSTS: your5e.com,www.your5e.com,localhost
+      DB_NAME: your5e
+      DB_USER: your5e
+      DB_HOST: postgres_db
+      DB_PORT: "5432"
+    secrets:
+      - db_password
+      - secret_key
+    networks:
+      - traefik-public
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.http.routers.your5e.rule=Host(`your5e.com`) || Host(`www.your5e.com`)
+        - traefik.http.routers.your5e.entrypoints=websecure
+        - traefik.http.routers.your5e.tls.certresolver=letsencrypt
+        - traefik.http.services.your5e.loadbalancer.server.port=8000
+
+secrets:
+  db_password:
+    external: true
+  secret_key:
+    external: true
+
+networks:
+  traefik-public:
+    external: true
+  backend:
+    external: true

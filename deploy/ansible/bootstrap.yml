@@ -1,0 +1,5 @@
+- name: Bootstrap server (run once as root)
+  hosts: your5e
+  remote_user: root
+  tasks:
+    - include_tasks: tasks/admin_user.yml

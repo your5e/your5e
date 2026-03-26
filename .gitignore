@@ -6,3 +6,8 @@ tests/*.token
 tests/seed.sql
 
 static/css/*.css*
+
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.*
+deploy/terraform/*.tfvars

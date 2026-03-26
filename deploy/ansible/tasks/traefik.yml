@@ -1,0 +1,37 @@
+- name: Create stacks directory
+  file:
+    path: /opt/stacks
+    state: directory
+    mode: "0755"
+
+- name: Create Traefik config directory
+  file:
+    path: /etc/traefik
+    state: directory
+    mode: "0755"
+
+- name: Create acme.json for Let's Encrypt
+  file:
+    path: /etc/traefik/acme.json
+    state: touch
+    mode: "0600"
+
+- name: Copy Traefik stack file
+  copy:
+    src: traefik-stack.yml
+    dest: /opt/stacks/traefik-stack.yml
+    mode: "0644"
+  register: traefik_stack
+
+- name: Deploy Traefik
+  community.docker.docker_stack:
+    name: traefik
+    compose:
+      - /opt/stacks/traefik-stack.yml
+    state: present
+  environment:
+    ACME_EMAIL: "{{ acme_email }}"
+
+- name: Restart Traefik if config changed
+  command: docker service update --force traefik_traefik
+  when: traefik_stack.changed

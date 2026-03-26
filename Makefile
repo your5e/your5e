@@ -1,4 +1,4 @@
-.PHONY: clean css dev lint-django makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down
+.PHONY: build clean css deploy dev lint-django makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -61,3 +61,25 @@ test-sync-integration:
 	bats tests/*.bats
 
 test: test-django test-sync-integration
+
+terraform-plan:
+	cd deploy/terraform && terraform plan
+
+terraform-apply:
+	cd deploy/terraform && terraform apply
+
+ansible-bootstrap:
+	cd deploy/ansible && ansible-playbook bootstrap.yml
+
+ansible-os:
+	cd deploy/ansible && ansible-playbook os.yml
+
+ansible-app:
+	cd deploy/ansible && ansible-playbook app.yml
+
+build:
+	docker build --platform linux/amd64 --target prod -t ghcr.io/your5e/your5e:latest .
+	docker push ghcr.io/your5e/your5e:latest
+
+deploy:
+	cd deploy/ansible && ansible-playbook app.yml

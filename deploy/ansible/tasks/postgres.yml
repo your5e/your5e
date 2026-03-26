@@ -1,0 +1,23 @@
+- name: Create Postgres data directory
+  file:
+    path: /var/lib/postgresql/data
+    state: directory
+    mode: "0700"
+
+- name: Copy Postgres stack file
+  copy:
+    src: postgres-stack.yml
+    dest: /opt/stacks/postgres-stack.yml
+    mode: "0644"
+  register: postgres_stack
+
+- name: Deploy Postgres
+  community.docker.docker_stack:
+    name: postgres
+    compose:
+      - /opt/stacks/postgres-stack.yml
+    state: present
+
+- name: Restart Postgres if config changed
+  command: docker service update --force postgres_db
+  when: postgres_stack.changed

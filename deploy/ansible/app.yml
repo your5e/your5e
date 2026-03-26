@@ -1,0 +1,12 @@
+- name: Deploy application stacks
+  hosts: your5e
+  remote_user: norm
+  become: true
+  vars:
+    acme_email: norm@201created.com
+
+  tasks:
+    - include_tasks: tasks/secrets.yml
+    - include_tasks: tasks/traefik.yml
+    - include_tasks: tasks/postgres.yml
+    - include_tasks: tasks/app.yml

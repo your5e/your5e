@@ -1,0 +1,35 @@
+- name: Create admin user
+  user:
+    name: norm
+    groups: sudo
+    shell: /bin/bash
+    create_home: true
+
+- name: Add SSH key for admin user
+  authorized_key:
+    user: norm
+    key: "{{ lookup('pipe', 'ssh-add -L') }}"
+
+- name: Allow passwordless sudo
+  lineinfile:
+    path: /etc/sudoers.d/norm
+    line: "norm ALL=(ALL) NOPASSWD:ALL"
+    create: true
+    mode: "0440"
+
+- name: Disable root SSH login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^PermitRootLogin"
+    line: "PermitRootLogin no"
+
+- name: Disable password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^PasswordAuthentication"
+    line: "PasswordAuthentication no"
+
+- name: Reload SSH
+  systemd:
+    name: ssh
+    state: reloaded

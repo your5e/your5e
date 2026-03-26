@@ -1,0 +1,6 @@
+- name: Configure server OS
+  hosts: your5e
+  remote_user: norm
+  become: true
+  tasks:
+    - include_tasks: tasks/docker.yml

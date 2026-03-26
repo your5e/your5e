@@ -3,8 +3,16 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def get_secret(name):
+    secret_path = Path(f"/run/secrets/{name.lower()}")
+    if secret_path.exists():
+        return secret_path.read_text().strip()
+    return os.environ[name]
+
+
 DEBUG = os.environ.get("DEBUG") == "1"
-SECRET_KEY = os.environ["SECRET_KEY"]
+SECRET_KEY = get_secret("SECRET_KEY")
 
 LANGUAGE_CODE = "en-gb"
 TIME_ZONE = "UTC"
@@ -12,6 +20,11 @@ USE_I18N = True
 USE_TZ = True
 
 ALLOWED_HOSTS = []
+CSRF_TRUSTED_ORIGINS = []
+if os.environ.get("ALLOWED_HOSTS"):
+    ALLOWED_HOSTS = os.environ["ALLOWED_HOSTS"].split(",")
+    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS]
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -31,6 +44,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -42,6 +56,7 @@ MIDDLEWARE = [
 WSGI_APPLICATION = "config.wsgi.application"
 ROOT_URLCONF = "config.urls"
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 TEMPLATES = [
@@ -65,7 +80,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ["DB_NAME"],
         "USER": os.environ["DB_USER"],
-        "PASSWORD": os.environ["DB_PASSWORD"],
+        "PASSWORD": get_secret("DB_PASSWORD"),
         "HOST": os.environ["DB_HOST"],
         "PORT": os.environ["DB_PORT"],
     }

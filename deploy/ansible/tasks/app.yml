@@ -1,0 +1,51 @@
+- name: Pull latest image
+  command: docker pull ghcr.io/your5e/your5e:latest
+
+- name: Remove stale migration service
+  command: docker service rm your5e_migrate
+  failed_when: false
+
+- name: Run migrations
+  command: >
+    docker service create
+    --detach
+    --name your5e_migrate
+    --restart-condition=none
+    --network backend
+    --secret db_password
+    --secret secret_key
+    --env DB_HOST=postgres_db
+    --env DB_NAME=your5e
+    --env DB_PORT=5432
+    --env DB_USER=your5e
+    ghcr.io/your5e/your5e:latest
+    python manage.py migrate --no-input
+
+- name: Wait for migrations to complete
+  shell: |
+    while docker service ps your5e_migrate --format '{{ '{{' }}.CurrentState{{ '}}' }}' | grep -q 'Running\|Pending\|Starting'; do
+      sleep 1
+    done
+    docker service logs your5e_migrate
+
+- name: Check migration succeeded
+  shell: "! docker service ps --format '{{ '{{' }}.CurrentState{{ '}}' }}' your5e_migrate | grep -q '^Failed'"
+
+- name: Remove migration service
+  command: docker service rm your5e_migrate
+
+- name: Copy app stack file
+  copy:
+    src: app-stack.yml
+    dest: /opt/stacks/app-stack.yml
+    mode: "0644"
+
+- name: Deploy app stack
+  community.docker.docker_stack:
+    name: your5e
+    compose:
+      - /opt/stacks/app-stack.yml
+    state: present
+
+- name: Update app service
+  command: docker service update --force --image ghcr.io/your5e/your5e:latest your5e_web
