@@ -5,7 +5,7 @@ deleted.
 
 # Preparation @phase
 
-- [ ] refactor the notebook views to be ready for being a subclass used by
+- [X] refactor the notebook views to be ready for being a subclass used by
       campaign views
         - they should be rewritten to be proper class-based views, not a
           weird hybrid of class and functions

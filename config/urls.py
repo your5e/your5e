@@ -31,6 +31,7 @@ from notebooks.views import (
     NotebookCreateView,
     NotebookDeletedPagesView,
     NotebookDeleteView,
+    NotebookIndexView,
     NotebookListView,
     NotebookPageCreateView,
     NotebookPageDeleteView,
@@ -39,7 +40,6 @@ from notebooks.views import (
     NotebookRenameView,
     NotebookSettingsView,
     NotebookUploadView,
-    NotebookView,
     NotebookVisibilityView,
 )
 from users.views import (
@@ -257,12 +257,12 @@ urlpatterns = [
     path(
         route="notebooks/<str:username>/<str:slug>/",
         name="notebook",
-        view=NotebookView.as_view(),
+        view=NotebookIndexView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/<path:path>/",
         name="notebook_directory",
-        view=NotebookView.as_view(),
+        view=NotebookIndexView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/<path:path>",
