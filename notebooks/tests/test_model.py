@@ -1,5 +1,6 @@
 import pytest
 
+from campaigns.models import Campaign
 from notebooks.models import Notebook
 from wikis.models import Page
 
@@ -74,3 +75,17 @@ class TestNotebook(NotebookMixin):
             {"name": "heroes", "url": "/notebooks/wendy/heros-legendes/heroes/"},
             {"name": "theron", "url": "/notebooks/wendy/heros-legendes/heroes/theron"},
         ]
+
+    def test_is_campaign_wiki_false_for_regular_notebook(self):
+        assert self.wendys_notebook.is_campaign_wiki is False
+
+    def test_is_campaign_wiki_true_for_wiki_notebook(self):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_notebook = campaign.campaign_notebooks.get(is_wiki=True).notebook
+        assert wiki_notebook.is_campaign_wiki is True
+
+    def test_campaign_wiki_notebook_cannot_be_deleted(self):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_notebook = campaign.campaign_notebooks.get(is_wiki=True).notebook
+        with pytest.raises(ValueError):
+            wiki_notebook.delete()

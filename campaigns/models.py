@@ -3,10 +3,10 @@ import secrets
 import bleach
 import markdown
 from django.db import models
-from django.db.models.signals import post_delete
+from django.db.models.signals import m2m_changed, post_delete
 from django.dispatch import receiver
 
-from notebooks.models import Notebook, OwnedSlugMixin
+from notebooks.models import Notebook, NotebookPermission, OwnedSlugMixin
 from users.models import User, get_sentinel_user
 
 
@@ -27,6 +27,7 @@ class CampaignNotebook(models.Model):
         related_name="linked_notebooks",
     )
     order = models.PositiveIntegerField(default=0)
+    is_wiki = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -41,12 +42,12 @@ class CampaignNotebook(models.Model):
         return f"{self.notebook.name} in {self.campaign.name}"
 
     def save(self, *args, **kwargs):
-        if self.pk is None:
+        if self.pk is None and not self.is_wiki:
             max_order = CampaignNotebook.objects.filter(
                 campaign=self.campaign
             ).aggregate(models.Max("order"))["order__max"]
             if max_order is None:
-                self.order = 0
+                self.order = 1
             else:
                 self.order = max_order + 1
         super().save(*args, **kwargs)
@@ -94,7 +95,24 @@ class Campaign(OwnedSlugMixin, models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
         if is_new:
+            wiki = Notebook.objects.create(
+                name=f"{self.name} wiki",
+                owner=self.owner,
+                visibility=Notebook.Visibility.PRIVATE,
+            )
+            CampaignNotebook.objects.create(
+                campaign=self,
+                notebook=wiki,
+                linked_by=self.owner,
+                order=0,
+                is_wiki=True,
+            )
             self.players.add(self.owner)
+        else:
+            wiki_link = self.campaign_notebooks.filter(is_wiki=True).first()
+            if wiki_link and wiki_link.notebook.owner != self.owner:
+                wiki_link.notebook.owner = self.owner
+                wiki_link.notebook.save()
 
     def generate_join_slug(self):
         while True:
@@ -123,3 +141,27 @@ def delete_orphaned_campaigns(sender, instance, **kwargs):
     Campaign.objects.filter(owner=sentinel).annotate(
         player_count=models.Count("players")
     ).filter(player_count=0).delete()
+
+
+@receiver(m2m_changed, sender=Campaign.players.through)
+def update_wiki_permissions(sender, instance, action, pk_set, **kwargs):
+    if action not in ("post_add", "post_remove"):
+        return
+    wiki_link = instance.campaign_notebooks.filter(is_wiki=True).first()
+    if not wiki_link:
+        return
+    wiki = wiki_link.notebook
+    if action == "post_add":
+        for user_pk in pk_set:
+            if user_pk == wiki.owner_id:
+                continue
+            NotebookPermission.objects.get_or_create(
+                notebook=wiki,
+                user_id=user_pk,
+                defaults={"role": NotebookPermission.Role.EDITOR},
+            )
+    elif action == "post_remove":
+        NotebookPermission.objects.filter(
+            notebook=wiki,
+            user_id__in=pk_set,
+        ).delete()

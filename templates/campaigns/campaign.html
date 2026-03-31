@@ -55,7 +55,7 @@
             ({% for u in item.cannot_see %}{{ u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
             cannot see){% endif %}
 
-          {% if is_owner and not item.is_first %}
+          {% if is_owner and item.can_move_up %}
             <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
               {% csrf_token %}
               <input type="hidden" name="campaign" value="{{ campaign.pk }}">
@@ -64,7 +64,7 @@
             </form>
           {% endif %}
 
-          {% if is_owner and not item.is_last %}
+          {% if is_owner and item.can_move_down %}
             <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
               {% csrf_token %}
               <input type="hidden" name="campaign" value="{{ campaign.pk }}">

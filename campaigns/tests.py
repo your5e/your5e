@@ -83,6 +83,9 @@ class CampaignMixin(UserMixin):
 class LinkedCampaignNotebooksMixin(CampaignMixin):
     @pytest.fixture(autouse=True)
     def setup_linked_notebooks(self, setup_campaigns):
+        self.wiki_link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign, is_wiki=True
+        )
         self.wendys_link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.wendys_notebook,
@@ -187,6 +190,51 @@ class TestCampaign(CampaignMixin):
 
     def test_description_html_empty_when_no_description(self):
         assert self.other_campaign.description_html() == ""
+
+    def test_wiki_notebook_created_with_campaign(self):
+        link = CampaignNotebook.objects.get(campaign=self.owned_campaign, is_wiki=True)
+        assert link.notebook.name == "The Old Forest wiki"
+        assert link.notebook.owner == self.wendy
+        assert link.notebook.visibility == Notebook.Visibility.PRIVATE
+        assert link.order == 0
+        assert link.linked_by == self.wendy
+
+    def test_wiki_ownership_transfers_with_campaign(self):
+        from users.models import get_sentinel_user
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign, is_wiki=True
+        )
+        self.owned_campaign.owner = get_sentinel_user()
+        self.owned_campaign.save()
+        wiki_link.refresh_from_db()
+        assert wiki_link.notebook.owner == get_sentinel_user()
+        self.owned_campaign.owner = self.susan
+        self.owned_campaign.slug = self.owned_campaign.generate_unique_slug()
+        self.owned_campaign.save()
+        wiki_link.refresh_from_db()
+        assert wiki_link.notebook.owner == self.susan
+
+    def test_joining_campaign_grants_editor_permission_on_wiki(self):
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.other_campaign, is_wiki=True
+        )
+        self.other_campaign.players.add(self.wendy)
+        permission = NotebookPermission.objects.get(
+            notebook=wiki_link.notebook,
+            user=self.wendy,
+        )
+        assert permission.role == NotebookPermission.Role.EDITOR
+
+    def test_leaving_campaign_removes_wiki_permission(self):
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.other_campaign, is_wiki=True
+        )
+        self.other_campaign.players.add(self.wendy)
+        self.other_campaign.players.remove(self.wendy)
+        assert not NotebookPermission.objects.filter(
+            notebook=wiki_link.notebook,
+            user=self.wendy,
+        ).exists()
 
 
 @pytest.mark.django_db
@@ -624,7 +672,7 @@ class TestCampaignNotebook(CampaignMixin):
         assert link.campaign == self.owned_campaign
         assert link.notebook == self.wendys_notebook
         assert link.linked_by == self.wendy
-        assert link.order == 0
+        assert link.order == 1
 
     def test_order_increments_for_each_link(self):
         link1 = CampaignNotebook.objects.create(
@@ -637,8 +685,8 @@ class TestCampaignNotebook(CampaignMixin):
             notebook=self.susans_notebook,
             linked_by=self.susan,
         )
-        assert link1.order == 0
-        assert link2.order == 1
+        assert link1.order == 1
+        assert link2.order == 2
 
     def test_same_notebook_cannot_be_linked_twice(self):
         CampaignNotebook.objects.create(
@@ -666,6 +714,14 @@ class TestCampaignNotebook(CampaignMixin):
         )
         assert link1.notebook == link2.notebook
         assert link1.campaign != link2.campaign
+
+    def test_linked_notebooks_start_at_order_one(self):
+        link = CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        assert link.order == 1
 
 
 @pytest.mark.django_db
@@ -756,6 +812,7 @@ class TestCampaignNotebookLinkView(CampaignMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert not CampaignNotebook.objects.filter(
             campaign=self.owned_campaign,
+            is_wiki=False,
         ).exists()
 
 
@@ -813,6 +870,15 @@ class TestCampaignNotebookRemoveView(LinkedCampaignNotebooksMixin):
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert CampaignNotebook.objects.filter(pk=self.wendys_link.pk).exists()
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_cannot_unlink_wiki_notebook(self, client):
+        response = client.post("/campaigns/notebooks", {
+            "campaign": self.owned_campaign.pk,
+            "unlink_notebook": self.wiki_link.pk,
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert CampaignNotebook.objects.filter(pk=self.wiki_link.pk).exists()
 
 
 @pytest.mark.django_db
@@ -883,6 +949,32 @@ class TestCampaignNotebookOrderView(LinkedCampaignNotebooksMixin):
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_move_wiki_notebook_down(self, client):
+        response = client.post(
+            "/campaigns/notebooks",
+            {
+                "campaign": self.owned_campaign.pk,
+                "move_notebook_down": self.wiki_link.pk,
+            },
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.wiki_link.refresh_from_db()
+        assert self.wiki_link.order == 0
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_move_notebook_above_wiki(self, client):
+        response = client.post(
+            "/campaigns/notebooks",
+            {
+                "campaign": self.owned_campaign.pk,
+                "move_notebook_up": self.wendys_link.pk,
+            },
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.wendys_link.refresh_from_db()
+        assert self.wendys_link.order == 1
+
 
 @pytest.mark.django_db
 class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
@@ -952,12 +1044,22 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
         assert "move_notebook_down" in content
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
-    def test_first_notebook_has_no_up_button(self, client):
+    def test_wiki_notebook_has_no_reorder_buttons(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest")
+        content = response.content.decode()
+        after_name = content.split("The Old Forest wiki")[1]
+        wiki_section = after_name.split("</li>")[0]
+        assert "move_notebook_up" not in wiki_section
+        assert "move_notebook_down" not in wiki_section
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_first_non_wiki_notebook_has_no_up_button(self, client):
         response = client.get("/campaigns/wendy/the-old-forest")
         content = response.content.decode()
         after_name = content.split(html.escape("Wendy's Notes"))[1]
         wendys_section = after_name.split("</li>")[0]
         assert "move_notebook_up" not in wendys_section
+        assert "move_notebook_down" in wendys_section
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_last_notebook_has_no_down_button(self, client):

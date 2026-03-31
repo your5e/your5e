@@ -14,13 +14,13 @@ deleted.
 
 # Create the campaign wiki @phase
 
-- [ ] add a campaign notebook to the campaign when it is created
+- [X] add a campaign notebook to the campaign when it is created
         - it is autocreated ("campaign name wiki"), private visibility
         - it cannot be deleted or unlinked from the campaign
         - it cannot be moved from order 0, other notebooks cannot rise past 1
-- [ ] ensure notebook ownership transfers with campaign ownership
-- [ ] anyone joining the campaign gets read/write permission automatically
-- [ ] deleting a campaign does not require confirmation if the notebook
+- [X] ensure notebook ownership transfers with campaign ownership
+- [X] anyone joining the campaign gets read/write permission automatically
+- [X] deleting a campaign does not require confirmation if the notebook
       is empty
 
 

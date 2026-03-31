@@ -87,6 +87,15 @@ class Notebook(OwnedSlugMixin, Wiki):
     def has_content(self):
         return self.page_set.filter(deleted_at__isnull=True).exists()
 
+    @property
+    def is_campaign_wiki(self):
+        return self.campaign_notebooks.filter(is_wiki=True).exists()
+
+    def delete(self, *args, **kwargs):
+        if self.is_campaign_wiki:
+            raise ValueError("Cannot delete a campaign wiki notebook")
+        super().delete(*args, **kwargs)
+
 
 class NotebookPermission(models.Model):
     class Role(models.TextChoices):

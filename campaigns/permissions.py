@@ -22,6 +22,8 @@ class CampaignPermissions:
 
     @staticmethod
     def can_unlink_notebook(link, campaign, user):
+        if link.is_wiki:
+            return False
         return (
             campaign.owner == user
             or link.notebook.owner == user

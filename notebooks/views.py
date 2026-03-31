@@ -526,7 +526,10 @@ class NotebookDeleteView(NotebookFromPOSTMixin, View):
     def post(self, request):
         if "confirm" in request.POST or not self.object.has_content():
             owner_username = self.object.owner.username
-            self.object.delete()
+            try:
+                self.object.delete()
+            except ValueError:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
             return redirect("profile", username=owner_username)
 
         breadcrumbs = [

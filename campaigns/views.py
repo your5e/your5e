@@ -102,8 +102,8 @@ class CampaignView(CampaignObjectMixin, View):
                     link, self.object, request.user
                 ),
                 "is_notebook_owner": is_notebook_owner,
-                "is_first": index == 0,
-                "is_last": index == notebook_count - 1,
+                "can_move_up": not link.is_wiki and index > 1,
+                "can_move_down": not link.is_wiki and index < notebook_count - 1,
             })
 
         other_players = [
@@ -227,6 +227,8 @@ class CampaignNotebooksView(View):
                 swap = CampaignNotebook.objects.filter(
                     campaign=self.object, order__lt=link.order
                 ).order_by("-order").first()
+                if swap and swap.is_wiki:
+                    return HttpResponse(status=HTTPStatus.FORBIDDEN)
                 if swap:
                     link.order, swap.order = swap.order, link.order
                     link.save()
@@ -239,6 +241,8 @@ class CampaignNotebooksView(View):
             link = CampaignNotebook.objects.filter(
                 pk=link_id, campaign=self.object
             ).first()
+            if link and link.is_wiki:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
             if link:
                 swap = CampaignNotebook.objects.filter(
                     campaign=self.object, order__gt=link.order

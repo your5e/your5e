@@ -3,6 +3,7 @@ from io import BytesIO
 
 import pytest
 
+from campaigns.models import Campaign, CampaignNotebook
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
 from wikis.models import Page
@@ -212,6 +213,17 @@ class TestNotebookDeleteView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "/notebooks/settings/wendy/heros-legendes/" in content
+
+    @UserMixin.as_user("wendy")
+    def test_owner_cannot_delete_campaign_wiki_notebook(self, client):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_link = CampaignNotebook.objects.get(campaign=campaign, is_wiki=True)
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": wiki_link.notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert Notebook.objects.filter(id=wiki_link.notebook.id).exists()
 
 
 @pytest.mark.django_db

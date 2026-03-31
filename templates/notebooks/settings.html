@@ -89,10 +89,14 @@
   </form>
 
   <h2>Delete Notebook</h2>
-  <p>This will remove the contents with no window for recovery.</p>
-  <form method="post" action="{% url 'notebook_delete' %}">
-    {% csrf_token %}
-    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-    <button type="submit" class="danger">Delete notebook</button>
-  </form>
+  {% if notebook.is_campaign_wiki %}
+    <p>This notebook is a campaign wiki and cannot be deleted while the campaign still exists.</p>
+  {% else %}
+    <p>This will remove the contents with no window for recovery.</p>
+    <form method="post" action="{% url 'notebook_delete' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <button type="submit" class="danger">Delete notebook</button>
+    </form>
+  {% endif %}
 {% endblock %}

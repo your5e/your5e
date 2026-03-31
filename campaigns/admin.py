@@ -13,7 +13,7 @@ class CampaignAdmin(admin.ModelAdmin):
 
 @admin.register(CampaignNotebook)
 class CampaignNotebookAdmin(admin.ModelAdmin):
-    list_display = ["notebook", "campaign", "linked_by", "order"]
-    list_filter = ["campaign"]
+    list_display = ["notebook", "campaign", "linked_by", "order", "is_wiki"]
+    list_filter = ["campaign", "is_wiki"]
     search_fields = ["notebook__name", "campaign__name"]
     autocomplete_fields = ["notebook", "campaign", "linked_by"]
