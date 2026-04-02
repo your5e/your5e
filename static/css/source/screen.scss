@@ -2,22 +2,20 @@
 @use "base/colours";
 
 @use "layout/page" as layout-page;
-@use "layout/header" as layout-header;
+@use "layout/headers" as layout-headers;
 @use "layout/footer" as layout-footer;
 @use "layout/notebook" as layout-notebook;
 @use "layout/campaign" as layout-campaign;
-@use "layout/breadcrumbs" as layout-breadcrumbs;
 @use "layout/forms" as layout-forms;
 @use "layout/version-controls" as layout-version-controls;
 @use "layout/overtype" as layout-overtype;
 
 @use "theme/page" as theme-page;
 @use "theme/user-content" as theme-user-content;
-@use "theme/header" as theme-header;
+@use "theme/headers" as theme-headers;
 @use "theme/footer" as theme-footer;
 @use "theme/notebook" as theme-notebook;
 @use "theme/campaign" as theme-campaign;
-@use "theme/breadcrumbs" as theme-breadcrumbs;
 @use "theme/forms" as theme-forms;
 @use "theme/version-controls" as theme-version-controls;
 @use "theme/overtype" as theme-overtype;

@@ -1,28 +1,7 @@
 @use "../base/colours" as *;
-@use "../base/fonts" as *;
-@use "typography" as *;
 
 main.campaign {
-    .campaign-header {
-        border-bottom: 1px solid $colour-subtle-border;
-        background: $colour-subtle;
-        font-family: $font-site;
-        font-size: $size-small-pica;
-
-        a {
-            color: inherit;
-        }
-
-        .campaign-name {
-            margin: 0;
-            font-size: $size-double-small-pica;
-            font-weight: bold;
-            line-height: 1.25;
-        }
-
-        .campaign-meta {
-            margin: 0;
-            line-height: 1.25;
-        }
+    hr {
+        background-color: $colour-danger;
     }
 }

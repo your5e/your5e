@@ -1,5 +1,7 @@
+@use "../theme/typography" as *;
+
 body > footer {
-    padding: 1rem var(--indent);
+    padding: 1rem $indent;
 }
 
 body > footer p {

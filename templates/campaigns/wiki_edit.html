@@ -1,30 +1,23 @@
 {% extends "base.html" %}
+{% load notebook_permissions %}
 
 {% block title %}
   {% if page %}Edit{% else %}Create{% endif %}
-  {{ editing_name|default:notebook.name }} - {{ notebook.name }} - Your 5E
+  {{ editing_name|default:notebook.name }} - {{ campaign.name }} Wiki - Your 5E
 {% endblock %}
 
-{% block main_class %} class="{% if campaign %}campaign {% endif %}notebook edit"{% endblock %}
+{% block main_class %} class="notebook campaign-wiki edit"{% endblock %}
 
 {% block header_primary_wrapper %}
-  {% if campaign %}
-    <div class="header primary campaign">
-      {% include "campaigns/includes/campaign_header.html" %}
-    </div>
-  {% elif notebook %}
-    <div class="header primary notebook">
-      {% include "notebooks/includes/notebook_header.html" %}
-    </div>
-  {% endif %}
+<div class="header primary campaign">
+  {% include "campaigns/includes/campaign_header.html" %}
+</div>
 {% endblock %}
 
 {% block header_secondary_wrapper %}
-  {% if campaign %}
-    <div class="header secondary notebook">
-      {% include "notebooks/includes/notebook_header.html" %}
-    </div>
-  {% endif %}
+<div class="header secondary notebook">
+  {% include "notebooks/includes/notebook_header.html" %}
+</div>
 {% endblock %}
 
 {% block header_breadcrumbs_wrapper %}

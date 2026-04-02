@@ -31,7 +31,7 @@ folder -- adding a "Campaign Notes" notebook would make its resolution path
 `/campaign/user/slug/wiki/campaign-notes`, slug defaults to `notebook.slug`
 on link, append numbers as we do elsewhere to differentiate when colliding.
 
-- [ ] add campaign wiki aware notebook URLs
+- [X] add campaign wiki aware notebook URLs
         - adds a third layer of navigation, global, campaign, notebook,
           breadcrumbs?
         - links in notebook pages should remain in the campaign context

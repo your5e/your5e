@@ -4,12 +4,16 @@
 
 {% block main_class %} class="campaign settings"{% endblock %}
 
-{% block page_context %}
+{% block header_primary_wrapper %}
+<div class="header primary campaign">
   {% include "campaigns/includes/campaign_header.html" %}
+</div>
 {% endblock %}
 
-{% block page_breadcrumbs %}
+{% block header_breadcrumbs_wrapper %}
+<div class="header breadcrumbs">
   {% include "campaigns/includes/page_header.html" %}
+</div>
 {% endblock %}
 
 {% block page_content %}

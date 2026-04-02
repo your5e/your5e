@@ -354,7 +354,7 @@ class TestCampaignView(CampaignMixin):
         response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
-        assert 'class="campaign-name">The Old Forest</p>' in content
+        assert "<h1>The Old Forest</h1>" in content
         assert f"/campaigns/join-{self.owned_campaign.join_slug}" in content
         assert '<a href="/profile/wendy/">wendy</a>' in content
         assert "/campaigns/settings/wendy/the-old-forest" in content
@@ -364,7 +364,7 @@ class TestCampaignView(CampaignMixin):
         response = client.get("/campaigns/susan/river-crossing/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
-        assert 'class="campaign-name">River Crossing</p>' in content
+        assert "<h1>River Crossing</h1>" in content
         assert '<a href="/profile/susan/">susan</a>' in content
         assert "/campaigns/settings/susan/river-crossing" not in content
         assert self.joined_campaign.join_slug in content
@@ -501,8 +501,8 @@ class TestCampaignJoinView(CampaignMixin):
     def test_uses_header_stripe(self, client):
         response = client.get(f"/campaigns/join-{self.owned_campaign.join_slug}")
         content = response.content.decode()
-        assert 'class="campaign-header"' in content
-        assert 'class="campaign-name"' in content
+        assert 'class="header primary campaign"' in content
+        assert f"<h1>{self.owned_campaign.name}</h1>" in content
 
     @CampaignMixin.as_user("mary")
     def test_non_member_does_not_see_leave_button(self, client):

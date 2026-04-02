@@ -7,6 +7,7 @@ html {
 }
 
 body {
+    background-color: $colour-page;
     color: $colour-text;
     font-family: $font-site;
     line-height: 1.5;
@@ -23,10 +24,4 @@ code,
 pre,
 kbd {
     font-family: $font-mono;
-}
-
-.page-header {
-    border-bottom: 1px solid $colour-subtle-border;
-    font-family: $font-site;
-    font-size: $size-small-pica;
 }

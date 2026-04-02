@@ -46,8 +46,22 @@
 
     <main{% block main_class %}{% endblock %}>
       <header>
-        {% block page_context %}{% endblock %}
-        {% block page_breadcrumbs %}{% endblock %}
+        {% block header_primary_wrapper %}
+        {% if notebook or campaign %}
+        <div class="header primary {% if campaign %}campaign{% else %}notebook{% endif %}">
+          {% block header_primary %}{% endblock %}
+        </div>
+        {% endif %}
+        {% endblock %}
+        {% block header_secondary_wrapper %}
+        {% endblock %}
+        {% block header_breadcrumbs_wrapper %}
+        {% if breadcrumbs %}
+        <div class="header breadcrumbs">
+          {% block header_breadcrumbs %}{% endblock %}
+        </div>
+        {% endif %}
+        {% endblock %}
       </header>
       <div class="page-content">
         {% block page_content %}{% endblock %}

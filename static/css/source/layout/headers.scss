@@ -1,0 +1,154 @@
+@use "../base/fonts" as *;
+@use "../theme/typography" as *;
+
+// site branding header, global nav
+body > header {
+    padding: 0.5em $indent;
+
+    > a {
+        font-size: $size-double-great-primer;
+        line-height: 1;
+    }
+
+    nav {
+        display: flex;
+        justify-content: space-between;
+        font-size: $size-long-primer;
+    }
+
+    nav ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    nav li {
+        display: inline;
+    }
+
+    nav li + li::before {
+        padding: 0 0.5em;
+    }
+
+    nav form {
+        display: inline;
+    }
+}
+
+// per-page headings and nav
+.header.primary,
+.header.secondary,
+.header.breadcrumbs {
+    box-sizing: border-box;
+    width: calc(100% + 2 * $indent);
+    margin-left: calc(-1 * $indent);
+    padding: $third-line $indent;
+}
+
+.header.primary,
+.header.secondary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 1em;
+
+    h1 {
+        grid-column: 1;
+        grid-row: 1;
+        margin: 0;
+        line-height: 1.25;
+    }
+
+    .controls {
+        display: contents;
+    }
+
+    .meta {
+        grid-column: 1;
+        grid-row: 2;
+        margin: 0;
+        line-height: 1.25;
+    }
+
+    .actions {
+        grid-column: 2;
+        grid-row: 1 / -1;
+        align-self: start;
+        display: flex;
+        align-items: stretch;
+        gap: 0.5em;
+
+        form {
+            display: flex;
+            margin: 0;
+        }
+
+        a.button,
+        button {
+            line-height: 1;
+            padding: 0.2em 0.5em;
+        }
+    }
+}
+
+.header.primary,
+.header.secondary,
+.header.breadcrumbs {
+    font-size: $size-bourgeois;
+}
+
+.header.primary h1 {
+    font-size: $size-great-primer;
+}
+
+.header.secondary h1 {
+    font-size: $size-english;
+}
+
+.header.breadcrumbs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+
+    .page-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+
+        form {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5em;
+            margin: 0;
+        }
+
+        .version-controls select,
+        .version-controls button,
+        .page-actions button {
+            box-sizing: border-box;
+            line-height: 1;
+            padding: 0.2em 0.5em;
+        }
+
+        .version-controls select {
+            padding-right: 1.5em;
+        }
+    }
+
+    ol {
+        margin: 0;
+        padding-left: 0;
+        list-style: none;
+    }
+
+    li {
+        display: inline;
+    }
+
+    li + li::before {
+        display: inline-block;
+        margin-inline: 0.5em;
+        transform: rotate(15deg);
+        height: 0.8em;
+        content: "";
+    }
+}

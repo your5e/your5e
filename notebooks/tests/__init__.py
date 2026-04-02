@@ -350,8 +350,8 @@ class NotebookMixin(UserMixin):
         assert 'name="confirm"' in content
 
     def assert_notebook_header_present(self, content, notebook):
-        assert '<div class="notebook-header">' in content
-        assert f'<p class="notebook-name">{html.escape(notebook.name)}</p>' in content
+        assert '<div class="header primary notebook">' in content
+        assert f'<h1>{html.escape(notebook.name)}</h1>' in content
 
     def assert_edit_page_form_present(self, content):
         assert "<form" in content

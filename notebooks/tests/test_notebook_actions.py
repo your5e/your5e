@@ -90,7 +90,7 @@ class TestNotebookDeletedPagesView(NotebookMixin):
     def test_index_links_to_deleted_pages_view(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
-        assert '<p class="notebook-name">Héros &amp; Légendes</p>' in content
+        assert '<h1>Héros &amp; Légendes</h1>' in content
         assert 'href="/notebooks/deleted/wendy/heros-legendes/"' in content
 
 

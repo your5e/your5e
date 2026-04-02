@@ -5,14 +5,24 @@
 
 {% block main_class %} class="notebook campaign-wiki"{% endblock %}
 
-{% block page_context %}
-  {% include "campaigns/includes/wiki_header.html" %}
+{% block header_primary_wrapper %}
+<div class="header primary campaign">
+  {% include "campaigns/includes/campaign_header.html" %}
+</div>
 {% endblock %}
 
-{% block page_breadcrumbs %}
+{% block header_secondary_wrapper %}
+<div class="header secondary notebook">
+  {% include "notebooks/includes/notebook_header.html" %}
+</div>
+{% endblock %}
+
+{% block header_breadcrumbs_wrapper %}
+<div class="header breadcrumbs">
   {% with versions=index_history selected=index_version param_name="index_version" %}
     {% include "notebooks/includes/page_header.html" %}
   {% endwith %}
+</div>
 {% endblock %}
 
 {% block page_content %}

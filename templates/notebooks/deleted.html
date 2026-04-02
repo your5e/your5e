@@ -4,14 +4,18 @@
 
 {% block main_class %} class="notebook settings"{% endblock %}
 
-{% block page_context %}
+{% block header_primary_wrapper %}
+<div class="header primary notebook">
   {% include "notebooks/includes/notebook_header.html" %}
+</div>
 {% endblock %}
 
-{% block page_breadcrumbs %}
+{% block header_breadcrumbs_wrapper %}
+<div class="header breadcrumbs">
   {% with current_page="deleted pages" hide_controls=True %}
     {% include "notebooks/includes/page_header.html" %}
   {% endwith %}
+</div>
 {% endblock %}
 
 {% block page_content %}

@@ -1,24 +1,22 @@
 {% load campaign_permissions %}
 
-<div class="campaign-header">
-  <p class="campaign-name">{{ campaign.name }}</p>
-  <div class="campaign-controls">
-    <p class="campaign-meta">
-      Campaign owner:
-      <a href="{% url 'profile' username=campaign.owner.username %}">{{ campaign.owner.username }}</a>.
-    </p>
-    {% if campaign|is_member:request.user %}
-      <div class="campaign-actions">
-        {% if campaign|is_owner:request.user %}
-          <a href="{% url 'campaign_settings' username=campaign.owner.username slug=campaign.slug %}"
-             class="button">Settings</a>
-        {% endif %}
-        <form method="post" action="{% url 'campaign_leave' %}">
-          {% csrf_token %}
-          <input type="hidden" name="campaign" value="{{ campaign.pk }}">
-          <button type="submit" class="danger">Leave campaign</button>
-        </form>
-      </div>
-    {% endif %}
-  </div>
+<h1>{{ campaign.name }}</h1>
+<div class="controls">
+  <p class="meta">
+    Campaign owner:
+    <a href="{% url 'profile' username=campaign.owner.username %}">{{ campaign.owner.username }}</a>.
+  </p>
+  {% if campaign|is_member:request.user %}
+    <div class="actions">
+      {% if campaign|is_owner:request.user %}
+        <a href="{% url 'campaign_settings' username=campaign.owner.username slug=campaign.slug %}"
+           class="button">Settings</a>
+      {% endif %}
+      <form method="post" action="{% url 'campaign_leave' %}">
+        {% csrf_token %}
+        <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+        <button type="submit" class="danger">Leave campaign</button>
+      </form>
+    </div>
+  {% endif %}
 </div>

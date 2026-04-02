@@ -1,6 +1,4 @@
-:root {
-    --indent: clamp(1rem, 5vw, 4rem);
-}
+@use "../theme/typography" as *;
 
 body {
     display: flex;
@@ -15,19 +13,5 @@ body {
 body > main {
     flex-grow: 1;
     margin-bottom: 2rem;
-    padding-inline: var(--indent);
-}
-
-.full-width {
-    box-sizing: border-box;
-    width: 100vw;
-    margin-left: calc(-1 * var(--indent));
-    padding-inline: var(--indent);
-}
-
-.page-header {
-    box-sizing: border-box;
-    width: calc(100% + 2 * var(--indent));
-    margin-left: calc(-1 * var(--indent));
-    padding: 0.5em var(--indent);
+    padding-inline: $indent;
 }
