@@ -1,7 +1,8 @@
 import pytest
+from django.db import IntegrityError
 
 from campaigns.models import Campaign
-from notebooks.models import Notebook
+from notebooks.models import Notebook, NotebookPermission
 from wikis.models import Page
 
 from . import NotebookMixin
@@ -89,3 +90,22 @@ class TestNotebook(NotebookMixin):
         wiki_notebook = campaign.campaign_notebooks.get(is_wiki=True).notebook
         with pytest.raises(ValueError):
             wiki_notebook.delete()
+
+
+@pytest.mark.django_db
+class TestNotebookPermission(NotebookMixin):
+    def test_cannot_duplicate_collaborator(self):
+        with pytest.raises(IntegrityError):
+            NotebookPermission.objects.create(
+                notebook=self.wendys_notebook,
+                user=self.susan,
+                role=NotebookPermission.Role.EDITOR,
+            )
+
+    def test_cannot_duplicate_collaborator_with_different_role(self):
+        with pytest.raises(IntegrityError):
+            NotebookPermission.objects.create(
+                notebook=self.wendys_notebook,
+                user=self.susan,
+                role=NotebookPermission.Role.VIEWER,
+            )

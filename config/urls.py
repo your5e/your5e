@@ -24,6 +24,8 @@ from campaigns.views import (
     CampaignNotebooksView,
     CampaignSettingsView,
     CampaignView,
+    CampaignWikiPageView,
+    CampaignWikiView,
 )
 from help.views import HelpPageView
 from notebooks.views import (
@@ -185,9 +187,19 @@ urlpatterns = [
         view=CampaignSettingsView.as_view(),
     ),
     path(
-        route="campaigns/<str:username>/<str:slug>",
+        route="campaigns/<str:username>/<str:slug>/",
         name="campaign",
         view=CampaignView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/",
+        name="campaign_wiki",
+        view=CampaignWikiView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/<path:path>",
+        name="campaign_wiki_page",
+        view=CampaignWikiPageView.as_view(),
     ),
 
     path(

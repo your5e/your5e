@@ -1,0 +1,23 @@
+{% load notebook_permissions %}
+
+<div class="campaign-header">
+  <p class="campaign-name">
+    <a href="{{ campaign.get_absolute_url }}">{{ campaign.name }}</a>
+    &rsaquo; Wiki
+  </p>
+  <div class="campaign-controls">
+    <p class="campaign-meta">
+      Campaign owner:
+      <a href="{% url 'profile' username=campaign.owner.username %}">{{ campaign.owner.username }}</a>.
+      {% if not is_wiki_notebook %}
+        Viewing: {{ notebook.name }}.
+      {% endif %}
+    </p>
+    <div class="campaign-actions">
+      {% if notebook|can_edit:request.user %}
+        <a href="{{ create_page_url }}" class="button">Add new page</a>
+      {% endif %}
+      <a href="{{ campaign.get_absolute_url }}" class="button">Back to campaign</a>
+    </div>
+  </div>
+</div>

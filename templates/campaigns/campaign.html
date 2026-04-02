@@ -41,52 +41,86 @@
   })();
   </script>
 
-  <h2>Notebooks</h2>
-  {% if notebook_data %}
-    <ul>
-      {% for item in notebook_data %}
-        <li>
-          <a href="{{ item.notebook.get_absolute_url }}">{{ item.notebook.name }}</a>
-          by {{ item.notebook.owner.username }}{% if item.editors %},
-            {% for e in item.editors %}{{ e.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            can edit{% endif %}{% if item.viewers %},
-            {% for v in item.viewers %}{{ v.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            can see{% endif %}{% if item.cannot_see %}
-            ({% for u in item.cannot_see %}{{ u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            cannot see){% endif %}
+  <h2>Wiki</h2>
+  <p>
+    <a href="{% url 'campaign_wiki' username=campaign.owner.username slug=campaign.slug %}">The wiki</a>
+    is a notebook automatically created for the campaign. Use it to take notes, about
+    anything. Anyone joining the campaign can edit it.
+  </p>
 
+  {% if notebook_data %}
+  <ul class="notebook-list">
+    {% for item in notebook_data %}
+      <li>
+        <span class="description">
+          <a href="{% url 'notebook_settings' username=item.notebook.owner.username slug=item.notebook.slug %}"
+            >{{ item.notebook.name }}</a>
+          by {{ item.notebook.owner.username }}
+        </span>
+        <span class="controls">
           {% if is_owner and item.can_move_up %}
-            <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+            <form method="post" action="{% url 'campaign_notebooks' %}">
               {% csrf_token %}
               <input type="hidden" name="campaign" value="{{ campaign.pk }}">
               <input type="hidden" name="move_notebook_up" value="{{ item.link.pk }}">
               <button type="submit">↑</button>
             </form>
           {% endif %}
-
           {% if is_owner and item.can_move_down %}
-            <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+            <form method="post" action="{% url 'campaign_notebooks' %}">
               {% csrf_token %}
               <input type="hidden" name="campaign" value="{{ campaign.pk }}">
               <input type="hidden" name="move_notebook_down" value="{{ item.link.pk }}">
               <button type="submit">↓</button>
             </form>
           {% endif %}
-
           {% if item.can_remove %}
-            <form method="post" action="{% url 'campaign_notebooks' %}" style="display:inline">
+            <form method="post" action="{% url 'campaign_notebooks' %}">
               {% csrf_token %}
               <input type="hidden" name="campaign" value="{{ campaign.pk }}">
               <input type="hidden" name="unlink_notebook" value="{{ item.link.pk }}">
               <button type="submit">Remove</button>
             </form>
           {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No notebooks linked to this campaign.</p>
+        </span>
+        <span class="collaborators">
+          {% if item.editors %}
+            {% for e in item.editors %}{{ e.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            can edit{% if item.viewers %};{% endif %}
+          {% endif %}
+          {% if item.viewers %}
+            {% for v in item.viewers %}{{ v.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            can see
+          {% endif %}
+          {% if item.cannot_see %}
+            ({% for u in item.cannot_see %}{{ u.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            cannot see)
+          {% endif %}
+        </span>
+      </li>
+    {% endfor %}
+  </ul>
   {% endif %}
+
+  <p>
+    <strong>Link notebooks to the wiki.</strong> They will create a folder in the wiki,
+    with the same name as the notebook. If a page in the wiki was created under the
+    same name, it will be obscured by the notebook and become inaccessible.
+  </p>
+  <p>
+    <strong>Private notebooks stay private.</strong> Private notebooks can be linked,
+    they will not become automatically visible to other players, nor give them the
+    ability to edit, unless you give them explicit permission.
+  </p>
+
+  <form method="post" action="{% url 'notebook_create' %}" class="notebook-add">
+    {% csrf_token %}
+    <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+    {% for player in other_players %}
+      <input type="hidden" name="prepopulate_collaborator" value="{{ player.pk }}">
+    {% endfor %}
+    <button type="submit">Add a new notebook to the campaign</button>
+  </form>
 
   {% if linkable_notebooks %}
     <form method="post" action="{% url 'campaign_notebooks' %}">
@@ -103,14 +137,5 @@
       <button type="submit">Link</button>
     </form>
   {% endif %}
-
-  <form method="post" action="{% url 'notebook_create' %}">
-    {% csrf_token %}
-    <input type="hidden" name="campaign" value="{{ campaign.pk }}">
-    {% for player in other_players %}
-      <input type="hidden" name="prepopulate_collaborator" value="{{ player.pk }}">
-    {% endfor %}
-    <button type="submit">Create new notebook</button>
-  </form>
 
 {% endblock %}

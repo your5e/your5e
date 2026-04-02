@@ -10,7 +10,9 @@ from notebooks.models import Notebook, NotebookPermission, OwnedSlugMixin
 from users.models import User, get_sentinel_user
 
 
-class CampaignNotebook(models.Model):
+class CampaignNotebook(OwnedSlugMixin, models.Model):
+    slug_scope_field = "campaign"
+
     campaign = models.ForeignKey(
         "Campaign",
         on_delete=models.CASCADE,
@@ -26,6 +28,7 @@ class CampaignNotebook(models.Model):
         on_delete=models.SET(get_sentinel_user),
         related_name="linked_notebooks",
     )
+    slug = models.SlugField(max_length=255, blank=True)
     order = models.PositiveIntegerField(default=0)
     is_wiki = models.BooleanField(default=False)
 
@@ -35,8 +38,19 @@ class CampaignNotebook(models.Model):
                 fields=["campaign", "notebook"],
                 name="unique_notebook_per_campaign",
             ),
+            models.UniqueConstraint(
+                fields=["campaign", "slug"],
+                name="unique_slug_per_campaign",
+            ),
         ]
         ordering = ["order"]
+
+    @property
+    def name(self):
+        return self.notebook.name
+
+    def get_base_slug(self):
+        return self.notebook.slug
 
     def __str__(self):
         return f"{self.notebook.name} in {self.campaign.name}"
@@ -50,6 +64,7 @@ class CampaignNotebook(models.Model):
                 self.order = 1
             else:
                 self.order = max_order + 1
+            self.slug = self.generate_unique_slug()
         super().save(*args, **kwargs)
 
 
@@ -86,6 +101,14 @@ class Campaign(OwnedSlugMixin, models.Model):
             "username": self.owner.username,
             "slug": self.slug,
         })
+
+    def get_players(self):
+        return [
+            m.user
+            for m in Campaign.players.through.objects.filter(campaign=self)
+            .select_related("user")
+            .order_by("id")
+        ]
 
     def save(self, *args, **kwargs):
         if not self.slug:

@@ -47,6 +47,9 @@ class NotebookContextMixin:
     Requires self.object to be set (a Notebook instance).
     """
 
+    def get_base_url(self):
+        return self.object.get_absolute_url()
+
     def get_create_page_url(self):
         return reverse("notebook_create_page", kwargs={
             "username": self.object.owner.username,
@@ -252,7 +255,7 @@ class NotebookCreateView(View):
         return render(request, "notebooks/create.html", context)
 
 
-class NotebookIndexView(NotebookFromURLMixin, TemplateView):
+class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView):
     template_name = "notebooks/notebook.html"
     not_found_template = "notebooks/not_found.html"
 
@@ -316,7 +319,7 @@ class NotebookIndexView(NotebookFromURLMixin, TemplateView):
             ).first()
             path_depth = len(self.path.split("/"))
             return self.object.breadcrumbs_for(representative)[:path_depth + 1]
-        return [{"name": self.object.name, "url": self.object.get_absolute_url()}]
+        return [{"name": self.object.name, "url": self.get_base_url()}]
 
     def get_current_page(self, breadcrumbs):
         if self.path:
@@ -343,7 +346,7 @@ class NotebookIndexView(NotebookFromURLMixin, TemplateView):
             "breadcrumbs": breadcrumbs,
             "current_page": self.get_current_page(breadcrumbs),
             "create_base": (
-                self.object.get_absolute_url() + (self.path + "/").lstrip("/")
+                self.get_base_url() + (self.path + "/").lstrip("/")
             ),
             "create_page_url": self.get_create_page_url(),
         }
@@ -355,7 +358,7 @@ class NotebookIndexView(NotebookFromURLMixin, TemplateView):
 
         if index_version:
             context["index_content"] = index_version.render(
-                base_url=self.object.get_absolute_url()
+                base_url=self.get_base_url()
             )
             context["index_version"] = index_version
             context["index_history"] = index_page.history()
@@ -837,9 +840,12 @@ class NotebookPageEditView(NotebookEditMixin, NotebookPageMixin, FormView):
             return self.version.filename
         return None
 
+    def get_folder_url(self, path):
+        return self.object.get_folder_url(path)
+
     def handle_empty_create(self):
         if self.path.endswith("/index"):
-            return redirect(self.object.get_folder_url(self.path))
+            return redirect(self.get_folder_url(self.path))
         return redirect(self.request.path)
 
     def save_page(self, form, filename, content):
@@ -930,13 +936,16 @@ class NotebookPageView(NotebookContextMixin, NotebookPageMixin, TemplateView):
 
         return super().get(request, *args, **kwargs)
 
+    def get_breadcrumbs(self):
+        return self.object.breadcrumbs_for(self.version)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update({
             "notebook": self.object,
             "page": self.version,
-            "breadcrumbs": self.object.breadcrumbs_for(self.version),
-            "content": self.version.render(base_url=self.object.get_absolute_url()),
+            "breadcrumbs": self.get_breadcrumbs(),
+            "content": self.version.render(base_url=self.get_base_url()),
             "history": self.page.history(),
             "is_old_version": self.version.number != self.page.latest_version.number,
             "create_page_url": self.get_create_page_url(),

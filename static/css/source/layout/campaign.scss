@@ -28,6 +28,37 @@ main.campaign {
         background-color: $colour-danger;
     }
 
+    ul.notebook-list {
+        list-style: none;
+        padding-left: 0;
+        padding-bottom: $half-line;
+
+        li {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 1em;
+            padding: 0.25em 0;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 2em 2em auto;
+            gap: 0.5em;
+
+            form:has([name="move_notebook_up"]) { grid-column: 1; }
+            form:has([name="move_notebook_down"]) { grid-column: 2; }
+            form:has([name="unlink_notebook"]) { grid-column: 3; }
+        }
+
+        .collaborators {
+            font-size: $size-long-primer;
+        }
+    }
+
+    .notebook-add {
+        padding-bottom: $one-line;
+    }
+
     &.settings {
         h2 {
             margin-bottom: 0;

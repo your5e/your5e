@@ -66,7 +66,7 @@ class TestNotebookView(NotebookMixin):
         )
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
-        assert 'href="/campaigns/wendy/the-great-quest"' in content
+        assert 'href="/campaigns/wendy/the-great-quest/"' in content
         assert "The Great Quest" in content
 
     @UserMixin.as_user("wendy")

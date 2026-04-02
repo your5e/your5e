@@ -8,16 +8,24 @@ from wikis.models import Wiki
 
 class OwnedSlugMixin:
     """
-    Mixin for models with name, slug, and owner fields.
-    Generates unique slugs scoped to the owner.
+    Mixin for models with name and slug fields.
+    Generates unique slugs scoped to a configurable field.
+    Override slug_scope_field to change the scoping (default: 'owner').
+    Override get_base_slug() to change how the base slug is determined.
     """
 
+    slug_scope_field = "owner"
+
+    def get_base_slug(self):
+        return slugify(self.name)
+
     def generate_unique_slug(self):
-        base_slug = slugify(self.name)
+        base_slug = self.get_base_slug()
         slug = base_slug
         counter = 2
+        scope_filter = {self.slug_scope_field: getattr(self, self.slug_scope_field)}
         while (
-            self.__class__.objects.filter(slug=slug, owner=self.owner)
+            self.__class__.objects.filter(slug=slug, **scope_filter)
             .exclude(pk=self.pk)
             .exists()
         ):
@@ -105,6 +113,14 @@ class NotebookPermission(models.Model):
     notebook = models.ForeignKey(Notebook, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=10, choices=Role.choices)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["notebook", "user"],
+                name="unique_notebook_user",
+            ),
+        ]
 
     def __str__(self):
         return (

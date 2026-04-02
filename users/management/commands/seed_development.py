@@ -308,6 +308,38 @@ class Command(BaseCommand):
         )
         norms_campaign.players.add(wendy)
 
+        norms_wiki = norms_campaign.campaign_notebooks.get(is_wiki=True).notebook
+        wiki_index = Page.objects.create(wiki=norms_wiki)
+        wiki_index.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # The Long Road
+
+                A campaign wiki for tracking our journey.
+
+                ## Quick Links
+                - [[Characters]]
+                - [[Locations]]
+                - [[Session Notes]]
+            """).strip().encode(),
+            created_by=norm,
+        )
+        wiki_chars = Page.objects.create(wiki=norms_wiki)
+        wiki_chars.update(
+            filename="characters.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Characters
+
+                ## Party Members
+                - **Thorn** - Human fighter
+                - **Elara** - Elf wizard
+                - **Bramble** - Halfling rogue
+            """).strip().encode(),
+            created_by=norm,
+        )
+
         wendys_campaign = Campaign.objects.create(
             name="Secrets of the Tower",
             owner=wendy,

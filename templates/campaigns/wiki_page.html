@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load notebook_permissions %}
+
+{% block title %}
+  {% if is_old_version %}Version {{ page.number }} of {% endif %}
+  {{ page.filename }} - {{ campaign.name }} Wiki - Your 5E
+{% endblock %}
+
+{% block main_class %} class="notebook campaign-wiki"{% endblock %}
+
+{% block page_context %}
+  {% include "campaigns/includes/wiki_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% with versions=history selected=page param_name="version" %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
+
+{% block page_content %}
+  <article>
+    <div class="user-content">
+      {{ content|safe }}
+    </div>
+  </article>
+{% endblock %}

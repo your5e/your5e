@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Link {{ notebook.name }} - Your 5E{% endblock %}
+
+{% block main_class %} class="campaign"{% endblock %}
+
+{% block page_context %}
+  {% include "campaigns/includes/campaign_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% include "campaigns/includes/page_header.html" %}
+{% endblock %}
+
+{% block page_content %}
+  <p>
+    A wiki page already exists at <code>{{ collision_path }}</code>.
+    Linking this notebook will make the wiki page inaccessible via that path.
+  </p>
+
+  <form method="post" action="{% url 'campaign_notebooks' %}">
+    {% csrf_token %}
+    <input type="hidden" name="campaign" value="{{ campaign.pk }}">
+    <input type="hidden" name="link_notebook" value="{{ notebook.pk }}">
+    <input type="hidden" name="confirm" value="true">
+    <button type="submit">Link {{ notebook.name }} anyway</button>
+  </form>
+
+  <p>
+    <a href="{% url 'campaign' username=campaign.owner.username slug=campaign.slug %}" class="cancel">Cancel</a>
+  </p>
+{% endblock %}

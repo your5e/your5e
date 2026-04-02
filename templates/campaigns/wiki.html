@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load notebook_permissions %}
+
+{% block title %}{{ campaign.name }} Wiki - Your 5E{% endblock %}
+
+{% block main_class %} class="notebook campaign-wiki"{% endblock %}
+
+{% block page_context %}
+  {% include "campaigns/includes/wiki_header.html" %}
+{% endblock %}
+
+{% block page_breadcrumbs %}
+  {% with versions=index_history selected=index_version param_name="index_version" %}
+    {% include "notebooks/includes/page_header.html" %}
+  {% endwith %}
+{% endblock %}
+
+{% block page_content %}
+  {% if folders or files %}
+    <nav class="notebook-nav">
+      <h2>
+        {% if not current_page or current_page == "index" %}
+          {% if is_wiki_notebook %}Wiki{% else %}{{ notebook.name }}{% endif %}
+        {% else %}
+          {{ current_page }}
+        {% endif %}
+        navigation
+      </h2>
+      {% if folders %}
+        <h3>Folders</h3>
+        <ul>
+          {% for folder in folders %}
+            <li>
+              <a href="{{ base_url }}{{ folder.href }}/">{{ folder.name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if files %}
+        <h3>Pages</h3>
+        <ul>
+          {% for file in files %}
+            <li>
+              <a href="{{ base_url }}{{ file.path }}">{{ file.display_name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if recent_pages %}
+        <h3>Recent</h3>
+        <ul>
+          {% for page in recent_pages %}
+            <li>
+              <a href="{{ base_url }}{{ page.path }}">{{ page.display_name }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+  {% if index_content %}
+    <article>
+      <div class="user-content">
+        {{ index_content|safe }}
+      </div>
+    </article>
+  {% endif %}
+{% endblock %}
