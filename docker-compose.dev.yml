@@ -27,7 +27,9 @@ services:
       DB_PORT: "5432"
 
   sass:
-    build: .
+    build:
+      context: .
+      target: base
     volumes:
       - .:/app
     command: sass --watch static/css/source/screen.scss:static/css/screen.css
