@@ -154,8 +154,9 @@ class Wiki(models.Model):
 
         return "/".join(result)
 
-    def breadcrumbs_for(self, version):
-        base_url = self.get_absolute_url()
+    def breadcrumbs_for(self, version, base_url=None):
+        if base_url is None:
+            base_url = self.get_absolute_url()
         crumbs = [{"name": self.name, "url": base_url}]
 
         path_parts = version.path.split("/")
@@ -340,6 +341,12 @@ class Version(models.Model):
             return basename[:-3]
         return basename
 
+    @property
+    def display_path(self):
+        if self.filename.lower().endswith(".md"):
+            return self.filename[:-3]
+        return self.filename
+
     def clean(self):
         self.validate_filename()
         self.validate_path_unique()
@@ -432,14 +439,14 @@ class Version(models.Model):
             if conflicting:
                 raise ValidationError(f"Path '{parent_path}' already exists.")
 
-    def render(self, base_url=None):
+    def render(self, base_url=None, resolve_wikilink=None):
+        if resolve_wikilink is None:
+            resolve_wikilink = self.resolve_wikilink
         if self.mime_type == "text/markdown":
-            current_dir = "/".join(self.path.split("/")[:-1])
             return render_wiki_content(
                 self.content.data.decode(),
-                self.resolve_wikilink,
+                resolve_wikilink,
                 base_url,
-                current_dir,
             )
         return self.content.data
 

@@ -326,6 +326,11 @@ class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView
             return breadcrumbs[-1]["name"]
         return ""
 
+    def get_recent_pages(self):
+        if self.path:
+            return None
+        return self.object.latest_versions().order_by("-created_at")[:5]
+
     def get_create_page_url(self):
         url = reverse("notebook_create_page", kwargs={
             "username": self.object.owner.username,
@@ -351,10 +356,7 @@ class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView
             "create_page_url": self.get_create_page_url(),
         }
 
-        if not self.path:
-            context["recent_pages"] = (
-                self.object.latest_versions().order_by("-created_at")[:5]
-            )
+        context["recent_pages"] = self.get_recent_pages()
 
         if index_version:
             context["index_content"] = index_version.render(

@@ -121,7 +121,7 @@ class TestNotebookPageView(NotebookMixin):
         )
         # [Notes](./notes) markdown link
         assert (
-            '<a href="/notebooks/wendy/heros-legendes/notes">Notes</a>'
+            '<a href="./notes">Notes</a>'
             in content
         )
 

@@ -71,7 +71,7 @@
         <ul>
           {% for page in recent_pages %}
             <li>
-              <a href="{{ notebook.get_absolute_url }}{{ page.path }}">{{ page.display_name }}</a>
+              <a href="{{ notebook.get_absolute_url }}{{ page.path }}">{{ page.display_path }}</a>
             </li>
           {% endfor %}
         </ul>

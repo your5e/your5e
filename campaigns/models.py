@@ -5,6 +5,7 @@ import markdown
 from django.db import models
 from django.db.models.signals import m2m_changed, post_delete
 from django.dispatch import receiver
+from django.utils.text import slugify
 
 from notebooks.models import Notebook, NotebookPermission, OwnedSlugMixin
 from users.models import User, get_sentinel_user
@@ -156,6 +157,45 @@ class Campaign(OwnedSlugMixin, models.Model):
             return ""
         clean = bleach.clean(self.description, tags=[], strip=True)
         return markdown.markdown(clean)
+
+    def visible_notebook_links(self, user, include_wiki=False):
+        from django.db.models import Q
+
+        from notebooks.models import Notebook
+
+        links = self.campaign_notebooks.select_related(
+            "notebook", "notebook__owner"
+        ).prefetch_related("notebook__notebookpermission_set__user")
+        if not include_wiki:
+            links = links.filter(is_wiki=False)
+        return list(links.filter(
+            Q(notebook__visibility=Notebook.Visibility.PUBLIC) |
+            Q(notebook__visibility=Notebook.Visibility.INTERNAL) |
+            Q(notebook__owner=user) |
+            Q(notebook__notebookpermission__user=user)
+        ).distinct())
+
+    def resolve_wikilink(self, target):
+        target = target.removesuffix(".md").removesuffix(".MD")
+        target_slug = slugify(target.replace("'", ""))
+
+        candidates = []
+        for link in self.campaign_notebooks.all():
+            notebook = link.notebook
+            for version in notebook.latest_versions():
+                path_basename = version.path.rsplit("/", 1)[-1]
+                if path_basename == target_slug or version.path == target_slug:
+                    if link.is_wiki:
+                        full_path = version.path
+                    else:
+                        full_path = f"{link.slug}/{version.path}"
+                    depth = version.path.count("/")
+                    candidates.append((depth, link.order, full_path))
+
+        if candidates:
+            candidates.sort()
+            return candidates[0][2]
+        return target_slug
 
 
 @receiver(post_delete, sender=User)

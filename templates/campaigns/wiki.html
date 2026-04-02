@@ -41,7 +41,7 @@
         <ul>
           {% for folder in folders %}
             <li>
-              <a href="{{ base_url }}{{ folder.href }}/">{{ folder.name }}</a>
+              <a href="{{ notebook_base_url }}{{ folder.href }}/">{{ folder.name }}</a>
             </li>
           {% endfor %}
         </ul>
@@ -52,7 +52,7 @@
         <ul>
           {% for file in files %}
             <li>
-              <a href="{{ base_url }}{{ file.path }}">{{ file.display_name }}</a>
+              <a href="{{ notebook_base_url }}{{ file.path }}">{{ file.display_name }}</a>
             </li>
           {% endfor %}
         </ul>
@@ -63,7 +63,7 @@
         <ul>
           {% for page in recent_pages %}
             <li>
-              <a href="{{ base_url }}{{ page.path }}">{{ page.display_name }}</a>
+              <a href="{{ base_url }}{{ page.path }}">{{ page.display_path }}</a>
             </li>
           {% endfor %}
         </ul>

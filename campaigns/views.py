@@ -13,6 +13,7 @@ from notebooks.models import Notebook
 from notebooks.permissions import NotebookPermissions
 from notebooks.views import NotebookIndexView, NotebookPageEditView, NotebookPageView
 from users.models import User, get_sentinel_user
+from wikis.models import FolderLink, Version
 
 
 class CampaignObjectMixin:
@@ -44,16 +45,7 @@ class CampaignSettingsView(CampaignObjectMixin, View):
 
 class CampaignView(CampaignObjectMixin, View):
     def get_visible_notebooks(self, user):
-        links = self.object.campaign_notebooks.filter(
-            is_wiki=False
-        ).select_related(
-            "notebook", "notebook__owner", "linked_by"
-        )
-        visible = []
-        for link in links:
-            if NotebookPermissions.can_view(link.notebook, user):
-                visible.append(link)
-        return visible
+        return self.object.visible_notebook_links(user)
 
     def get_linkable_notebooks(self, user):
         already_linked = self.object.campaign_notebooks.values_list(
@@ -83,7 +75,9 @@ class CampaignView(CampaignObjectMixin, View):
             viewers = []
             cannot_see = []
 
-            for perm in notebook.notebookpermission_set.select_related("user"):
+            permitted_user_ids = set()
+            for perm in notebook.notebookpermission_set.all():
+                permitted_user_ids.add(perm.user_id)
                 if perm.user not in player_set:
                     continue
                 if perm.role == "editor":
@@ -91,9 +85,12 @@ class CampaignView(CampaignObjectMixin, View):
                 else:
                     viewers.append(perm.user)
 
-            if is_notebook_owner:
+            if is_notebook_owner and notebook.visibility == Notebook.Visibility.PRIVATE:
                 for player in players:
-                    if not NotebookPermissions.can_view(notebook, player):
+                    if (
+                        player.id != notebook.owner_id
+                        and player.id not in permitted_user_ids
+                    ):
                         cannot_see.append(player)
 
             notebook_data.append({
@@ -481,19 +478,19 @@ class CampaignWikiMixin:
             })
 
         if hasattr(self, 'version') and self.version:
-            base_url = self.get_notebook_base_url()
-            path_parts = self.version.path.split("/")
-            filename_parts = self.version.filename.split("/")
+            source = self.version
+        elif self.notebook_path:
+            path = self.notebook_path.rstrip("/") or "index"
+            filename = self.object.suggest_filename(path)
+            source = Version(path=path, filename=filename)
+        else:
+            return breadcrumbs
 
-            for i in range(len(path_parts)):
-                is_last = i == len(path_parts) - 1
-                if is_last:
-                    name = self.version.display_name
-                    url = base_url + "/".join(path_parts)
-                else:
-                    name = filename_parts[i]
-                    url = base_url + "/".join(path_parts[:i + 1]) + "/"
-                breadcrumbs.append({"name": name, "url": url})
+        path_crumbs = self.object.breadcrumbs_for(
+            source,
+            base_url=self.get_notebook_base_url(),
+        )
+        breadcrumbs.extend(path_crumbs[1:])
 
         return breadcrumbs
 
@@ -525,13 +522,65 @@ class CampaignWikiView(CampaignWikiMixin, NotebookIndexView):
         context = self.get_context_data(contents, index_page, index_version)
         return self.render_to_response(context)
 
+    def get_visible_notebook_links(self):
+        return self.campaign.visible_notebook_links(self.request.user)
+
+    def get_contents(self):
+        contents = super().get_contents()
+        if self.notebook_path or not self.is_wiki_notebook():
+            return contents
+
+        notebook_folders = [
+            FolderLink(name=link.notebook.name, href=link.slug)
+            for link in self.get_visible_notebook_links()
+        ]
+        all_folders = sorted(
+            contents["folders"] + notebook_folders,
+            key=lambda f: f.href,
+        )
+        return {
+            "folders": all_folders,
+            "files": contents["files"],
+        }
+
+    def get_recent_pages(self):
+        if self.notebook_path or not self.is_wiki_notebook():
+            return None
+        recent = []
+        links = self.campaign.visible_notebook_links(
+            self.request.user, include_wiki=True
+        )
+        for link in links:
+            versions = link.notebook.latest_versions().order_by("-created_at")[:5]
+            for version in versions:
+                if link.is_wiki:
+                    path = version.path
+                    display_path = version.display_path
+                else:
+                    path = f"{link.slug}/{version.path}"
+                    display_path = f"{link.notebook.name}/{version.display_path}"
+                recent.append({
+                    "path": path,
+                    "display_path": display_path,
+                    "created_at": version.created_at,
+                })
+        recent.sort(key=lambda p: p["created_at"], reverse=True)
+        return recent[:5]
+
     def get_context_data(self, contents, index_page, index_version):
         context = super().get_context_data(contents, index_page, index_version)
+        if index_version:
+            context["index_content"] = index_version.render(
+                base_url=self.get_base_url(),
+                resolve_wikilink=self.campaign.resolve_wikilink,
+            )
         context.update({
             "campaign": self.campaign,
             "notebook": self.object,
             "is_wiki_notebook": self.is_wiki_notebook(),
             "base_url": self.get_base_url(),
+            "notebook_base_url": self.get_notebook_base_url(),
+            "create_base": self.get_notebook_base_url(),
         })
         return context
 
@@ -576,6 +625,10 @@ class CampaignWikiPageView(CampaignWikiMixin, NotebookPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["content"] = self.version.render(
+            base_url=self.get_base_url(),
+            resolve_wikilink=self.campaign.resolve_wikilink,
+        )
         context.update({
             "campaign": self.campaign,
             "notebook": self.object,
@@ -618,16 +671,6 @@ class CampaignWikiPageEditView(CampaignWikiMixin, NotebookPageEditView):
 
     def get_breadcrumbs(self):
         breadcrumbs = super().get_breadcrumbs()
-
-        if not self.version:
-            page_name = self.notebook_path.split("/")[-1]
-            if not page_name:
-                page_name = "new"
-            breadcrumbs.append({
-                "name": page_name,
-                "url": self.get_base_url() + self.wiki_path,
-            })
-
         if self.page:
             breadcrumbs.append({"name": "edit"})
         else:

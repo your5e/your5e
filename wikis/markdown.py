@@ -1,11 +1,10 @@
 import re
-from posixpath import normpath
 
 import bleach
 import markdown
 
 
-def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
+def render_wiki_content(text, resolve_wikilink, base_url):
     def replace_image_embed(match):
         content = match.group(1)
         if "|" in content:
@@ -24,7 +23,7 @@ def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
             else:
                 dims = f' width="{dimensions}"'
 
-        return f'<img src="/{path}"{dims}>'
+        return f'<img src="{base_url}/{path}"{dims}>'
 
     def replace_wikilink(match):
         content = match.group(1)
@@ -36,24 +35,7 @@ def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
 
         path = resolve_wikilink(target)
 
-        return f"[{display}](/{path})"
-
-    def replace_url(match):
-        attr = match.group(1)
-        url = match.group(2)
-
-        if url.startswith(("http://", "https://", "#")):
-            return match.group(0)
-
-        if url.startswith("/"):
-            resolved = f"{base_url}{url}"
-        else:
-            if current_dir:
-                resolved = f"{base_url}/{normpath(current_dir + '/' + url)}"
-            else:
-                resolved = f"{base_url}/{normpath(url)}"
-
-        return f'{attr}="{resolved}"'
+        return f"[{display}]({base_url}/{path})"
 
     base_url = base_url.rstrip("/")
 
@@ -61,6 +43,5 @@ def render_wiki_content(text, resolve_wikilink, base_url, current_dir=None):
     text = re.sub(r"!\[\[([^\]]+)\]\]", replace_image_embed, text)
     text = re.sub(r"\[\[([^\]]+)\]\]", replace_wikilink, text)
     html = markdown.markdown(text, extensions=["fenced_code", "tables"])
-    html = re.sub(r'(href|src)="([^"]+)"', replace_url, html)
 
     return html

@@ -37,11 +37,17 @@ on link, append numbers as we do elsewhere to differentiate when colliding.
         - links in notebook pages should remain in the campaign context
         - attached notebook beats paths in the wiki, warn when adding a
           notebook that would clash
-- [ ] extend wikilink resolution to be campaign-aware
+- [X] extend wikilink resolution to be campaign-aware
         - shortest-path, first-notebook-match as tiebreaker using the campaign
           attachment ordering (test both ways)
+- [X] the list of pages, folders, and most-recent edits should be a
+      cross-campaign collection, not limited to the wiki
+- [X] recently edited should list the full pathname
+- [X] check all anciliary links resolve to the campaign wiki, not the notebook
 - [ ] creating a page in the campaign wiki should offer a dropdown of which
       place it gets created
         - defaults to the current context (either wiki or notebook)
         - read-only notebooks are excluded
         - ensure returns to campaign context not notebook
+- [ ] cache the list of cross-campaign pages for resolving folders, pages,
+      most-recent edits, etc
