@@ -6035,4 +6035,3 @@ if (typeof window !== "undefined" && typeof window.document !== "undefined") {
   window.OverType = OverType.default ? OverType.default : OverType;
 }
     
-//# sourceMappingURL=overtype.js.map
