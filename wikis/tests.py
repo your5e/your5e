@@ -344,7 +344,7 @@ class TestVersion(WikiMixin):
         html = page.latest_version.render(base_url="/wiki")
         assert 'href="/wiki/getting-started"' in html
 
-    def test_render_strips_html_tags(self):
+    def test_render_escapes_html_tags(self):
         page = Page.objects.create(wiki=self.wiki)
         page.update(
             filename="With HTML.md",
@@ -353,7 +353,55 @@ class TestVersion(WikiMixin):
             created_by=self.wendy,
         )
         html = page.latest_version.render(base_url="/wiki")
-        assert html == "<p>blockboldsupercustom</p>"
+        assert html == (
+            "&lt;div&gt;block&lt;/div&gt;\n"
+            "<p>&lt;b&gt;bold&lt;/b&gt;&lt;sup&gt;super&lt;/sup&gt;"
+            "&lt;x&gt;custom&lt;/x&gt;</p>"
+        )
+
+    def test_render_blockquote(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Blockquote.md",
+            mime_type="text/markdown",
+            data=b"> A wise saying",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<blockquote>\n<p>A wise saying</p>\n</blockquote>"
+
+    def test_render_autolink(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Autolink.md",
+            mime_type="text/markdown",
+            data=b"<https://example.com>",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == '<p><a href="https://example.com">https://example.com</a></p>'
+
+    def test_render_html_entity(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Entity.md",
+            mime_type="text/markdown",
+            data=b"One &mdash; two",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>One &mdash; two</p>"
+
+    def test_render_quote_in_title(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Quote.md",
+            mime_type="text/markdown",
+            data=b'[link](https://example.com "A title")',
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == '<p><a href="https://example.com" title="A title">link</a></p>'
 
 
 @pytest.mark.django_db

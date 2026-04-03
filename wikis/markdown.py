@@ -3,6 +3,19 @@ import re
 import bleach
 import markdown
 
+ALLOWED_TAGS = [
+    "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "blockquote", "pre", "code", "hr", "br",
+    "ul", "ol", "li",
+    "a", "em", "strong", "img",
+    "table", "thead", "tbody", "tr", "th", "td",
+]
+
+ALLOWED_ATTRIBUTES = {
+    "a": ["href", "title"],
+    "img": ["src", "width", "height", "alt", "title"],
+}
+
 
 def render_wiki_content(text, resolve_wikilink, base_url):
     def replace_image_embed(match):
@@ -39,9 +52,9 @@ def render_wiki_content(text, resolve_wikilink, base_url):
 
     base_url = base_url.rstrip("/")
 
-    text = bleach.clean(text, tags=[], strip=True)
     text = re.sub(r"!\[\[([^\]]+)\]\]", replace_image_embed, text)
     text = re.sub(r"\[\[([^\]]+)\]\]", replace_wikilink, text)
     html = markdown.markdown(text, extensions=["fenced_code", "tables"])
+    html = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
 
     return html
