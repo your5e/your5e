@@ -240,13 +240,20 @@ class TestCampaign(LinkedCampaignNotebooksMixin):
     def test_description_html_empty_when_no_description(self):
         assert self.other_campaign.description_html() == ""
 
-    def test_wiki_notebook_created_with_campaign(self):
-        link = CampaignNotebook.objects.get(campaign=self.owned_campaign, is_wiki=True)
-        assert link.notebook.name == "The Old Forest wiki"
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wiki_notebook_created_with_campaign(self, client):
+        campaign = Campaign.objects.create(owner=self.wendy, name="New Campaign")
+        link = CampaignNotebook.objects.get(campaign=campaign, is_wiki=True)
+        assert link.notebook.name == "New Campaign wiki"
         assert link.notebook.owner == self.wendy
         assert link.notebook.visibility == Notebook.Visibility.PRIVATE
         assert link.order == 0
         assert link.linked_by == self.wendy
+
+        response = client.get("/campaigns/wendy/new-campaign/")
+        assert response.status_code == HTTPStatus.OK
+        response = client.get("/campaigns/wendy/new-campaign/wiki/")
+        assert response.status_code == HTTPStatus.OK
 
     def test_wiki_ownership_transfers_with_campaign(self):
         from users.models import get_sentinel_user

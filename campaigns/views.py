@@ -521,7 +521,8 @@ class CampaignWikiView(CampaignWikiMixin, NotebookIndexView):
         index_page = self.get_index_page()
 
         if self.is_empty_folder(contents, index_page):
-            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+            if not (self.is_wiki_notebook() and not self.notebook_path):
+                return HttpResponse(status=HTTPStatus.NOT_FOUND)
 
         if index_page:
             index_version = self.get_index_version(index_page)
