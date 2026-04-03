@@ -39,6 +39,8 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 # production image
 # ================
 FROM base AS prod
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
 RUN pip install .
 
 COPY manage.py .

@@ -13,6 +13,7 @@ def get_secret(name):
 
 DEBUG = os.environ.get("DEBUG") == "1"
 SECRET_KEY = get_secret("SECRET_KEY")
+GIT_SHA = os.environ.get("GIT_SHA", "dev")
 
 LANGUAGE_CODE = "en-gb"
 TIME_ZONE = "UTC"
@@ -70,6 +71,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.git_sha",
             ],
         },
     },
