@@ -1,4 +1,4 @@
-.PHONY: build clean css deploy dev lint-django makemigrations migrate reset scry setup test test-django test-sync-integration server-tests server-tests-down terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
+.PHONY: build clean css deploy dev lint-django makemigrations migrate reset scry setup shell test test-django test-sync-integration server-tests server-tests-down terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -20,6 +20,9 @@ makemigrations:
 
 migrate:
 	docker compose exec $(EXEC_FLAGS) web python manage.py migrate
+
+shell:
+	docker compose exec $(EXEC_FLAGS) web python manage.py shell
 
 setup:
 	docker compose up -d --build
