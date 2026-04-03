@@ -4,8 +4,11 @@ from http import HTTPStatus
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.views import View
+from django.views.generic import TemplateView
+from django.views.generic.edit import FormView
 
 from campaigns.models import Campaign, CampaignNotebook
 from campaigns.permissions import CampaignPermissions
@@ -23,36 +26,52 @@ DEFAULT_MIME_TYPE = "application/octet-stream"
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
 
 
-class NotebookReadMixin:
+class NotebookFromURLMixin:
+    """Provides get_object() from URL kwargs (username, slug)."""
+
     def get_object(self):
         owner = get_object_or_404(User, username=self.kwargs['username'])
         return get_object_or_404(Notebook, owner=owner, slug=self.kwargs['slug'])
 
 
-class NotebookWriteMixin:
+class NotebookFromPOSTMixin:
+    """Provides get_object() from POST body (notebook pk)."""
+
     def get_object(self):
         return get_object_or_404(Notebook, pk=self.request.POST.get("notebook"))
 
 
-class NotebookSettingsMixin:
+class NotebookContextMixin:
+    """
+    Provides common notebook context.
+    Requires self.object to be set (a Notebook instance).
+    """
+
+    def get_base_url(self):
+        return self.object.get_absolute_url()
+
+    def get_create_page_url(self):
+        return reverse("notebook_create_page", kwargs={
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+        })
+
+
+class NotebookSettingsMixin(NotebookContextMixin):
     def get_context_data(self, **kwargs):
         collaborators = NotebookPermission.objects.filter(
             notebook=self.object
         ).select_related("user")
-        create_page_url = reverse("notebook_create_page", kwargs={
-            "username": self.object.owner.username,
-            "slug": self.object.slug,
-        })
         return {
             "notebook": self.object,
             "collaborators": collaborators,
             "visibility_choices": Notebook.Visibility.choices,
-            "create_page_url": create_page_url,
+            "create_page_url": self.get_create_page_url(),
             **kwargs,
         }
 
 
-class NotebookEditMixin:
+class NotebookEditMixin(NotebookContextMixin):
     def get_edit_context(self, path, filename, version=None):
         if version:
             source = version
@@ -71,17 +90,12 @@ class NotebookEditMixin:
             breadcrumbs = self.object.breadcrumbs_for(source)
             editing_name = source.display_name
 
-        create_page_url = reverse("notebook_create_page", kwargs={
-            "username": self.object.owner.username,
-            "slug": self.object.slug,
-        })
-
         return {
             "notebook": self.object,
             "breadcrumbs": breadcrumbs,
             "editing_name": editing_name,
             "editing_url": self.object.get_absolute_url() + path,
-            "create_page_url": create_page_url,
+            "create_page_url": self.get_create_page_url(),
         }
 
 
@@ -241,96 +255,127 @@ class NotebookCreateView(View):
         return render(request, "notebooks/create.html", context)
 
 
-class NotebookView(NotebookReadMixin, View):
+class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView):
+    template_name = "notebooks/notebook.html"
+    not_found_template = "notebooks/not_found.html"
+
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.path = kwargs.get("path", "")
+
     @NotebookPermissions.view_required
-    def get(self, request, username, slug, path=""):
-        contents = self.object.contents_in(path)
+    def get(self, request, *args, **kwargs):
+        contents = self.get_contents()
+        index_page = self.get_index_page()
 
-        # index.md is rendered inline, exclude from the file list
-        index_path = (path + "/index").lstrip("/")
-        files = [
-            f for f in contents["files"]
-                if f.path != index_path
-        ]
+        if self.is_empty_folder(contents, index_page):
+            return self.handle_not_found()
 
-        index_exists = False
-        try:
-            index_page = self.object.get_page(path=index_path)
-            index_exists = True
-        except Page.DoesNotExist:
-            index_page = None
-
-        # an index only "exists" if there is content below
-        if not files and not contents["folders"] and not index_exists:
-            context = {"notebook": self.object, "path": path}
-            if NotebookPermissions.can_edit(self.object, request.user):
-                filename = self.object.suggest_filename(index_path)
-                context["form"] = PageForm(initial={"filename": filename})
-                context["form_action"] = reverse("notebook_page", kwargs={
-                    "username": username,
-                    "slug": slug,
-                    "path": index_path,
-                })
-            return render(
-                request,
-                "notebooks/not_found.html",
-                context,
-                status=HTTPStatus.NOT_FOUND,
-            )
-
-        if path:
-            representative = self.object.latest_versions().filter(
-                path__startswith=path + "/"
-            ).first()
-            path_depth = len(path.split("/"))
-            breadcrumbs = self.object.breadcrumbs_for(representative)[:path_depth + 1]
-            current_page = breadcrumbs[-1]["name"]
+        if index_page:
+            index_version = self.get_index_version(index_page)
+            if index_version is None:
+                return HttpResponse(status=HTTPStatus.NOT_FOUND)
         else:
-            current_page = ""
-            breadcrumbs = [
-                {"name": self.object.name, "url": self.object.get_absolute_url()},
-            ]
+            index_version = None
 
-        create_page_url = reverse("notebook_create_page", kwargs={
+        context = self.get_context_data(contents, index_page, index_version)
+        return self.render_to_response(context)
+
+    def get_index_path(self):
+        return (self.path + "/index").lstrip("/")
+
+    def get_index_page(self):
+        try:
+            return self.object.get_page(path=self.get_index_path())
+        except Page.DoesNotExist:
+            return None
+
+    def get_index_version(self, index_page):
+        try:
+            return index_page.get_version(self.request.GET.get("index_version"))
+        except Page.DoesNotExist:
+            return None
+
+    def get_contents(self):
+        contents = self.object.contents_in(self.path)
+        index_path = self.get_index_path()
+        files = [f for f in contents["files"] if f.path != index_path]
+        return {
+            "folders": contents["folders"],
+            "files": files,
+        }
+
+    def is_empty_folder(self, contents, index_page):
+        return (
+            not contents["files"]
+            and not contents["folders"]
+            and index_page is None
+        )
+
+    def get_breadcrumbs(self):
+        if self.path:
+            representative = self.object.latest_versions().filter(
+                path__startswith=self.path + "/"
+            ).first()
+            path_depth = len(self.path.split("/"))
+            return self.object.breadcrumbs_for(representative)[:path_depth + 1]
+        return [{"name": self.object.name, "url": self.get_base_url()}]
+
+    def get_current_page(self, breadcrumbs):
+        if self.path:
+            return breadcrumbs[-1]["name"]
+        return ""
+
+    def get_recent_pages(self):
+        if self.path:
+            return None
+        return self.object.latest_versions().order_by("-created_at")[:5]
+
+    def get_create_page_url(self):
+        url = reverse("notebook_create_page", kwargs={
             "username": self.object.owner.username,
             "slug": self.object.slug,
         })
-        if path:
-            create_page_url += f"?folder={path}"
+        if self.path:
+            url += f"?folder={self.path}"
+        return url
+
+    def get_context_data(self, contents, index_page, index_version):
+        breadcrumbs = self.get_breadcrumbs()
 
         context = {
             "notebook": self.object,
             "folders": contents["folders"],
-            "files": files,
-            "index_exists": index_exists,
+            "files": contents["files"],
+            "index_exists": index_page is not None,
             "breadcrumbs": breadcrumbs,
-            "current_page": current_page,
-            "create_base": self.object.get_absolute_url() + (path + "/").lstrip("/"),
-            "create_page_url": create_page_url,
+            "current_page": self.get_current_page(breadcrumbs),
+            "create_base": (
+                self.get_base_url() + (self.path + "/").lstrip("/")
+            ),
+            "create_page_url": self.get_create_page_url(),
         }
 
-        if not path:
-            context["recent_pages"] = (
-                self.object.latest_versions().order_by("-created_at")[:5]
-            )
+        context["recent_pages"] = self.get_recent_pages()
 
-        if index_page:
-            try:
-                index_version = index_page.get_version(
-                    request.GET.get("index_version")
-                )
-            except Page.DoesNotExist:
-                return HttpResponse(status=HTTPStatus.NOT_FOUND)
+        if index_version:
             context["index_content"] = index_version.render(
-                base_url=self.object.get_absolute_url()
+                base_url=self.get_base_url()
             )
             context["index_version"] = index_version
             context["index_history"] = index_page.history()
 
-        return render(request, "notebooks/notebook.html", context)
+        return context
+
+    def handle_not_found(self):
+        kwargs = dict(self.kwargs)
+        kwargs["path"] = self.get_index_path()
+        return NotebookPageEditView.as_view()(
+            self.request, *self.args, **kwargs
+        )
 
 
-class NotebookSettingsView(NotebookSettingsMixin, NotebookReadMixin, View):
+class NotebookSettingsView(NotebookSettingsMixin, NotebookFromURLMixin, View):
     @NotebookPermissions.owner_required
     def get(self, request, username, slug):
         breadcrumbs = [
@@ -344,14 +389,10 @@ class NotebookSettingsView(NotebookSettingsMixin, NotebookReadMixin, View):
         )
 
 
-class NotebookDeletedPagesView(NotebookReadMixin, View):
+class NotebookDeletedPagesView(NotebookContextMixin, NotebookFromURLMixin, View):
     @NotebookPermissions.edit_required
     def get(self, request, username, slug):
         deleted_pages = self.object.deleted_pages()
-        create_page_url = reverse("notebook_create_page", kwargs={
-            "username": self.object.owner.username,
-            "slug": self.object.slug,
-        })
         breadcrumbs = [
             {"name": self.object.name, "url": self.object.get_absolute_url()},
             {"name": "Deleted pages"},
@@ -362,13 +403,13 @@ class NotebookDeletedPagesView(NotebookReadMixin, View):
             {
                 "notebook": self.object,
                 "deleted_pages": deleted_pages,
-                "create_page_url": create_page_url,
+                "create_page_url": self.get_create_page_url(),
                 "breadcrumbs": breadcrumbs,
             },
         )
 
 
-class NotebookPageCreateView(NotebookEditMixin, NotebookReadMixin, View):
+class NotebookPageCreateView(NotebookEditMixin, NotebookFromURLMixin, View):
     @NotebookPermissions.edit_required
     def get(self, request, username, slug):
         folder = request.GET.get("folder", "")
@@ -405,7 +446,7 @@ class NotebookPageCreateView(NotebookEditMixin, NotebookReadMixin, View):
         return render(request, "notebooks/edit.html", context)
 
 
-class NotebookUploadView(NotebookWriteMixin, View):
+class NotebookUploadView(NotebookFromPOSTMixin, View):
     @NotebookPermissions.edit_required
     def post(self, request):
         uploaded_file = request.FILES.get("file")
@@ -441,7 +482,7 @@ class NotebookUploadView(NotebookWriteMixin, View):
         return redirect(self.object)
 
 
-class NotebookRenameView(NotebookWriteMixin, View):
+class NotebookRenameView(NotebookFromPOSTMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         name = request.POST.get("name")
@@ -467,7 +508,7 @@ class NotebookRenameView(NotebookWriteMixin, View):
         return redirect(self.object)
 
 
-class NotebookVisibilityView(NotebookWriteMixin, View):
+class NotebookVisibilityView(NotebookFromPOSTMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         visibility = request.POST.get("visibility")
@@ -485,12 +526,15 @@ class NotebookVisibilityView(NotebookWriteMixin, View):
         return redirect(self.object)
 
 
-class NotebookDeleteView(NotebookWriteMixin, View):
+class NotebookDeleteView(NotebookFromPOSTMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         if "confirm" in request.POST or not self.object.has_content():
             owner_username = self.object.owner.username
-            self.object.delete()
+            try:
+                self.object.delete()
+            except ValueError:
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
             return redirect("profile", username=owner_username)
 
         breadcrumbs = [
@@ -503,7 +547,7 @@ class NotebookDeleteView(NotebookWriteMixin, View):
         })
 
 
-class NotebookPageDeleteView(NotebookWriteMixin, View):
+class NotebookPageDeleteView(NotebookFromPOSTMixin, View):
     @NotebookPermissions.edit_required
     def post(self, request):
         page = get_object_or_404(Page, pk=request.POST.get("page"))
@@ -523,97 +567,77 @@ class NotebookPageDeleteView(NotebookWriteMixin, View):
         )
 
 
-class NotebookPageRestoreView(View):
-    def get_page_and_notebook(self, request):
-        page_uuid = request.GET.get("page") or request.POST.get("page")
-        page = get_object_or_404(Page, uuid=page_uuid)
-        notebook = page.wiki.notebook
-        return page, notebook
+class NotebookPageRestoreView(NotebookContextMixin, View):
+    def get_object(self):
+        page_uuid = self.request.GET.get("page") or self.request.POST.get("page")
+        self.page = get_object_or_404(Page, uuid=page_uuid)
+        return self.page.wiki.notebook
 
-    def check_permission(self, request, notebook):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-        if not NotebookPermissions.can_edit(notebook, request.user):
-            return HttpResponse(status=HTTPStatus.FORBIDDEN)
-        return None
-
-    def get_page_url(self, notebook, page):
+    def get_page_url(self):
         return reverse("notebook_page", kwargs={
-            "username": notebook.owner.username,
-            "slug": notebook.slug,
-            "path": page.latest_version.path,
+            "username": self.object.owner.username,
+            "slug": self.object.slug,
+            "path": self.page.latest_version.path,
         })
 
-    def get_restore_context(self, notebook, page, form):
-        breadcrumbs = notebook.breadcrumbs_for(page.latest_version)
+    def get_restore_context(self, form):
+        breadcrumbs = self.object.breadcrumbs_for(self.page.latest_version)
         breadcrumbs.append({"name": "restore"})
-        create_page_url = reverse("notebook_create_page", kwargs={
-            "username": notebook.owner.username,
-            "slug": notebook.slug,
-        })
         return {
-            "notebook": notebook,
-            "page": page,
+            "notebook": self.object,
+            "page": self.page,
             "form": form,
             "breadcrumbs": breadcrumbs,
-            "create_page_url": create_page_url,
+            "create_page_url": self.get_create_page_url(),
         }
 
+    @NotebookPermissions.edit_required
     def get(self, request):
         from notebooks.forms import RestoreForm
 
-        page, notebook = self.get_page_and_notebook(request)
-        if not page.deleted_at:
-            return redirect(self.get_page_url(notebook, page))
-
-        denied = self.check_permission(request, notebook)
-        if denied:
-            return denied
+        if not self.page.deleted_at:
+            return redirect(self.get_page_url())
 
         form = RestoreForm()
         return render(
             request,
             "notebooks/restore.html",
-            self.get_restore_context(notebook, page, form),
+            self.get_restore_context(form),
         )
 
+    @NotebookPermissions.edit_required
     def post(self, request):
         from notebooks.forms import RestoreForm
 
-        page, notebook = self.get_page_and_notebook(request)
-        if not page.deleted_at:
-            return redirect(self.get_page_url(notebook, page))
-
-        denied = self.check_permission(request, notebook)
-        if denied:
-            return denied
+        if not self.page.deleted_at:
+            return redirect(self.get_page_url())
 
         form = RestoreForm(request.POST)
         if not form.is_valid():
             return render(
                 request,
                 "notebooks/restore.html",
-                self.get_restore_context(notebook, page, form),
+                self.get_restore_context(form),
                 status=HTTPStatus.BAD_REQUEST,
             )
 
         filename = form.cleaned_data.get("filename") or None
         try:
-            page.restore(filename=filename)
+            self.page.restore(filename=filename)
         except ValidationError as e:
             for message in e.messages:
                 form.add_error("filename", message)
             return render(
                 request,
                 "notebooks/restore.html",
-                self.get_restore_context(notebook, page, form),
+                self.get_restore_context(form),
                 status=HTTPStatus.CONFLICT,
             )
 
-        return redirect(notebook)
+        return redirect(self.object)
 
 
-class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View):
+class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookFromPOSTMixin, View):
     @NotebookPermissions.owner_required
     def post(self, request):
         confirm = request.POST.get("confirm") == "true"
@@ -667,6 +691,12 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View)
         user_pk = request.POST.get("remove")
         user = get_object_or_404(User, pk=user_pk)
 
+        wiki_link = CampaignNotebook.objects.filter(
+            notebook=self.object, is_wiki=True
+        ).first()
+        if wiki_link and wiki_link.campaign.players.filter(pk=user.pk).exists():
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
         if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
@@ -686,6 +716,13 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View)
         role = request.POST.get("role")
         user = get_object_or_404(User, pk=user_pk)
 
+        if role == NotebookPermission.Role.VIEWER:
+            wiki_link = CampaignNotebook.objects.filter(
+                notebook=self.object, is_wiki=True
+            ).first()
+            if wiki_link and wiki_link.campaign.players.filter(pk=user.pk).exists():
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
         if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
@@ -702,171 +739,133 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookWriteMixin, View)
         return redirect(self.object)
 
 
-class NotebookPageView(NotebookEditMixin, NotebookReadMixin, View):
-    @NotebookPermissions.view_required
-    def get(self, request, username, slug, path):
-        if path.endswith(".md"):
-            url = reverse("notebook_page", kwargs={
-                "username": username,
-                "slug": slug,
-                "path": path[:-3],
-            })
-            return redirect(url, permanent=True)
+class NotebookPageMixin(NotebookFromURLMixin):
 
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.path = kwargs.get("path", "")
+
+    def get_page(self):
         try:
-            page = self.object.get_page(path=path)
+            return self.object.get_page(path=self.path)
         except Page.DoesNotExist:
-            if not NotebookPermissions.can_edit(self.object, request.user):
-                return render(
+            return None
+
+
+class NotebookPageEditView(NotebookEditMixin, NotebookPageMixin, FormView):
+    template_name = "notebooks/edit.html"
+    form_class = PageForm
+
+    @NotebookPermissions.view_required
+    def dispatch(self, request, *args, **kwargs):
+        self.page = self.get_page()
+
+        if not NotebookPermissions.can_edit(self.object, request.user):
+            if request.method == "GET" and self.page is None:
+                return TemplateResponse(
                     request,
                     "notebooks/not_found.html",
-                    {"notebook": self.object, "path": path},
+                    {"notebook": self.object, "path": self.path},
                     status=HTTPStatus.NOT_FOUND,
                 )
+            return NotebookPermissions.forbidden_response(request)
 
-            filename = self.object.suggest_filename(path)
-            form = PageForm(initial={"filename": filename})
+        if self.page:
+            self.version = self.page.latest_version
+            self.mime_type = self.version.mime_type
+        else:
+            self.version = None
+            self.mime_type = "text/markdown"
+        return super().dispatch(request, *args, **kwargs)
 
-            context = self.get_edit_context(path, filename)
-            context["breadcrumbs"].append({"name": "create"})
-            context.update({
-                "page": None,
-                "version": None,
-                "form": form,
-                "history": [],
-            })
-            return render(
-                request,
-                "notebooks/edit.html",
-                context,
-                status=HTTPStatus.NOT_FOUND,
-            )
-
-        if "edit" in request.GET:
-            if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-            if not NotebookPermissions.can_edit(self.object, request.user):
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
-
-            version = page.latest_version
-            content = version.content.data
-            if version.mime_type.startswith("text/"):
+    def get_initial(self):
+        if self.page:
+            content = self.version.content.data
+            if self.version.mime_type.startswith("text/"):
                 content = content.decode("utf-8")
             else:
                 content = ""
-
-            filename = version.filename
+            filename = self.version.filename
             if filename.lower().endswith(".md"):
                 filename = filename[:-3]
+            return {"filename": filename, "content": content}
+        return {"filename": self.object.suggest_filename(self.path)}
 
-            form = PageForm(initial={"filename": filename, "content": content})
-
-            context = self.get_edit_context(version.path, version.filename, version)
-            context["breadcrumbs"].append({"name": "edit"})
-            context.update({
-                "page": page,
-                "version": version,
-                "form": form,
-                "history": page.history(),
-            })
-            return render(request, "notebooks/edit.html", context)
-
-        history = page.history()
-        version_number = request.GET.get("version")
-        try:
-            version = page.get_version(version_number)
-        except Page.DoesNotExist:
-            return HttpResponse(status=HTTPStatus.NOT_FOUND)
-        is_old_version = version_number is not None
-
-        content = version.render(base_url=self.object.get_absolute_url())
-
-        if isinstance(content, str):
-            breadcrumbs = self.object.breadcrumbs_for(version)
-
-            create_page_url = reverse("notebook_create_page", kwargs={
-                "username": self.object.owner.username,
-                "slug": self.object.slug,
-            })
-            return render(request, "notebooks/page.html", {
-                "notebook": self.object,
-                "page": version,
-                "breadcrumbs": breadcrumbs,
-                "content": content,
-                "history": history,
-                "is_old_version": is_old_version,
-                "create_page_url": create_page_url,
-            })
-        return HttpResponse(content, content_type=version.mime_type)
-
-    @NotebookPermissions.edit_required
-    def post(self, request, username, slug, path):
-        try:
-            page = self.object.get_page(path=path)
-            version = page.latest_version
-            mime_type = version.mime_type
-            default_filename = version.filename
-            current_page = version.display_name
-        except Page.DoesNotExist:
-            page = None
-            version = None
-            mime_type = "text/markdown"
-            default_filename = None
-            current_page = path
-
-        form = PageForm(request.POST)
-        create_page_url = reverse("notebook_create_page", kwargs={
-            "username": self.object.owner.username,
-            "slug": self.object.slug,
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form_action"] = reverse("notebook_page", kwargs={
+            "username": self.kwargs["username"],
+            "slug": self.kwargs["slug"],
+            "path": self.path,
         })
-        if not form.is_valid():
-            return render(
-                request,
-                "notebooks/edit.html",
-                {
-                    "notebook": self.object,
-                    "page": page,
-                    "version": version,
-                    "form": form,
-                    "current_page": current_page,
-                    "create_page_url": create_page_url,
-                },
-                status=HTTPStatus.BAD_REQUEST,
+        if self.page:
+            edit_context = self.get_edit_context(
+                self.version.path, self.version.filename, self.version
             )
+            edit_context["breadcrumbs"].append({"name": "edit"})
+            context.update(edit_context)
+            context["page"] = self.page
+            context["version"] = self.version
+            context["history"] = self.page.history()
+        else:
+            filename = self.object.suggest_filename(self.path)
+            edit_context = self.get_edit_context(self.path, filename)
+            edit_context["breadcrumbs"].append({"name": "create"})
+            context.update(edit_context)
+            context["page"] = None
+            context["version"] = None
+            context["history"] = []
+        return context
 
+    def render_to_response(self, context, **response_kwargs):
+        if self.page is None and self.request.method == "GET":
+            response_kwargs["status"] = HTTPStatus.NOT_FOUND
+        return super().render_to_response(context, **response_kwargs)
+
+    def form_valid(self, form):
+        filename = self.get_filename(form)
+        if filename is None:
+            form.add_error("filename", "Filename is required")
+            return self.form_invalid(form)
+
+        content = form.cleaned_data.get("content", "")
+        if not content and self.page is None:
+            return self.handle_empty_create()
+
+        return self.save_page(form, filename, content)
+
+    def form_invalid(self, form):
+        return self.render_to_response(
+            self.get_context_data(form=form),
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    def get_filename(self, form):
         filename = form.cleaned_data["filename"].strip()
         if filename:
             if "/" not in filename:
-                directory = "/".join(path.split("/")[:-1])
+                directory = "/".join(self.path.split("/")[:-1])
                 if directory:
                     filename = f"{directory}/{filename}"
-            if mime_type == "text/markdown":
+            if self.mime_type == "text/markdown":
                 if not filename.lower().endswith(".md"):
                     filename = f"{filename}.md"
-        elif default_filename:
-            filename = default_filename
-        else:
-            form.add_error("filename", "Filename is required")
-            return render(
-                request,
-                "notebooks/edit.html",
-                {
-                    "notebook": self.object,
-                    "page": page,
-                    "version": version,
-                    "form": form,
-                    "current_page": current_page,
-                    "create_page_url": create_page_url,
-                },
-                status=HTTPStatus.BAD_REQUEST,
-            )
+            return filename
+        if self.version:
+            return self.version.filename
+        return None
 
-        content = form.cleaned_data.get("content", "")
-        if not content and page is None:
-            if path.endswith("/index"):
-                return redirect(self.object.get_folder_url(path))
-            return redirect(request.path)
+    def get_folder_url(self, path):
+        return self.object.get_folder_url(path)
+
+    def handle_empty_create(self):
+        if self.path.endswith("/index"):
+            return redirect(self.get_folder_url(self.path))
+        return redirect(self.request.path)
+
+    def save_page(self, form, filename, content):
         data = content.encode("utf-8")
+        page = self.page
 
         if page is None:
             page = Page.objects.create(wiki=self.object)
@@ -874,51 +873,112 @@ class NotebookPageView(NotebookEditMixin, NotebookReadMixin, View):
         try:
             new_version = page.update(
                 filename=filename,
-                mime_type=mime_type,
+                mime_type=self.mime_type,
                 data=data,
-                created_by=request.user,
+                created_by=self.request.user,
             )
         except ValidationError as e:
-            context = {
-                "notebook": self.object,
-                "page": page,
-                "version": page.latest_version,
-                "form": form,
-                "current_page": current_page,
-                "create_page_url": create_page_url,
-            }
-            for message in e.messages:
-                if "already exists" in message:
-                    conflict_path = (
-                        message
-                        .removeprefix("Path '")
-                        .removesuffix("' already exists.")
-                    )
-                    context["conflict_filename"] = form.cleaned_data["filename"]
-                    context["conflict_url"] = reverse("notebook_page", kwargs={
-                        "username": username,
-                        "slug": slug,
-                        "path": conflict_path,
-                    })
-                else:
-                    form.add_error(None, message)
-            return render(
-                request,
-                "notebooks/edit.html",
-                context,
-                status=HTTPStatus.CONFLICT,
-            )
+            return self.handle_validation_error(e, form, page)
 
+        return self.get_success_redirect(new_version)
+
+    def handle_validation_error(self, error, form, page):
+        self.page = page
+        self.version = page.latest_version
+        for message in error.messages:
+            if "already exists" in message:
+                conflict_path = (
+                    message
+                    .removeprefix("Path '")
+                    .removesuffix("' already exists.")
+                )
+                context = self.get_context_data(form=form)
+                context["conflict_filename"] = form.cleaned_data["filename"]
+                context["conflict_url"] = reverse("notebook_page", kwargs={
+                    "username": self.kwargs["username"],
+                    "slug": self.kwargs["slug"],
+                    "path": conflict_path,
+                })
+                return self.render_to_response(context, status=HTTPStatus.CONFLICT)
+            form.add_error(None, message)
+        return self.render_to_response(
+            self.get_context_data(form=form),
+            status=HTTPStatus.CONFLICT,
+        )
+
+    def get_success_redirect(self, new_version):
         new_path = new_version.path
         if new_path.endswith("/index") or new_path == "index":
             return redirect(self.object.get_folder_url(new_path))
-
-        url = reverse("notebook_page", kwargs={
-            "username": username,
-            "slug": slug,
+        return redirect(reverse("notebook_page", kwargs={
+            "username": self.kwargs["username"],
+            "slug": self.kwargs["slug"],
             "path": new_path,
+        }))
+
+
+class NotebookPageView(NotebookContextMixin, NotebookPageMixin, TemplateView):
+    template_name = "notebooks/page.html"
+    not_found_template = "notebooks/not_found.html"
+
+    @NotebookPermissions.view_required
+    def dispatch(self, request, *args, **kwargs):
+        if self.path.endswith(".md"):
+            return self.redirect_md_extension()
+
+        if request.method == "POST" or "edit" in request.GET:
+            return NotebookPageEditView.as_view()(request, *args, **kwargs)
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        self.page = self.get_page()
+        self.version_number = request.GET.get("version")
+
+        if self.page is None:
+            return self.handle_not_found()
+
+        try:
+            self.version = self.page.get_version(self.version_number)
+        except Page.DoesNotExist:
+            return HttpResponse(status=HTTPStatus.NOT_FOUND)
+
+        if self.version.mime_type != "text/markdown":
+            return HttpResponse(
+                self.version.content.data,
+                content_type=self.version.mime_type,
+            )
+
+        return super().get(request, *args, **kwargs)
+
+    def get_breadcrumbs(self):
+        return self.object.breadcrumbs_for(self.version)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            "notebook": self.object,
+            "page": self.version,
+            "breadcrumbs": self.get_breadcrumbs(),
+            "content": self.version.render(base_url=self.get_base_url()),
+            "history": self.page.history(),
+            "is_old_version": self.version.number != self.page.latest_version.number,
+            "create_page_url": self.get_create_page_url(),
         })
-        return redirect(url)
+        return context
+
+    def redirect_md_extension(self):
+        url = reverse("notebook_page", kwargs={
+            "username": self.kwargs["username"],
+            "slug": self.kwargs["slug"],
+            "path": self.path[:-3],
+        })
+        return redirect(url, permanent=True)
+
+    def handle_not_found(self):
+        return NotebookPageEditView.as_view()(
+            self.request, *self.args, **self.kwargs
+        )
 
 
 class NotebookListView(View):

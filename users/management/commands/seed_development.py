@@ -308,6 +308,38 @@ class Command(BaseCommand):
         )
         norms_campaign.players.add(wendy)
 
+        norms_wiki = norms_campaign.campaign_notebooks.get(is_wiki=True).notebook
+        wiki_index = Page.objects.create(wiki=norms_wiki)
+        wiki_index.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # The Long Road
+
+                A campaign wiki for tracking our journey.
+
+                ## Quick Links
+                - [[Characters]]
+                - [[Locations]]
+                - [[Session Notes]]
+            """).strip().encode(),
+            created_by=norm,
+        )
+        wiki_chars = Page.objects.create(wiki=norms_wiki)
+        wiki_chars.update(
+            filename="characters.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Characters
+
+                ## Party Members
+                - **Thorn** - Human fighter
+                - **Elara** - Elf wizard
+                - **Bramble** - Halfling rogue
+            """).strip().encode(),
+            created_by=norm,
+        )
+
         wendys_campaign = Campaign.objects.create(
             name="Secrets of the Tower",
             owner=wendy,
@@ -335,6 +367,65 @@ class Command(BaseCommand):
         CampaignNotebook.objects.create(
             campaign=wendys_campaign,
             notebook=notebook,
+            linked_by=norm,
+        )
+
+        # Long names for wrapping tests
+        long_campaign = Campaign.objects.create(
+            name=(
+                "Whispers from the Forgotten Crypts Beneath the Mountains "
+                "of Eternal Sorrow"
+            ),
+            owner=norm,
+            description="A campaign with a deliberately long name for testing.",
+        )
+        long_campaign.players.add(wendy)
+
+        long_notebook = Notebook.objects.create(
+            name=(
+                "Comprehensive Bestiary and Geographical Survey of the "
+                "Blighted Territories Including Appendices on Local Customs"
+            ),
+            owner=norm,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+        long_index = Page.objects.create(wiki=long_notebook)
+        long_index.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Campaign Notes
+
+                Welcome to our campaign wiki.
+
+                ![Map](random-hexmap-7.png)
+            """).encode(),
+            created_by=norm,
+        )
+        long_map = Page.objects.create(wiki=long_notebook)
+        long_map.update(
+            filename="random-hexmap-7.png",
+            mime_type="image/png",
+            data=map_data,
+            created_by=norm,
+        )
+        long_folder_one = Page.objects.create(wiki=long_notebook)
+        long_folder_one.update(
+            filename="Legends and Oral Histories of the Northern Clans/index.md",
+            mime_type="text/markdown",
+            data=b"# Legends and Oral Histories of the Northern Clans\n",
+            created_by=norm,
+        )
+        long_folder_two = Page.objects.create(wiki=long_notebook)
+        long_folder_two.update(
+            filename="Alchemical Reagents and Their Mundane Substitutes/index.md",
+            mime_type="text/markdown",
+            data=b"# Alchemical Reagents and Their Mundane Substitutes\n",
+            created_by=norm,
+        )
+        CampaignNotebook.objects.create(
+            campaign=long_campaign,
+            notebook=long_notebook,
             linked_by=norm,
         )
 

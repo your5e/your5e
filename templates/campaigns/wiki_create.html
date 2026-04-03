@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Create page - {{ campaign.name }} Wiki - Your 5E{% endblock %}
+
+{% block main_class %} class="notebook campaign-wiki edit"{% endblock %}
+
+{% block header_primary_wrapper %}
+<div class="header primary campaign">
+  {% include "campaigns/includes/campaign_header.html" %}
+</div>
+{% endblock %}
+
+{% block header_breadcrumbs_wrapper %}
+<div class="header breadcrumbs">
+  {% include "includes/breadcrumbs.html" %}
+</div>
+{% endblock %}
+
+{% block page_content %}
+  <h1>Create page</h1>
+
+  {% if form.non_field_errors %}
+    <ul class="errors">
+      {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post" action="{{ form_action }}" class="edit-form">
+    {% csrf_token %}
+    <p>
+      <label for="id_notebook">Notebook:</label><br>
+      <select name="notebook" id="id_notebook">
+        {% for link in editable_notebooks %}
+          <option value="{{ link.notebook.pk }}"{% if link.notebook == selected_notebook %} selected{% endif %}>
+            {% if link.is_wiki %}{{ campaign.name }} Wiki{% else %}{{ link.notebook.name }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </p>
+    <p>
+      {{ form.filename.label_tag }}<br>
+      {{ form.filename }}
+      {% if form.filename.errors %}
+        <span class="error">{{ form.filename.errors.0 }}</span>
+      {% endif %}
+    </p>
+    <p>
+      {{ form.content.label_tag }}
+    </p>
+    <div id="overtype-editor" hidden></div>
+    <textarea id="id_content" name="content" rows="20" cols="80">{{ form.content.value|default:'' }}</textarea>
+    {% if form.content.errors %}
+      <span class="error">{{ form.content.errors.0 }}</span>
+    {% endif %}
+    <input type="submit" value="Create" class="primary">
+  </form>
+
+  {% load static %}
+  <script src="{% static 'js/overtype.js' %}"></script>
+  <script>
+  const textarea = document.getElementById('id_content');
+  const container = document.getElementById('overtype-editor');
+  try {
+    const tb = toolbarButtons;
+    const [editor] = new OverType('#overtype-editor', {
+      value: textarea.value,
+      toolbar: true,
+      toolbarButtons: [
+        tb.h1, tb.h2, tb.h3, tb.separator,
+        tb.bold, tb.italic, tb.code, tb.link, tb.separator,
+        tb.bulletList, tb.orderedList, tb.separator,
+        tb.quote
+      ],
+      onChange: (value) => { textarea.value = value; }
+    });
+    container.hidden = false;
+    textarea.hidden = true;
+  } catch (e) {
+    console.error('OverType failed:', e);
+  }
+  </script>
+{% endblock %}

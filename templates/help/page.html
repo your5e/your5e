@@ -2,10 +2,10 @@
 
 {% block title %}{{ page.display_name }} - Help - Your 5E{% endblock %}
 
-{% block page_breadcrumbs %}
-  <div class="page-header">
-    {% include "includes/breadcrumbs.html" %}
-  </div>
+{% block header_breadcrumbs_wrapper %}
+<div class="header breadcrumbs">
+  {% include "includes/breadcrumbs.html" %}
+</div>
 {% endblock %}
 
 {% block page_content %}

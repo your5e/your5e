@@ -121,7 +121,7 @@ class TestNotebookPageView(NotebookMixin):
         )
         # [Notes](./notes) markdown link
         assert (
-            '<a href="/notebooks/wendy/heros-legendes/notes">Notes</a>'
+            '<a href="./notes">Notes</a>'
             in content
         )
 
@@ -164,21 +164,94 @@ class TestNotebookPageView(NotebookMixin):
         response = client.get("/notebooks/wendy/heros-legendes/session-one?version=99")
         assert response.status_code == HTTPStatus.NOT_FOUND
 
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_can_view_public_page(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        self.assert_notebook_name_present(content, self.susans_notebook)
+        self.assert_page_heading_present(content, "Session Log")
+        self.assert_page_edit_link_absent(content)
+
+    def test_anonymous_can_view_public_page(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        self.assert_notebook_name_present(content, self.susans_notebook)
+        self.assert_page_heading_present(content, "Session Log")
+        self.assert_page_edit_link_absent(content)
+
+    @UserMixin.as_user("mary")
+    def test_owner_can_view_internal_restricted_notebook(self, client):
+        response = client.get("/notebooks/mary/world-lore/history")
+        assert response.status_code == HTTPStatus.OK
+        assert "The world began" in response.content.decode()
+
     @UserMixin.as_user("wendy")
-    def test_edit_markdown_shows_form_with_content(self, client):
+    def test_editor_can_view_internal_restricted_notebook(self, client):
+        response = client.get("/notebooks/mary/world-lore/history")
+        assert response.status_code == HTTPStatus.OK
+        assert "The world began" in response.content.decode()
+
+    @UserMixin.as_user("susan")
+    def test_viewer_can_view_internal_restricted_notebook(self, client):
+        response = client.get("/notebooks/mary/world-lore/history")
+        assert response.status_code == HTTPStatus.OK
+        assert "The world began" in response.content.decode()
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_can_view_internal_restricted_notebook(self, client):
+        response = client.get("/notebooks/mary/world-lore/history")
+        assert response.status_code == HTTPStatus.OK
+
+    def test_anonymous_cannot_view_internal_restricted_notebook(self, client):
+        response = client.get("/notebooks/mary/world-lore/history")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        self.assert_notebook_name_absent(
+            response.content.decode(),
+            self.marys_notebook,
+        )
+
+    @UserMixin.as_user("susan")
+    def test_owner_can_view_public_notebook(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        assert "Public campaign notes" in response.content.decode()
+
+    @UserMixin.as_user("mary")
+    def test_editor_can_view_public_notebook(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        assert "Public campaign notes" in response.content.decode()
+
+    @UserMixin.as_user("wendy")
+    def test_viewer_can_view_public_notebook(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        assert "Public campaign notes" in response.content.decode()
+
+    @UserMixin.as_user("hugh")
+    def test_non_collaborator_can_view_public_notebook(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        assert "Public campaign notes" in response.content.decode()
+
+    def test_anonymous_can_view_public_notebook(self, client):
+        response = client.get("/notebooks/susan/campaign-notes/session-log")
+        assert response.status_code == HTTPStatus.OK
+        assert "Public campaign notes" in response.content.decode()
+
+
+@pytest.mark.django_db
+class TestNotebookPageEditView(NotebookMixin):
+    @UserMixin.as_user("wendy")
+    def test_owner_can_see_edit_form(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         self.assert_edit_page_form_present(content)
         assert "# Notes" in content
         assert 'name="filename" value="notes"' in content
-
-    @UserMixin.as_user("wendy")
-    def test_edit_binary_shows_form(self, client):
-        response = client.get("/notebooks/wendy/heros-legendes/heroes/shield.png?edit")
-        assert response.status_code == HTTPStatus.OK
-        content = response.content.decode()
-        self.assert_edit_page_form_present(content)
 
     @UserMixin.as_user("susan")
     def test_editor_can_see_edit_form(self, client):
@@ -197,25 +270,16 @@ class TestNotebookPageView(NotebookMixin):
         assert response.status_code == HTTPStatus.FORBIDDEN
 
     def test_anonymous_cannot_see_edit_form(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log?edit")
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert "Access denied" in response.content.decode()
 
-    @UserMixin.as_user("hugh")
-    def test_non_collaborator_can_view_public_page(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
+    @UserMixin.as_user("wendy")
+    def test_edit_binary_shows_form(self, client):
+        response = client.get("/notebooks/wendy/heros-legendes/heroes/shield.png?edit")
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
-        self.assert_notebook_name_present(content, self.susans_notebook)
-        self.assert_page_heading_present(content, "Session Log")
-        self.assert_page_edit_link_absent(content)
-
-    def test_anonymous_can_view_public_page(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        content = response.content.decode()
-        self.assert_notebook_name_present(content, self.susans_notebook)
-        self.assert_page_heading_present(content, "Session Log")
-        self.assert_page_edit_link_absent(content)
+        self.assert_edit_page_form_present(content)
 
     @UserMixin.as_user("wendy")
     def test_owner_can_edit_page(self, client):
@@ -267,10 +331,10 @@ class TestNotebookPageView(NotebookMixin):
         assert page.latest_version.content.data == initial_data
 
     def test_anonymous_cannot_edit(self, client):
-        page = self.susans_notebook.get_page(path="session-log")
+        page = self.wendys_notebook.get_page(path="notes")
         initial_data = page.latest_version.content.data
-        response = client.post("/notebooks/susan/campaign-notes/session-log", {
-            "filename": "session-log",
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "notes",
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
@@ -287,6 +351,40 @@ class TestNotebookPageView(NotebookMixin):
         assert response.url == "/notebooks/wendy/heros-legendes/"
 
     @UserMixin.as_user("wendy")
+    def test_edit_page_with_new_filename_renames(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "archive/Campaign Notes",
+            "content": "# Campaign Notes\n\nRenamed.",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/heros-legendes/archive/campaign-notes"
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.filename == "archive/Campaign Notes.md"
+        assert page.latest_version.content.data == b"# Campaign Notes\n\nRenamed.\n"
+
+    @UserMixin.as_user("wendy")
+    def test_rename_to_existing_path_shows_error_with_link(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "Session One",
+            "content": "# Conflict",
+        })
+        assert response.status_code == HTTPStatus.CONFLICT
+        content = response.content.decode()
+        assert "already exists" in content
+        expected_link = (
+            '<a href="/notebooks/wendy/heros-legendes/session-one">'
+            "Session One</a>"
+        )
+        assert expected_link in content
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count
+
+    @UserMixin.as_user("wendy")
     def test_unresolved_path_for_owner(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/rumours")
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -296,11 +394,11 @@ class TestNotebookPageView(NotebookMixin):
 
     @UserMixin.as_user("susan")
     def test_unresolved_path_for_editor(self, client):
-        response = client.get("/notebooks/wendy/heros-legendes/monsters/goblin")
+        response = client.get("/notebooks/wendy/heros-legendes/rumours")
         assert response.status_code == HTTPStatus.NOT_FOUND
         content = response.content.decode()
         self.assert_create_form_present(content)
-        assert 'name="filename" value="Monsters/Goblin"' in content
+        assert 'name="filename" value="Rumours"' in content
 
     @UserMixin.as_user("mary")
     def test_unresolved_path_for_viewer(self, client):
@@ -312,11 +410,12 @@ class TestNotebookPageView(NotebookMixin):
     def test_unresolved_path_for_non_collaborator(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/rumours")
         assert response.status_code == HTTPStatus.FORBIDDEN
+        self.assert_create_form_absent(response.content.decode())
 
     def test_unresolved_path_for_anonymous(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/rumours")
-        assert response.status_code == HTTPStatus.NOT_FOUND
-        self.assert_create_form_absent(response.content.decode())
+        response = client.get("/notebooks/wendy/heros-legendes/rumours")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert "Access denied" in response.content.decode()
 
     @UserMixin.as_user("wendy")
     def test_create_page_from_unresolved_path(self, client):
@@ -357,38 +456,14 @@ class TestNotebookPageView(NotebookMixin):
         assert Page.objects.filter(wiki=self.wendys_notebook).count() == initial_count
 
     @UserMixin.as_user("wendy")
-    def test_edit_page_with_new_filename_renames(self, client):
-        page = self.wendys_notebook.get_page(path="notes")
-        initial_version_count = page.version_set.count()
-        response = client.post("/notebooks/wendy/heros-legendes/notes", {
-            "filename": "archive/Campaign Notes",
-            "content": "# Campaign Notes\n\nRenamed.",
+    def test_owner_can_create_page(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/locations/tavern", {
+            "filename": "Locations/Tavern",
+            "content": "# The Tavern",
         })
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/notebooks/wendy/heros-legendes/archive/campaign-notes"
-        page.refresh_from_db()
-        assert page.version_set.count() == initial_version_count + 1
-        assert page.latest_version.filename == "archive/Campaign Notes.md"
-        assert page.latest_version.content.data == b"# Campaign Notes\n\nRenamed.\n"
-
-    @UserMixin.as_user("wendy")
-    def test_rename_to_existing_path_shows_error_with_link(self, client):
-        page = self.wendys_notebook.get_page(path="notes")
-        initial_version_count = page.version_set.count()
-        response = client.post("/notebooks/wendy/heros-legendes/notes", {
-            "filename": "Session One",
-            "content": "# Conflict",
-        })
-        assert response.status_code == HTTPStatus.CONFLICT
-        content = response.content.decode()
-        assert "already exists" in content
-        expected_link = (
-            '<a href="/notebooks/wendy/heros-legendes/session-one">'
-            "Session One</a>"
-        )
-        assert expected_link in content
-        page.refresh_from_db()
-        assert page.version_set.count() == initial_version_count
+        page = self.wendys_notebook.get_page(path="locations/tavern")
+        assert page.latest_version.created_by == self.wendy
 
     @UserMixin.as_user("susan")
     def test_editor_can_create_page(self, client):
@@ -421,25 +496,13 @@ class TestNotebookPageView(NotebookMixin):
         assert Page.objects.filter(wiki=self.wendys_notebook).count() == initial_count
 
     def test_anonymous_cannot_create_page(self, client):
-        initial_count = Page.objects.filter(wiki=self.susans_notebook).count()
-        response = client.post("/notebooks/susan/campaign-notes/locations/tavern", {
+        initial_count = Page.objects.filter(wiki=self.wendys_notebook).count()
+        response = client.post("/notebooks/wendy/heros-legendes/locations/tavern", {
             "filename": "Locations/Tavern",
             "content": "# The Tavern",
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
-        assert Page.objects.filter(wiki=self.susans_notebook).count() == initial_count
-
-    @UserMixin.as_user("mary")
-    def test_owner_can_view_internal_restricted_notebook(self, client):
-        response = client.get("/notebooks/mary/world-lore/history")
-        assert response.status_code == HTTPStatus.OK
-        assert "The world began" in response.content.decode()
-
-    @UserMixin.as_user("wendy")
-    def test_editor_can_view_internal_restricted_notebook(self, client):
-        response = client.get("/notebooks/mary/world-lore/history")
-        assert response.status_code == HTTPStatus.OK
-        assert "The world began" in response.content.decode()
+        assert Page.objects.filter(wiki=self.wendys_notebook).count() == initial_count
 
     @UserMixin.as_user("wendy")
     def test_editor_can_edit_internal_restricted_notebook(self, client):
@@ -463,17 +526,6 @@ class TestNotebookPageView(NotebookMixin):
         page = self.marys_notebook.get_page(path="geography")
         assert page.latest_version.created_by == self.wendy
 
-    @UserMixin.as_user("susan")
-    def test_viewer_can_view_internal_restricted_notebook(self, client):
-        response = client.get("/notebooks/mary/world-lore/history")
-        assert response.status_code == HTTPStatus.OK
-        assert "The world began" in response.content.decode()
-
-    @UserMixin.as_user("hugh")
-    def test_non_collaborator_can_view_internal_restricted_notebook(self, client):
-        response = client.get("/notebooks/mary/world-lore/history")
-        assert response.status_code == HTTPStatus.OK
-
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_edit_internal_restricted_notebook(self, client):
         response = client.post("/notebooks/mary/world-lore/history", {
@@ -481,14 +533,6 @@ class TestNotebookPageView(NotebookMixin):
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_anonymous_cannot_view_internal_restricted_notebook(self, client):
-        response = client.get("/notebooks/mary/world-lore/history")
-        assert response.status_code == HTTPStatus.UNAUTHORIZED
-        self.assert_notebook_name_absent(
-            response.content.decode(),
-            self.marys_notebook,
-        )
 
     @UserMixin.as_user("mary")
     def test_owner_can_edit_internal_restricted_notebook(self, client):
@@ -564,30 +608,6 @@ class TestNotebookPageView(NotebookMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert Page.objects.filter(wiki=self.marys_notebook).count() == initial_count
 
-    @UserMixin.as_user("susan")
-    def test_owner_can_view_public_notebook(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        assert "Public campaign notes" in response.content.decode()
-
-    @UserMixin.as_user("mary")
-    def test_editor_can_view_public_notebook(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        assert "Public campaign notes" in response.content.decode()
-
-    @UserMixin.as_user("wendy")
-    def test_viewer_can_view_public_notebook(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        assert "Public campaign notes" in response.content.decode()
-
-    @UserMixin.as_user("hugh")
-    def test_non_collaborator_can_view_public_notebook(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        assert "Public campaign notes" in response.content.decode()
-
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_edit_public_notebook(self, client):
         response = client.post("/notebooks/susan/campaign-notes/session-log", {
@@ -595,11 +615,6 @@ class TestNotebookPageView(NotebookMixin):
             "content": "# Hacked",
         })
         assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_anonymous_can_view_public_notebook(self, client):
-        response = client.get("/notebooks/susan/campaign-notes/session-log")
-        assert response.status_code == HTTPStatus.OK
-        assert "Public campaign notes" in response.content.decode()
 
     @UserMixin.as_user("susan")
     def test_owner_can_edit_public_notebook(self, client):

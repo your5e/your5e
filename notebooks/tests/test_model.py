@@ -1,6 +1,8 @@
 import pytest
+from django.db import IntegrityError
 
-from notebooks.models import Notebook
+from campaigns.models import Campaign
+from notebooks.models import Notebook, NotebookPermission
 from wikis.models import Page
 
 from . import NotebookMixin
@@ -74,3 +76,36 @@ class TestNotebook(NotebookMixin):
             {"name": "heroes", "url": "/notebooks/wendy/heros-legendes/heroes/"},
             {"name": "theron", "url": "/notebooks/wendy/heros-legendes/heroes/theron"},
         ]
+
+    def test_is_campaign_wiki_false_for_regular_notebook(self):
+        assert self.wendys_notebook.is_campaign_wiki is False
+
+    def test_is_campaign_wiki_true_for_wiki_notebook(self):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_notebook = campaign.campaign_notebooks.get(is_wiki=True).notebook
+        assert wiki_notebook.is_campaign_wiki is True
+
+    def test_campaign_wiki_notebook_cannot_be_deleted(self):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_notebook = campaign.campaign_notebooks.get(is_wiki=True).notebook
+        with pytest.raises(ValueError):
+            wiki_notebook.delete()
+
+
+@pytest.mark.django_db
+class TestNotebookPermission(NotebookMixin):
+    def test_cannot_duplicate_collaborator(self):
+        with pytest.raises(IntegrityError):
+            NotebookPermission.objects.create(
+                notebook=self.wendys_notebook,
+                user=self.susan,
+                role=NotebookPermission.Role.EDITOR,
+            )
+
+    def test_cannot_duplicate_collaborator_with_different_role(self):
+        with pytest.raises(IntegrityError):
+            NotebookPermission.objects.create(
+                notebook=self.wendys_notebook,
+                user=self.susan,
+                role=NotebookPermission.Role.VIEWER,
+            )

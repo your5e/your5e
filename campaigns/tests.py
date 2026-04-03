@@ -58,6 +58,13 @@ class CampaignMixin(UserMixin):
             owner=self.mary,
             visibility=Notebook.Visibility.PRIVATE,
         )
+        page = Page.objects.create(wiki=self.marys_notebook)
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Mary's Prayer",
+            created_by=self.mary,
+        )
         NotebookPermission.objects.create(
             notebook=self.marys_notebook,
             user=self.wendy,
@@ -83,6 +90,24 @@ class CampaignMixin(UserMixin):
 class LinkedCampaignNotebooksMixin(CampaignMixin):
     @pytest.fixture(autouse=True)
     def setup_linked_notebooks(self, setup_campaigns):
+        self.wiki_link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign, is_wiki=True
+        )
+        self.wiki = self.wiki_link.notebook
+        self.wiki_index = Page.objects.create(wiki=self.wiki)
+        self.wiki_index.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# The Old Forest Wiki",
+            created_by=self.wendy,
+        )
+        self.wiki_characters = Page.objects.create(wiki=self.wiki)
+        self.wiki_characters.update(
+            filename="characters.md",
+            mime_type="text/markdown",
+            data=b"# Characters",
+            created_by=self.wendy,
+        )
         self.wendys_link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.wendys_notebook,
@@ -93,15 +118,36 @@ class LinkedCampaignNotebooksMixin(CampaignMixin):
             notebook=self.susans_notebook,
             linked_by=self.susan,
         )
+        self.susans_page = Page.objects.create(wiki=self.susans_notebook)
+        self.susans_page.update(
+            filename="potions.md",
+            mime_type="text/markdown",
+            data=b"# Potions",
+            created_by=self.susan,
+        )
+        self.susans_folder_page = Page.objects.create(wiki=self.susans_notebook)
+        self.susans_folder_page.update(
+            filename="monsters/goblin.md",
+            mime_type="text/markdown",
+            data=b"# Goblin",
+            created_by=self.susan,
+        )
         self.marys_link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,
             notebook=self.marys_notebook,
             linked_by=self.wendy,
         )
+        self.wiki_monster = Page.objects.create(wiki=self.wiki)
+        self.wiki_monster.update(
+            filename="monsters/goblin.md",
+            mime_type="text/markdown",
+            data=b"# Goblin",
+            created_by=self.wendy,
+        )
 
 
 @pytest.mark.django_db
-class TestCampaign(CampaignMixin):
+class TestCampaign(LinkedCampaignNotebooksMixin):
     def test_slug_generated_from_name(self):
         campaign = Campaign.objects.create(
             owner=self.wendy,
@@ -151,6 +197,12 @@ class TestCampaign(CampaignMixin):
         self.owned_campaign.players.add(self.susan)
         assert self.owned_campaign.has_content() is True
 
+    def test_get_players_returns_in_join_order(self):
+        self.owned_campaign.players.add(self.susan)
+        self.owned_campaign.players.add(self.mary)
+        players = self.owned_campaign.get_players()
+        assert players == [self.wendy, self.susan, self.mary]
+
     def test_has_content_false_with_empty_notebooks(self):
         CampaignNotebook.objects.create(
             campaign=self.other_campaign,
@@ -188,6 +240,179 @@ class TestCampaign(CampaignMixin):
     def test_description_html_empty_when_no_description(self):
         assert self.other_campaign.description_html() == ""
 
+    def test_wiki_notebook_created_with_campaign(self):
+        link = CampaignNotebook.objects.get(campaign=self.owned_campaign, is_wiki=True)
+        assert link.notebook.name == "The Old Forest wiki"
+        assert link.notebook.owner == self.wendy
+        assert link.notebook.visibility == Notebook.Visibility.PRIVATE
+        assert link.order == 0
+        assert link.linked_by == self.wendy
+
+    def test_wiki_ownership_transfers_with_campaign(self):
+        from users.models import get_sentinel_user
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign, is_wiki=True
+        )
+        self.owned_campaign.owner = get_sentinel_user()
+        self.owned_campaign.save()
+        wiki_link.refresh_from_db()
+        assert wiki_link.notebook.owner == get_sentinel_user()
+        self.owned_campaign.owner = self.susan
+        self.owned_campaign.slug = self.owned_campaign.generate_unique_slug()
+        self.owned_campaign.save()
+        wiki_link.refresh_from_db()
+        assert wiki_link.notebook.owner == self.susan
+
+    def test_joining_campaign_grants_editor_permission_on_wiki(self):
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.other_campaign, is_wiki=True
+        )
+        self.other_campaign.players.add(self.wendy)
+        permission = NotebookPermission.objects.get(
+            notebook=wiki_link.notebook,
+            user=self.wendy,
+        )
+        assert permission.role == NotebookPermission.Role.EDITOR
+
+    def test_leaving_campaign_removes_wiki_permission(self):
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.other_campaign, is_wiki=True
+        )
+        self.other_campaign.players.add(self.wendy)
+        self.other_campaign.players.remove(self.wendy)
+        assert not NotebookPermission.objects.filter(
+            notebook=wiki_link.notebook,
+            user=self.wendy,
+        ).exists()
+
+    def test_resolve_wikilink_finds_wiki_page(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="people/npcs.md",
+            mime_type="text/markdown",
+            data=b"# NPCs",
+            created_by=self.wendy,
+        )
+        resolved = self.owned_campaign.resolve_wikilink("npcs")
+        assert resolved == "people/npcs"
+
+    def test_resolve_wikilink_finds_linked_notebook_page(self):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="items/elixirs.md",
+            mime_type="text/markdown",
+            data=b"# Elixirs",
+            created_by=self.wendy,
+        )
+        resolved = self.owned_campaign.resolve_wikilink("elixirs")
+        assert resolved == f"{self.wendys_link.slug}/items/elixirs"
+
+    def test_resolve_wikilink_shortest_path_wins(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="rules/combat.md",
+            mime_type="text/markdown",
+            data=b"# Combat Rules",
+            created_by=self.wendy,
+        )
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="combat.md",
+            mime_type="text/markdown",
+            data=b"# Combat",
+            created_by=self.wendy,
+        )
+        resolved = self.owned_campaign.resolve_wikilink("combat")
+        assert resolved == f"{self.wendys_link.slug}/combat"
+
+    def test_resolve_wikilink_notebook_order_tiebreaker(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="spells.md",
+            mime_type="text/markdown",
+            data=b"# Wiki Spells",
+            created_by=self.wendy,
+        )
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="spells.md",
+            mime_type="text/markdown",
+            data=b"# Notebook Spells",
+            created_by=self.wendy,
+        )
+        resolved = self.owned_campaign.resolve_wikilink("spells")
+        assert resolved == "spells"
+
+    def test_resolve_wikilink_notebook_order_tiebreaker_both_directions(self):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="quests.md",
+            mime_type="text/markdown",
+            data=b"# Wendy Quests",
+            created_by=self.wendy,
+        )
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="quests.md",
+            mime_type="text/markdown",
+            data=b"# Susan Quests",
+            created_by=self.susan,
+        )
+        resolved = self.owned_campaign.resolve_wikilink("quests")
+        assert resolved == f"{self.wendys_link.slug}/quests"
+
+        self.wendys_link.order = 4
+        self.wendys_link.save()
+        resolved = self.owned_campaign.resolve_wikilink("quests")
+        assert resolved == f"{self.susans_link.slug}/quests"
+
+    def test_resolve_wikilink_nonexistent_returns_slugified(self):
+        resolved = self.owned_campaign.resolve_wikilink("Unknown Page")
+        assert resolved == "unknown-page"
+
+    def test_visible_notebook_links_for_owner(self):
+        links = self.owned_campaign.visible_notebook_links(self.wendy)
+        notebooks = [link.notebook for link in links]
+        assert self.wendys_notebook in notebooks
+        assert self.susans_notebook in notebooks
+        assert self.marys_notebook in notebooks
+        assert self.wiki not in notebooks
+
+    def test_visible_notebook_links_for_player_with_permission(self):
+        links = self.owned_campaign.visible_notebook_links(self.susan)
+        notebooks = [link.notebook for link in links]
+        assert self.wendys_notebook not in notebooks
+        assert self.susans_notebook in notebooks
+        assert self.marys_notebook in notebooks
+
+    def test_visible_notebook_links_excludes_wiki_by_default(self):
+        links = self.owned_campaign.visible_notebook_links(self.wendy)
+        notebooks = [link.notebook for link in links]
+        assert self.wiki not in notebooks
+
+    def test_visible_notebook_links_includes_wiki_when_requested(self):
+        links = self.owned_campaign.visible_notebook_links(
+            self.wendy, include_wiki=True
+        )
+        notebooks = [link.notebook for link in links]
+        assert self.wiki in notebooks
+
+    def test_editable_notebook_links_for_owner(self):
+        links = self.owned_campaign.editable_notebook_links(self.wendy)
+        notebooks = [link.notebook for link in links]
+        assert self.wiki in notebooks
+        assert self.wendys_notebook in notebooks
+        assert self.marys_notebook in notebooks
+        assert self.susans_notebook not in notebooks
+
+    def test_editable_notebook_links_for_player(self):
+        links = self.owned_campaign.editable_notebook_links(self.susan)
+        notebooks = [link.notebook for link in links]
+        assert self.wiki in notebooks
+        assert self.susans_notebook in notebooks
+        assert self.marys_notebook not in notebooks
+        assert self.wendys_notebook not in notebooks
+
 
 @pytest.mark.django_db
 class TestCampaignCreateView(UserMixin):
@@ -212,7 +437,7 @@ class TestCampaignCreateView(UserMixin):
     def test_user_can_create_campaign(self, client):
         response = client.post("/campaigns/create", {"name": "New Campaign"})
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/campaigns/wendy/new-campaign"
+        assert response.url == "/campaigns/wendy/new-campaign/"
         assert Campaign.objects.filter(name="New Campaign", owner=self.wendy).exists()
 
 
@@ -275,48 +500,48 @@ class TestCampaignView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_owner_view(self, client):
         self.owned_campaign.players.add(self.susan)
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
-        assert 'class="campaign-name">The Old Forest</p>' in content
+        assert "<h1>The Old Forest</h1>" in content
         assert f"/campaigns/join-{self.owned_campaign.join_slug}" in content
         assert '<a href="/profile/wendy/">wendy</a>' in content
         assert "/campaigns/settings/wendy/the-old-forest" in content
 
     @CampaignMixin.as_user("wendy")
     def test_player_view(self, client):
-        response = client.get("/campaigns/susan/river-crossing")
+        response = client.get("/campaigns/susan/river-crossing/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
-        assert 'class="campaign-name">River Crossing</p>' in content
+        assert "<h1>River Crossing</h1>" in content
         assert '<a href="/profile/susan/">susan</a>' in content
         assert "/campaigns/settings/susan/river-crossing" not in content
         assert self.joined_campaign.join_slug in content
 
     @CampaignMixin.as_user("wendy")
     def test_member_sees_leave_button(self, client):
-        response = client.get("/campaigns/susan/river-crossing")
+        response = client.get("/campaigns/susan/river-crossing/")
         content = response.content.decode()
         assert 'action="/campaigns/leave"' in content
 
     @CampaignMixin.as_user("wendy")
     def test_non_player_forbidden(self, client):
-        response = client.get("/campaigns/mary/the-eastern-road")
+        response = client.get("/campaigns/mary/the-eastern-road/")
         assert response.status_code == HTTPStatus.FORBIDDEN
 
     def test_anonymous_unauthorised(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
     @CampaignMixin.as_user("wendy")
     def test_owner_can_edit(self, client):
         response = client.post(
-            "/campaigns/wendy/the-old-forest",
+            "/campaigns/wendy/the-old-forest/",
             {"name": "The New Forest", "description": "A dark and mysterious forest."},
         )
         self.owned_campaign.refresh_from_db()
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/campaigns/wendy/the-new-forest"
+        assert response.url == "/campaigns/wendy/the-new-forest/"
         assert self.owned_campaign.name == "The New Forest"
         assert self.owned_campaign.slug == "the-new-forest"
         assert self.owned_campaign.description == "A dark and mysterious forest."
@@ -325,18 +550,18 @@ class TestCampaignView(CampaignMixin):
     def test_edit_slug_collision(self, client):
         Campaign.objects.create(owner=self.wendy, name="Journey!")
         response = client.post(
-            "/campaigns/wendy/the-old-forest",
+            "/campaigns/wendy/the-old-forest/",
             {"name": "Journey?", "description": ""},
         )
         self.owned_campaign.refresh_from_db()
-        assert response.url == "/campaigns/wendy/journey-2"
+        assert response.url == "/campaigns/wendy/journey-2/"
         assert self.owned_campaign.slug == "journey-2"
 
     @CampaignMixin.as_user("wendy")
     def test_owner_regenerate_join_slug(self, client):
         old_join_slug = self.owned_campaign.join_slug
         response = client.post(
-            "/campaigns/wendy/the-old-forest",
+            "/campaigns/wendy/the-old-forest/",
             {"regenerate_join_slug": "true"},
         )
         self.owned_campaign.refresh_from_db()
@@ -347,7 +572,7 @@ class TestCampaignView(CampaignMixin):
     def test_owner_remove_player(self, client):
         self.owned_campaign.players.add(self.susan)
         response = client.post(
-            "/campaigns/wendy/the-old-forest",
+            "/campaigns/wendy/the-old-forest/",
             {"remove_player": self.susan.pk},
         )
         assert response.status_code == HTTPStatus.FOUND
@@ -356,7 +581,7 @@ class TestCampaignView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_owner_cannot_remove_self(self, client):
         response = client.post(
-            "/campaigns/wendy/the-old-forest",
+            "/campaigns/wendy/the-old-forest/",
             {"remove_player": self.wendy.pk},
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
@@ -365,7 +590,7 @@ class TestCampaignView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_cannot_leave_directly_from_campaign_page(self, client):
         response = client.post(
-            "/campaigns/susan/river-crossing",
+            "/campaigns/susan/river-crossing/",
             {"leave": "true"},
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
@@ -375,15 +600,15 @@ class TestCampaignView(CampaignMixin):
     def test_player_cannot_modify(self, client):
         old_join_slug = self.joined_campaign.join_slug
         client.post(
-            "/campaigns/susan/river-crossing",
+            "/campaigns/susan/river-crossing/",
             {"name": "Hacked Name", "description": "Hacked"},
         )
         client.post(
-            "/campaigns/susan/river-crossing",
+            "/campaigns/susan/river-crossing/",
             {"regenerate_join_slug": "true"},
         )
         client.post(
-            "/campaigns/susan/river-crossing",
+            "/campaigns/susan/river-crossing/",
             {"remove_player": self.susan.pk},
         )
         self.joined_campaign.refresh_from_db()
@@ -394,7 +619,7 @@ class TestCampaignView(CampaignMixin):
 
     @CampaignMixin.as_user("wendy")
     def test_description_rendered_as_markdown(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert '<div class="user-content">' in content
         assert "<strong>bold</strong>" in content
@@ -425,8 +650,8 @@ class TestCampaignJoinView(CampaignMixin):
     def test_uses_header_stripe(self, client):
         response = client.get(f"/campaigns/join-{self.owned_campaign.join_slug}")
         content = response.content.decode()
-        assert 'class="campaign-header"' in content
-        assert 'class="campaign-name"' in content
+        assert 'class="header primary campaign"' in content
+        assert f"<h1>{self.owned_campaign.name}</h1>" in content
 
     @CampaignMixin.as_user("mary")
     def test_non_member_does_not_see_leave_button(self, client):
@@ -438,7 +663,7 @@ class TestCampaignJoinView(CampaignMixin):
     def test_post_joins_campaign(self, client):
         response = client.post(f"/campaigns/join-{self.other_campaign.join_slug}")
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/campaigns/mary/the-eastern-road"
+        assert response.url == "/campaigns/mary/the-eastern-road/"
         assert self.wendy in self.other_campaign.players.all()
 
     @CampaignMixin.as_user("wendy")
@@ -447,7 +672,7 @@ class TestCampaignJoinView(CampaignMixin):
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
         assert "already" in content.lower()
-        assert "/campaigns/wendy/the-old-forest" in content
+        assert "/campaigns/wendy/the-old-forest/" in content
 
     def test_invalid_join_slug_returns_404(self, client):
         response = client.get("/campaigns/join-nonexistent")
@@ -624,7 +849,16 @@ class TestCampaignNotebook(CampaignMixin):
         assert link.campaign == self.owned_campaign
         assert link.notebook == self.wendys_notebook
         assert link.linked_by == self.wendy
-        assert link.order == 0
+        assert link.order == 1
+        assert link.slug == self.wendys_notebook.slug
+
+    def test_get_base_slug_returns_notebook_slug(self):
+        link = CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        assert link.get_base_slug() == self.wendys_notebook.slug
 
     def test_order_increments_for_each_link(self):
         link1 = CampaignNotebook.objects.create(
@@ -637,8 +871,8 @@ class TestCampaignNotebook(CampaignMixin):
             notebook=self.susans_notebook,
             linked_by=self.susan,
         )
-        assert link1.order == 0
-        assert link2.order == 1
+        assert link1.order == 1
+        assert link2.order == 2
 
     def test_same_notebook_cannot_be_linked_twice(self):
         CampaignNotebook.objects.create(
@@ -666,6 +900,32 @@ class TestCampaignNotebook(CampaignMixin):
         )
         assert link1.notebook == link2.notebook
         assert link1.campaign != link2.campaign
+
+    def test_linked_notebooks_start_at_order_one(self):
+        link = CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        assert link.order == 1
+
+    def test_slug_appends_number_on_collision_with_other_notebook(self):
+        CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        other_notebook = Notebook.objects.create(
+            name="Wendy's Notes",
+            owner=self.susan,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+        link = CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=other_notebook,
+            linked_by=self.susan,
+        )
+        assert link.slug == "wendy-s-notes-2"
 
 
 @pytest.mark.django_db
@@ -756,6 +1016,35 @@ class TestCampaignNotebookLinkView(CampaignMixin):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert not CampaignNotebook.objects.filter(
             campaign=self.owned_campaign,
+            is_wiki=False,
+        ).exists()
+
+    @CampaignMixin.as_user("wendy")
+    def test_warns_when_notebook_slug_collides_with_wiki_page(self, client):
+        wiki_link = CampaignNotebook.objects.get(
+            campaign=self.owned_campaign, is_wiki=True
+        )
+        page = Page.objects.create(wiki=wiki_link.notebook)
+        page.update(
+            filename="hugh-s-secrets.md",
+            mime_type="text/markdown",
+            data=b"# Existing",
+            created_by=self.wendy,
+        )
+        self.hughs_notebook.visibility = Notebook.Visibility.PUBLIC
+        self.hughs_notebook.save()
+
+        response = client.post("/campaigns/notebooks", {
+            "campaign": self.owned_campaign.pk,
+            "link_notebook": self.hughs_notebook.pk,
+        })
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "Hugh" in content
+        assert 'name="confirm"' in content
+        assert not CampaignNotebook.objects.filter(
+            campaign=self.owned_campaign,
+            notebook=self.hughs_notebook,
         ).exists()
 
 
@@ -813,6 +1102,15 @@ class TestCampaignNotebookRemoveView(LinkedCampaignNotebooksMixin):
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert CampaignNotebook.objects.filter(pk=self.wendys_link.pk).exists()
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_cannot_unlink_wiki_notebook(self, client):
+        response = client.post("/campaigns/notebooks", {
+            "campaign": self.owned_campaign.pk,
+            "unlink_notebook": self.wiki_link.pk,
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert CampaignNotebook.objects.filter(pk=self.wiki_link.pk).exists()
 
 
 @pytest.mark.django_db
@@ -883,12 +1181,38 @@ class TestCampaignNotebookOrderView(LinkedCampaignNotebooksMixin):
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_move_wiki_notebook_down(self, client):
+        response = client.post(
+            "/campaigns/notebooks",
+            {
+                "campaign": self.owned_campaign.pk,
+                "move_notebook_down": self.wiki_link.pk,
+            },
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.wiki_link.refresh_from_db()
+        assert self.wiki_link.order == 0
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_move_notebook_above_wiki(self, client):
+        response = client.post(
+            "/campaigns/notebooks",
+            {
+                "campaign": self.owned_campaign.pk,
+                "move_notebook_up": self.wendys_link.pk,
+            },
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        self.wendys_link.refresh_from_db()
+        assert self.wendys_link.order == 1
+
 
 @pytest.mark.django_db
 class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_owner_sees_all_accessible_notebooks(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert html.escape("Wendy's Notes") in content
         assert html.escape("Susan's Guide") in content
@@ -896,7 +1220,7 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
 
     @LinkedCampaignNotebooksMixin.as_user("susan")
     def test_player_sees_only_accessible_notebooks(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert html.escape("Wendy's Notes") not in content
         assert html.escape("Susan's Guide") in content
@@ -904,7 +1228,7 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_notebook_shows_owner(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "by wendy" in content or "by Wendy" in content
 
@@ -915,7 +1239,7 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
             user=self.hugh,
             role=NotebookPermission.Role.EDITOR,
         )
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         normalised = " ".join(content.split())
         assert "wendy can edit" in normalised
@@ -924,20 +1248,20 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_notebook_owner_sees_cannot_see_warning(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         normalised = " ".join(content.split()).lower()
         assert "susan cannot see" in normalised
 
     @LinkedCampaignNotebooksMixin.as_user("susan")
     def test_non_owner_does_not_see_cannot_see_warning(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "cannot see" not in content.lower()
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_notebooks_appear_in_order(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         notes = content.find(html.escape("Wendy's Notes"))
         guide = content.find(html.escape("Susan's Guide"))
@@ -946,43 +1270,47 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_owner_sees_reorder_controls(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "move_notebook_up" in content
         assert "move_notebook_down" in content
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
-    def test_first_notebook_has_no_up_button(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+    def test_notebook_reorder_buttons(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
-        after_name = content.split(html.escape("Wendy's Notes"))[1]
-        wendys_section = after_name.split("</li>")[0]
-        assert "move_notebook_up" not in wendys_section
 
-    @LinkedCampaignNotebooksMixin.as_user("wendy")
-    def test_last_notebook_has_no_down_button(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
-        content = response.content.decode()
-        after_name = content.split(html.escape("Mary's Prayer"))[1]
-        marys_section = after_name.split("</li>")[0]
+        after_wendys = content.split(html.escape("Wendy's Notes"))[1]
+        wendys_section = after_wendys.split("</li>")[0]
+        assert "move_notebook_up" not in wendys_section
+        assert "move_notebook_down" in wendys_section
+
+        after_susans = content.split(html.escape("Susan's Guide"))[1]
+        susans_section = after_susans.split("</li>")[0]
+        assert "move_notebook_up" in susans_section
+        assert "move_notebook_down" in susans_section
+
+        after_marys = content.split(html.escape("Mary's Prayer"))[1]
+        marys_section = after_marys.split("</li>")[0]
+        assert "move_notebook_up" in marys_section
         assert "move_notebook_down" not in marys_section
 
     @LinkedCampaignNotebooksMixin.as_user("susan")
     def test_player_does_not_see_reorder_controls(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "move_notebook_up" not in content
         assert "move_notebook_down" not in content
 
     @LinkedCampaignNotebooksMixin.as_user("wendy")
     def test_owner_sees_link_notebook_dropdown(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "link_notebook" in content
 
     @LinkedCampaignNotebooksMixin.as_user("susan")
     def test_player_sees_link_notebook_dropdown(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert "link_notebook" in content
 
@@ -991,21 +1319,21 @@ class TestCampaignViewNotebooks(LinkedCampaignNotebooksMixin):
 class TestCampaignCreateNotebook(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_owner_sees_create_notebook_form(self, client):
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert 'action="/notebooks/create"' in content
 
     @CampaignMixin.as_user("susan")
     def test_player_sees_create_notebook_form(self, client):
         self.owned_campaign.players.add(self.susan)
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert 'action="/notebooks/create"' in content
 
     @CampaignMixin.as_user("wendy")
     def test_create_notebook_form_prepopulates_players(self, client):
         self.owned_campaign.players.add(self.susan, self.mary)
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert f'name="prepopulate_collaborator" value="{self.susan.pk}"' in content
         assert f'name="prepopulate_collaborator" value="{self.mary.pk}"' in content
@@ -1013,7 +1341,7 @@ class TestCampaignCreateNotebook(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_create_notebook_form_excludes_current_user(self, client):
         self.owned_campaign.players.add(self.susan)
-        response = client.get("/campaigns/wendy/the-old-forest")
+        response = client.get("/campaigns/wendy/the-old-forest/")
         content = response.content.decode()
         assert f'name="prepopulate_collaborator" value="{self.wendy.pk}"' not in content
         assert f'name="prepopulate_collaborator" value="{self.susan.pk}"' in content
@@ -1074,17 +1402,17 @@ class TestCampaignClaimView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_player_can_claim_unclaimed_campaign(self, client):
         response = client.post(
-            "/campaigns/deleted-user/lost-kingdom",
+            "/campaigns/deleted-user/lost-kingdom/",
             {"claim": "true"},
         )
         self.unclaimed_campaign.refresh_from_db()
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == "/campaigns/wendy/lost-kingdom"
+        assert response.url == "/campaigns/wendy/lost-kingdom/"
         assert self.unclaimed_campaign.owner == self.wendy
 
     @CampaignMixin.as_user("wendy")
     def test_player_sees_claim_button_on_unclaimed_campaign(self, client):
-        response = client.get("/campaigns/deleted-user/lost-kingdom")
+        response = client.get("/campaigns/deleted-user/lost-kingdom/")
         content = response.content.decode()
         assert response.status_code == HTTPStatus.OK
         assert "claim" in content.lower()
@@ -1092,14 +1420,14 @@ class TestCampaignClaimView(CampaignMixin):
     @CampaignMixin.as_user("mary")
     def test_non_player_cannot_claim_unclaimed_campaign(self, client):
         response = client.post(
-            "/campaigns/deleted-user/lost-kingdom",
+            "/campaigns/deleted-user/lost-kingdom/",
             {"claim": "true"},
         )
         assert response.status_code == HTTPStatus.FORBIDDEN
 
     def test_anonymous_cannot_claim_unclaimed_campaign(self, client):
         response = client.post(
-            "/campaigns/deleted-user/lost-kingdom",
+            "/campaigns/deleted-user/lost-kingdom/",
             {"claim": "true"},
         )
         assert response.status_code == HTTPStatus.UNAUTHORIZED
@@ -1107,7 +1435,7 @@ class TestCampaignClaimView(CampaignMixin):
     @CampaignMixin.as_user("wendy")
     def test_cannot_claim_non_unclaimed_campaign(self, client):
         client.post(
-            "/campaigns/susan/river-crossing",
+            "/campaigns/susan/river-crossing/",
             {"claim": "true"},
         )
         self.joined_campaign.refresh_from_db()
@@ -1140,3 +1468,605 @@ class TestCampaignUserRedirect(UserMixin):
         response = client.get("/campaigns/wendy/")
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/campaigns/"
+
+
+@pytest.mark.django_db
+class TestCampaignWikiView(LinkedCampaignNotebooksMixin):
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_can_view_wiki_index(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "The Old Forest Wiki" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_player_can_view_wiki_index(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        assert response.status_code == HTTPStatus.OK
+
+    @LinkedCampaignNotebooksMixin.as_user("mary")
+    def test_non_member_cannot_view_wiki_index(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @LinkedCampaignNotebooksMixin.as_user("hugh")
+    def test_non_member_with_notebook_permission_cannot_view_wiki_index(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wiki,
+            user=self.hugh,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_view_wiki_index(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_can_view_wiki_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Characters" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_player_can_view_wiki_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters")
+        assert response.status_code == HTTPStatus.OK
+
+    @LinkedCampaignNotebooksMixin.as_user("mary")
+    def test_non_member_cannot_view_wiki_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @LinkedCampaignNotebooksMixin.as_user("hugh")
+    def test_non_member_with_notebook_permission_cannot_view_wiki_page(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wiki,
+            user=self.hugh,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_view_wiki_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_can_view_attached_notebook_page(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Wendy" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_editor_can_view_attached_notebook_page(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/mary-s-prayer/index"
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_viewer_can_view_attached_notebook_page(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.susan,
+            role=NotebookPermission.Role.VIEWER,
+        )
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_user_cannot_view_attached_notebook_page(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    @LinkedCampaignNotebooksMixin.as_user("hugh")
+    def test_non_member_with_notebook_permission_cannot_view_via_campaign(self, client):
+        NotebookPermission.objects.create(
+            notebook=self.wendys_notebook,
+            user=self.hugh,
+            role=NotebookPermission.Role.EDITOR,
+        )
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_view_attached_notebook_page(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_attached_notebook_beats_wiki_page(self, client):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="wendy-s-notes.md",
+            mime_type="text/markdown",
+            data=b"# Wiki Page",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Wendy" in content
+        assert "Wiki Page" not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wikilinks_resolve_to_campaign_context(self, client):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes",
+            created_by=self.wendy,
+        )
+        self.wiki.get_page(path="index").update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Wiki\n\nSee [[notes]].",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        assert "/campaigns/wendy/the-old-forest/wiki/notes" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wikilinks_resolve_to_nested_page(self, client):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="monsters/bugbear.md",
+            mime_type="text/markdown",
+            data=b"# Bugbear",
+            created_by=self.wendy,
+        )
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="monsters/index.md",
+            mime_type="text/markdown",
+            data=b"# Monsters\n\nSee [[bugbear]].",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/monsters/")
+        content = response.content.decode()
+        assert "/campaigns/wendy/the-old-forest/wiki/monsters/bugbear" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wikilinks_resolve_across_campaign_notebooks(self, client):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="items/potions.md",
+            mime_type="text/markdown",
+            data=b"# Potions",
+            created_by=self.wendy,
+        )
+        self.wiki.get_page(path="index").update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Wiki\n\nSee [[potions]].",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        assert (
+            f'href="/campaigns/wendy/the-old-forest/wiki/'
+            f'{self.wendys_link.slug}/items/potions"'
+            in content
+        )
+
+    @CampaignMixin.as_user("wendy")
+    def test_edit_page_stays_in_campaign_context(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/characters?edit")
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "<h1>The Old Forest</h1>" in content
+        assert 'action="/campaigns/wendy/the-old-forest/wiki/characters"' in content
+
+    @CampaignMixin.as_user("wendy")
+    def test_edit_attached_notebook_stays_in_campaign_context(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index?edit"
+        )
+        content = response.content.decode()
+        assert response.status_code == HTTPStatus.OK
+        assert "<h1>The Old Forest</h1>" in content
+        assert "<h1>Wendy&#x27;s Notes</h1>" in content
+        assert (
+            'action="/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index"'
+            in content
+        )
+
+    @CampaignMixin.as_user("wendy")
+    def test_save_edit_returns_to_campaign_wiki(self, client):
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/characters",
+            {"filename": "characters", "content": "# Updated Characters"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/characters"
+
+    @CampaignMixin.as_user("wendy")
+    def test_save_edit_attached_notebook_returns_to_campaign_wiki(self, client):
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index",
+            {"filename": "index", "content": "# Updated Index"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/"
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wiki_root_shows_attached_notebooks_as_folders(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        assert f'href="{base}/{self.wendys_link.slug}/"' in content
+        assert f'href="{base}/{self.susans_link.slug}/"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wiki_root_shows_wiki_folders_alongside_notebook_folders(self, client):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="locations/tavern.md",
+            mime_type="text/markdown",
+            data=b"# The Tavern",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        assert f'href="{base}/locations/"' in content
+        assert f'href="{base}/{self.wendys_link.slug}/"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_attached_notebook_root_does_not_show_other_notebooks(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.wendys_link.slug}/"
+        )
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        assert f'href="{base}/{self.susans_link.slug}/"' not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_attached_notebook_folder_shows_index_content(self, client):
+        Page.objects.create(wiki=self.susans_notebook).update(
+            filename="monsters/index.md",
+            mime_type="text/markdown",
+            data=b"# Monsters Index",
+            created_by=self.susan,
+        )
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.susans_link.slug}/monsters/"
+        )
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Monsters Index" in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_recent_pages_includes_all_campaign_notebooks(self, client):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="Recent Note.md",
+            mime_type="text/markdown",
+            data=b"# Recent Note",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        assert "Recent" in content
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        url_path = f"{self.wendys_link.slug}/recent-note"
+        display_path = html.escape(f"{self.wendys_notebook.name}/Recent Note")
+        assert f'href="{base}/{url_path}">{display_path}</a>' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_recent_pages_respects_notebook_permissions(self, client):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="private-note.md",
+            mime_type="text/markdown",
+            data=b"# Private",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        assert "private-note" not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_page_links_in_attached_notebook_stay_in_wiki_context(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.susans_link.slug}/"
+        )
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        slug = self.susans_link.slug
+        assert f'href="{base}/potions"' not in content
+        assert f'href="{base}/{slug}/potions"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_folder_links_in_attached_notebook_stay_in_wiki_context(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.susans_link.slug}/"
+        )
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        slug = self.susans_link.slug
+        assert f'href="{base}/monsters/"' not in content
+        assert f'href="{base}/{slug}/monsters/"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_recent_pages_only_shown_on_wiki_root(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.susans_link.slug}/"
+        )
+        content = response.content.decode()
+        assert "<h3>Recent</h3>" not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_new_page_shows_breadcrumb_path(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.wendys_link.slug}"
+            "/monsters/newpage"
+        )
+        normalised = " ".join(response.content.decode().split())
+        base = "/campaigns/wendy/the-old-forest"
+        slug = self.wendys_link.slug
+        assert (
+            f'<li><a href="{base}/">The Old Forest</a></li> '
+            f'<li><a href="{base}/wiki/">Wiki</a></li> '
+            f'<li><a href="{base}/wiki/{slug}/">'
+            f'{html.escape("Wendy\'s Notes")}</a></li> '
+            f'<li><a href="{base}/wiki/{slug}/monsters/">Monsters</a></li> '
+            f'<li><a href="{base}/wiki/{slug}/monsters/newpage">Newpage</a></li> '
+            f'<li><a href="" aria-current="page">create</a></li>'
+            in normalised
+        )
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_edit_button_links_to_notebook_context(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.wendys_link.slug}/"
+        )
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        slug = self.wendys_link.slug
+        assert f'action="{base}/{slug}/index"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_create_button_in_subfolder_links_to_subfolder_index(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/monsters/")
+        content = response.content.decode()
+        base = "/campaigns/wendy/the-old-forest/wiki"
+        assert f'href="{base}/monsters/index?edit"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wikilinks_in_attached_notebook_resolve_to_campaign_context(self, client):
+        monsters = Notebook.objects.create(
+            name="Monsters",
+            owner=self.susan,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+        index = Page.objects.create(wiki=monsters)
+        index.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Monsters\n\nSee [[bugbear]].",
+            created_by=self.susan,
+        )
+        bugbear = Page.objects.create(wiki=monsters)
+        bugbear.update(
+            filename="bugbear.md",
+            mime_type="text/markdown",
+            data=b"# Bugbear",
+            created_by=self.susan,
+        )
+        link = CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=monsters,
+            linked_by=self.susan,
+        )
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{link.slug}/"
+        )
+        content = response.content.decode()
+        assert (
+            f'href="/campaigns/wendy/the-old-forest/wiki/'
+            f'{link.slug}/bugbear"'
+            in content
+        )
+
+
+@pytest.mark.django_db
+class TestCampaignWikiPageCreateView(LinkedCampaignNotebooksMixin):
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_owner_can_access_create_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert 'name="filename"' in content
+        assert 'name="content"' in content
+        assert 'name="notebook"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_player_can_access_create_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        assert response.status_code == HTTPStatus.OK
+
+    @LinkedCampaignNotebooksMixin.as_user("mary")
+    def test_non_member_cannot_access_create_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        assert response.status_code == HTTPStatus.FORBIDDEN
+
+    def test_anonymous_cannot_access_create_page(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_dropdown_shows_editable_notebooks(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        content = response.content.decode()
+        assert f'value="{self.wiki.pk}"' in content
+        assert f'value="{self.wendys_notebook.pk}"' in content
+        assert f'value="{self.marys_notebook.pk}"' in content
+        assert f'value="{self.susans_notebook.pk}"' not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("susan")
+    def test_dropdown_excludes_non_editable_notebooks(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        content = response.content.decode()
+        assert f'value="{self.wiki.pk}"' in content
+        assert f'value="{self.susans_notebook.pk}"' in content
+        assert f'value="{self.marys_notebook.pk}"' not in content
+        assert f'value="{self.wendys_notebook.pk}"' not in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_default_selection_is_wiki_from_wiki_context(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        content = response.content.decode()
+        assert f'value="{self.wiki.pk}" selected' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_default_selection_is_notebook_from_notebook_context(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/create-page"
+            f"?notebook={self.wendys_notebook.pk}"
+        )
+        content = response.content.decode()
+        assert f'value="{self.wendys_notebook.pk}" selected' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_unique_filename_across_all_editable_notebooks(self, client):
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="new-page.md",
+            mime_type="text/markdown",
+            data=b"# Existing",
+            created_by=self.wendy,
+        )
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        content = response.content.decode()
+        assert 'action="' in content
+        assert '/new-page-2"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_folder_path_preserved(self, client):
+        response = client.get(
+            "/campaigns/wendy/the-old-forest/create-page?folder=monsters"
+        )
+        content = response.content.decode()
+        assert 'monsters/new-page"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_form_posts_to_campaign_wiki_context(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/create-page")
+        content = response.content.decode()
+        assert 'action="/campaigns/wendy/the-old-forest/wiki/' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_wiki_add_new_page_links_to_campaign_create(self, client):
+        response = client.get("/campaigns/wendy/the-old-forest/wiki/")
+        content = response.content.decode()
+        assert 'href="/campaigns/wendy/the-old-forest/create-page"' in content
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_attached_notebook_add_new_page_links_to_campaign_create(self, client):
+        response = client.get(
+            f"/campaigns/wendy/the-old-forest/wiki/{self.wendys_link.slug}/"
+        )
+        content = response.content.decode()
+        assert (
+            f'href="/campaigns/wendy/the-old-forest/create-page'
+            f'?notebook={self.wendys_notebook.pk}"'
+            in content
+        )
+
+
+@pytest.mark.django_db
+class TestCampaignWikiPageEditView(LinkedCampaignNotebooksMixin):
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_page_created_in_notebook_from_post(self, client):
+        client.post(
+            "/campaigns/wendy/the-old-forest/wiki/new-page",
+            {
+                "notebook": self.wendys_notebook.pk,
+                "filename": "test-page.md",
+                "content": "# Test Page",
+            },
+        )
+        assert self.wendys_notebook.get_page(path="test-page") is not None
+        with pytest.raises(Page.DoesNotExist):
+            self.wiki.get_page(path="test-page")
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_page_created_in_notebook_from_url(self, client):
+        client.post(
+            "/campaigns/wendy/the-old-forest/wiki/new-page",
+            {
+                "filename": "new-page.md",
+                "content": "# New Page",
+            },
+        )
+        assert self.wiki.get_page(path="new-page") is not None
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_editing_wiki_root_index_redirects_to_wiki_root(self, client):
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/index",
+            {
+                "filename": "index.md",
+                "content": "# Updated Wiki Index",
+            },
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/"
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_editing_nested_folder_index_redirects_to_folder(self, client):
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/monsters/index",
+            {
+                "filename": "index.md",
+                "content": "# Monsters Index",
+            },
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/monsters/"
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_editing_existing_folder_index_redirects_to_folder(self, client):
+        Page.objects.create(wiki=self.wiki).update(
+            filename="monsters/index.md",
+            mime_type="text/markdown",
+            data=b"# Monsters",
+            created_by=self.wendy,
+        )
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/monsters/index",
+            {
+                "filename": "index.md",
+                "content": "# Updated Monsters Index",
+            },
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/monsters/"
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_attached_notebook_root_index_redirects_to_notebook_root(self, client):
+        response = client.post(
+            "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/index",
+            {
+                "filename": "index.md",
+                "content": "# Updated Notebook Index",
+            },
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/campaigns/wendy/the-old-forest/wiki/wendy-s-notes/"

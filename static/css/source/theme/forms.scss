@@ -26,29 +26,26 @@ textarea {
     font-family: $font-mono;
 }
 
-button,
-input[type="submit"],
-a.button {
+@mixin control-style {
     display: inline-block;
+    box-sizing: border-box;
+    appearance: none;
     background-color: transparent;
-    border: 1px solid $colour-subtle-border;
+    border: 1px solid currentcolor;
     border-radius: 0;
     cursor: pointer;
     font-family: $font-site;
     font-size: inherit;
-    padding: 0.3em 0.8em;
+    line-height: 1;
+    padding: 0.2em 0.5em;
     text-decoration: none;
     color: inherit;
 }
-button:hover,
-button:focus,
-input[type="submit"]:hover,
-input[type="submit"]:focus,
-a.button:hover,
-a.button:focus {
-    background-color: $colour-subtle-border;
-    color: $colour-subtle;
-    text-decoration: none !important;
+
+button,
+input[type="submit"],
+a.button {
+    @include control-style;
 }
 
 button.primary,

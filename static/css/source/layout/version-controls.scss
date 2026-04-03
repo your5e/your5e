@@ -1,7 +1,6 @@
 .version-controls {
     display: flex;
     gap: 0.5em;
-    margin-top: 0.5em;
 }
 
 .version-controls form {
@@ -11,9 +10,4 @@
 .version-controls form:last-child {
     display: block;
     margin-left: auto;
-}
-
-.version-controls select {
-    appearance: none;
-    padding: 0.1em 1.8em 0.1em 0.4em;
 }

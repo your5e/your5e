@@ -282,10 +282,10 @@ class TestVersion(WikiMixin):
             base_url="/notebooks/wendy/notes"
         )
         assert html == (
-            '<p><a href="/notebooks/wendy/notes/rules/status/exhaustion">Relative</a>\n'
-            '<a href="/notebooks/wendy/notes/rules/combat">Parent</a>\n'
-            '<a href="/notebooks/wendy/notes/rules/status/conditions">Bare</a>\n'
-            '<a href="/notebooks/wendy/notes/characters">Absolute</a>\n'
+            '<p><a href="./exhaustion">Relative</a>\n'
+            '<a href="../combat">Parent</a>\n'
+            '<a href="conditions">Bare</a>\n'
+            '<a href="/characters">Absolute</a>\n'
             '<a href="https://example.com">External</a>\n'
             '<a href="#section">Anchor</a></p>'
         )

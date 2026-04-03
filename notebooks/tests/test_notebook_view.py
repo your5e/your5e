@@ -66,7 +66,7 @@ class TestNotebookView(NotebookMixin):
         )
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
-        assert 'href="/campaigns/wendy/the-great-quest"' in content
+        assert 'href="/campaigns/wendy/the-great-quest/"' in content
         assert "The Great Quest" in content
 
     @UserMixin.as_user("wendy")
@@ -105,3 +105,19 @@ class TestNotebookView(NotebookMixin):
         breadcrumb_section = content.split("breadcrumb")[1].split("</nav>")[0]
         assert "world-regions" not in breadcrumb_section
         assert "northern-kingdoms" not in breadcrumb_section
+
+    @UserMixin.as_user("wendy")
+    def test_recent_pages_shows_full_path(self, client):
+        from wikis.models import Page
+        page = Page.objects.create(wiki=self.wendys_notebook)
+        page.update(
+            filename="Quests/Dragon Hunt.md",
+            mime_type="text/markdown",
+            data=b"# Dragon Hunt",
+            created_by=self.wendy,
+        )
+        response = client.get("/notebooks/wendy/heros-legendes/")
+        content = response.content.decode()
+        assert "Recent" in content
+        base = "/notebooks/wendy/heros-legendes/"
+        assert f'href="{base}quests/dragon-hunt">Quests/Dragon Hunt</a>' in content

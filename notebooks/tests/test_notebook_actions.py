@@ -3,6 +3,8 @@ from io import BytesIO
 
 import pytest
 
+from campaigns.models import Campaign, CampaignNotebook
+from campaigns.tests import LinkedCampaignNotebooksMixin
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
 from wikis.models import Page
@@ -89,7 +91,7 @@ class TestNotebookDeletedPagesView(NotebookMixin):
     def test_index_links_to_deleted_pages_view(self, client):
         response = client.get("/notebooks/wendy/heros-legendes/")
         content = response.content.decode()
-        assert '<p class="notebook-name">Héros &amp; Légendes</p>' in content
+        assert '<h1>Héros &amp; Légendes</h1>' in content
         assert 'href="/notebooks/deleted/wendy/heros-legendes/"' in content
 
 
@@ -212,6 +214,17 @@ class TestNotebookDeleteView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "/notebooks/settings/wendy/heros-legendes/" in content
+
+    @UserMixin.as_user("wendy")
+    def test_owner_cannot_delete_campaign_wiki_notebook(self, client):
+        campaign = Campaign.objects.create(owner=self.wendy, name="Test Campaign")
+        wiki_link = CampaignNotebook.objects.get(campaign=campaign, is_wiki=True)
+        response = client.post(
+            "/notebooks/delete",
+            {"notebook": wiki_link.notebook.pk, "confirm": "true"},
+        )
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert Notebook.objects.filter(id=wiki_link.notebook.id).exists()
 
 
 @pytest.mark.django_db
@@ -1029,3 +1042,34 @@ class TestNotebookRenameView(NotebookMixin):
         )
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/settings/wendy/heros-legendes/"
+
+
+@pytest.mark.django_db
+class TestCampaignWikiCollaborators(LinkedCampaignNotebooksMixin):
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_remove_campaign_player_from_wiki(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wiki.pk,
+            "remove": str(self.susan.pk),
+            "confirm": "true",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert NotebookPermission.objects.filter(
+            notebook=self.wiki,
+            user=self.susan,
+        ).exists()
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_downgrade_campaign_player_to_viewer(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wiki.pk,
+            "change_role": str(self.susan.pk),
+            "role": "viewer",
+            "confirm": "true",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        permission = NotebookPermission.objects.get(
+            notebook=self.wiki,
+            user=self.susan,
+        )
+        assert permission.role == NotebookPermission.Role.EDITOR

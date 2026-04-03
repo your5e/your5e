@@ -1,38 +1,6 @@
-@use "../base/colours" as *;
 @use "../theme/typography" as *;
 
 main.notebook {
-    .notebook-header {
-        box-sizing: border-box;
-        width: calc(100% + 2 * var(--indent));
-        margin-left: calc(-1 * var(--indent));
-        padding: 0.8em var(--indent);
-
-        .notebook-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .notebook-actions {
-            display: flex;
-            gap: 0.5em;
-        }
-    }
-
-    .page-header .page-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-
-        form {
-            margin: 0;
-            display: flex;
-            align-items: baseline;
-            gap: 0.5em;
-        }
-    }
-
     &.edit {
         padding-bottom: 1em;
 
@@ -54,7 +22,6 @@ main.notebook {
         height: 2px;
         margin: 2em 0;
         border: none;
-        background-color: $colour-danger;
     }
 
 

@@ -1,36 +1,14 @@
 @use "../base/colours" as *;
 @use "../base/fonts" as *;
 @use "typography" as *;
-
-.version-controls select,
-.version-controls button,
-.page-controls .page-actions button {
-    box-sizing: border-box;
-    font-family: $font-site;
-    font-size: $size-small-pica;
-    height: 2em;
-    line-height: 1;
-    vertical-align: middle;
-}
-
-.version-controls button {
-    background-color: transparent;
-    border: 1px solid $colour-subtle-border;
-    cursor: pointer;
-
-    &:hover,
-    &:focus {
-        background-color: $colour-subtle-border;
-        color: $colour-subtle;
-    }
-}
+@use "forms" as *;
 
 .version-controls select {
-    background-color: transparent;
+    @include control-style;
+    padding-right: 1.5em;
     // noqa
     background-image: url(data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwMCAxMDAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPg0KICA8cGF0aCBmaWxsPSJncmF5IiBkPSJNMTAsMjMyLjdsNDkwLDUzNC41bDQ5MC01MzQuNUgxMHoiIC8+DQo8L3N2Zz4=);
     background-repeat: no-repeat;
     background-position: right 0.4em center;
-    background-size: 1em;
-    border-radius: 0;
+    background-size: 0.6em;
 }

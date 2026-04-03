@@ -1,0 +1,87 @@
+@use "../base/colours" as *;
+@use "../base/fonts" as *;
+
+body > header {
+    border-bottom: 3px solid $colour-text;
+    background-color: $colour-header;
+    color: $colour-header-text;
+    font-family: $font-site;
+
+    > a {
+        font-family: $font-brand;
+        font-weight: bold;
+    }
+
+    a {
+        color: $colour-header-text;
+        text-decoration: none;
+    }
+    a.user {
+        font-weight: bold;
+    }
+
+    nav {
+        li + li::before {
+            content: "·";
+        }
+
+        button {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            font: inherit;
+            padding: 0;
+        }
+    }
+}
+
+main > header {
+    .header.primary {
+        border-bottom: 1px solid $colour-text;
+    }
+    .header.secondary,
+    .header.breadcrumbs {
+        border-bottom: 1px solid $colour-subtle-border;
+    }
+
+    .header.primary,
+    .header.secondary,
+    .header.breadcrumbs {
+        a {
+            color: inherit;
+        }
+    }
+
+    .header.breadcrumbs {
+        a.button,
+        button,
+        .version-controls select {
+            color: $colour-text-softened;
+            border-color: $colour-subtle-border;
+        }
+
+        li + li::before {
+            border-right: 0.1em solid currentcolor;
+        }
+
+        [aria-current="page"] {
+            font-weight: 700;
+            text-decoration: none;
+        }
+    }
+}
+
+main > header .header.campaign {
+    background: $colour-campaign;
+    color: $colour-campaign-text;
+}
+
+main > header .header.notebook {
+    background: $colour-subtle;
+
+    a.button,
+    button {
+        border-color: $colour-text-softened;
+    }
+}

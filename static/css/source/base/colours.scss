@@ -1,11 +1,21 @@
 @use "palette" as *;
 
+// All site colours should be specified using named variants,
+// explicitly selected for use.
+
 $colour-header: $gemstone-green;
 $colour-header-text: $baby-blossom;
 $colour-subtle: $baby-blossom;
 $colour-subtle-border: $esplanade;
 $colour-text: $dark-orchestra;
-$colour-footer: $brandy-copper;
+$colour-text-softened: color-mix(in srgb, $colour-text 60%, white);
+$colour-text-faded: color-mix(in srgb, $colour-text 30%, white);
+$colour-footer: $dark-orchestra;
 $colour-footer-text: $baby-blossom;
 $colour-danger: $brandy-copper;
 $colour-danger-text: $baby-blossom;
+$colour-campaign: $brandy-copper;
+$colour-campaign-text: $baby-blossom;
+$colour-page: $igloo;
+
+$colour-links: $cote-dazur;

@@ -17,6 +17,7 @@ $base-line-height:          1.6;
 $one-line:                  $base-font-size * $base-line-height;
 $half-line:                 $one-line * 0.5;
 $third-line:                $one-line * 0.333;
+$indent:                    clamp(1rem, 5vw, 4rem);
 
 a,
 a:hover,

@@ -1,25 +1,25 @@
 {% load notebook_permissions %}
 
-<div class="notebook-header">
-  <p class="notebook-name">{{ notebook.name }}</p>
-  <div class="notebook-controls">
-    <p class="notebook-meta">
-      Notebook owner:
-      <a href="/profile/{{ notebook.owner.username }}/">{{ notebook.owner.username }}</a>.
-      {% if notebook.campaign_notebooks.exists %}
-        Attached to: {% for cn in notebook.campaign_notebooks.all %}<a href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
-      {% endif %}
-    </p>
-    <div class="notebook-actions">
-      {% if notebook|can_edit:request.user %}
+<h1>{{ notebook.name }}</h1>
+<div class="controls">
+  <p class="meta">
+    Notebook owner:
+    <a href="/profile/{{ notebook.owner.username }}/">{{ notebook.owner.username }}</a>.
+    {% if not campaign and notebook.campaign_notebooks.exists %}
+      Attached to: {% for cn in notebook.campaign_notebooks.all %}<a href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
+    {% endif %}
+  </p>
+  <div class="actions">
+    {% if notebook|can_edit:request.user %}
+      {% if not campaign %}
         <a href="{{ create_page_url }}" class="button">Add new page</a>
-        <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}"
-           class="button">Deleted pages</a>
       {% endif %}
-      {% if notebook|can_manage:request.user %}
-        <a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}"
-           class="button">Settings</a>
-      {% endif %}
-    </div>
+      <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}"
+         class="button">Deleted pages</a>
+    {% endif %}
+    {% if notebook|can_manage:request.user %}
+      <a href="{% url 'notebook_settings' username=notebook.owner.username slug=notebook.slug %}"
+         class="button">Settings</a>
+    {% endif %}
   </div>
 </div>

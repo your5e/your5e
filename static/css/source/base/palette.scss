@@ -1,6 +1,21 @@
+// Named colours are the base of the site palette.
+// They are translated to the actual used values in colours.scss.
+
+
+// Chosen colours, named via https://api.color.pizza
+$igloo: #FDFCFA;
+
+
+// Colours taken from and inspired by Alex Cristache’s Mindful Palettes
+// https://www.patreon.com/cw/AlexCristache
+
+// mindful palette 255
 $baby-blossom: #FAEFE9;
 $esplanade: #D5BDA4;
 $gemstone-green: #495D39;
 $parsnip-root: #9D892E;
 $brandy-copper: #73372D;
 $dark-orchestra: #251B19;
+
+// mindful palette 259
+$cote-dazur: #017c85;

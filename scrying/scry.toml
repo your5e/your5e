@@ -48,6 +48,8 @@ path = "/profile/norm"
 user = "norm"
 path = "/profile/norm/password"
 
+# campaigns
+# ----------------------------------------------------------------------------
 [pages.campaigns-list]
 user = "norm"
 path = "/campaigns/"
@@ -76,16 +78,16 @@ steps = [
     { capture = { selector = "#invite-link", pattern = "(/campaigns/join-[^\\s]+)", as = "join_url" } },
 ]
 
-[pages.campaign-join]
-user = "susan"
-path = "{join_url}"
-
 [pages.campaign-delete]
 user = "norm"
 path = "/campaigns/settings/norm/the-long-road"
 steps = [
     { click = { text = "Delete campaign", role = "button" } },
 ]
+
+[pages.campaign-join]
+user = "susan"
+path = "{join_url}"
 
 [pages.campaign-leave]
 user = "susan"
@@ -94,6 +96,28 @@ steps = [
     { click = { text = "Leave campaign", role = "button" } },
 ]
 
+[pages.campaign-wiki]
+user = "norm"
+path = "/campaigns/norm/the-long-road/wiki/"
+
+[pages.campaign-wiki-notebook]
+user = "norm"
+path = "/campaigns/norm/the-long-road/wiki/campaign-notes/"
+
+[pages.campaign-wiki-page]
+user = "norm"
+path = "/campaigns/wendy/secrets-of-the-tower/wiki/wendy/world-building/places/the-capital"
+
+[pages.campaign-wiki-page-long-name]
+user = "norm"
+path = "/campaigns/norm/whispers-from-the-forgotten-crypts-beneath-the-mountains-of-eternal-sorrow/wiki/comprehensive-bestiary-and-geographical-survey-of-the-blighted-territories-including-appendices-on-local-customs/legends-and-oral-histories-of-the-northern-clans/"
+
+[pages.campaign-wiki-create-page]
+user = "norm"
+path = "/campaigns/norm/the-long-road/create-page"
+
+# notebooks
+# ----------------------------------------------------------------------------
 [pages.notebooks-list]
 user = "norm"
 path = "/notebooks/"
@@ -117,6 +141,10 @@ path = "/notebooks/deleted/norm/campaign-notes/"
 [pages.notebook-settings]
 user = "norm"
 path = "/notebooks/settings/norm/campaign-notes/"
+
+[pages.notebook-settings-wiki]
+user = "norm"
+path = "/notebooks/settings/norm/the-long-road-wiki/"
 
 [pages.notebook-delete]
 user = "norm"
@@ -166,6 +194,3 @@ path = "/notebooks/norm/campaign-notes/sessions/session-01"
 [pages.notebook-session-edit]
 user = "norm"
 path = "/notebooks/norm/campaign-notes/sessions/session-01?edit"
-
-[pages.help-using-notebooks]
-path = "/help/using-notebooks"

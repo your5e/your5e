@@ -24,6 +24,9 @@ from campaigns.views import (
     CampaignNotebooksView,
     CampaignSettingsView,
     CampaignView,
+    CampaignWikiPageCreateView,
+    CampaignWikiPageView,
+    CampaignWikiView,
 )
 from help.views import HelpPageView
 from notebooks.views import (
@@ -31,6 +34,7 @@ from notebooks.views import (
     NotebookCreateView,
     NotebookDeletedPagesView,
     NotebookDeleteView,
+    NotebookIndexView,
     NotebookListView,
     NotebookPageCreateView,
     NotebookPageDeleteView,
@@ -39,7 +43,6 @@ from notebooks.views import (
     NotebookRenameView,
     NotebookSettingsView,
     NotebookUploadView,
-    NotebookView,
     NotebookVisibilityView,
 )
 from users.views import (
@@ -185,9 +188,29 @@ urlpatterns = [
         view=CampaignSettingsView.as_view(),
     ),
     path(
-        route="campaigns/<str:username>/<str:slug>",
+        route="campaigns/<str:username>/<str:slug>/",
         name="campaign",
         view=CampaignView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/create-page",
+        name="campaign_wiki_create_page",
+        view=CampaignWikiPageCreateView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/",
+        name="campaign_wiki",
+        view=CampaignWikiView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/<path:path>/",
+        name="campaign_wiki_directory",
+        view=CampaignWikiView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/<path:path>",
+        name="campaign_wiki_page",
+        view=CampaignWikiPageView.as_view(),
     ),
 
     path(
@@ -257,12 +280,12 @@ urlpatterns = [
     path(
         route="notebooks/<str:username>/<str:slug>/",
         name="notebook",
-        view=NotebookView.as_view(),
+        view=NotebookIndexView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/<path:path>/",
         name="notebook_directory",
-        view=NotebookView.as_view(),
+        view=NotebookIndexView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/<str:slug>/<path:path>",

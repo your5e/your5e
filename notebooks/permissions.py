@@ -1,6 +1,6 @@
 from http import HTTPStatus
 
-from django.http import HttpResponse
+from django.template.response import TemplateResponse
 
 from notebooks.models import Notebook, NotebookPermission
 
@@ -36,13 +36,24 @@ class NotebookPermissions:
         )
 
     @staticmethod
+    def forbidden_response(request):
+        if request.user.is_authenticated:
+            status = HTTPStatus.FORBIDDEN
+        else:
+            status = HTTPStatus.UNAUTHORIZED
+        return TemplateResponse(
+            request,
+            "notebooks/forbidden.html",
+            {},
+            status=status,
+        )
+
+    @staticmethod
     def view_required(method):
         def wrapper(self, request, *args, **kwargs):
             self.object = self.get_object()
             if not NotebookPermissions.can_view(self.object, request.user):
-                if not request.user.is_authenticated:
-                    return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+                return NotebookPermissions.forbidden_response(request)
             return method(self, request, *args, **kwargs)
         return wrapper
 
@@ -51,9 +62,9 @@ class NotebookPermissions:
         def wrapper(self, request, *args, **kwargs):
             self.object = self.get_object()
             if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+                return NotebookPermissions.forbidden_response(request)
             if not NotebookPermissions.can_edit(self.object, request.user):
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+                return NotebookPermissions.forbidden_response(request)
             return method(self, request, *args, **kwargs)
         return wrapper
 
@@ -62,8 +73,8 @@ class NotebookPermissions:
         def wrapper(self, request, *args, **kwargs):
             self.object = self.get_object()
             if not request.user.is_authenticated:
-                return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+                return NotebookPermissions.forbidden_response(request)
             if request.user != self.object.owner:
-                return HttpResponse(status=HTTPStatus.FORBIDDEN)
+                return NotebookPermissions.forbidden_response(request)
             return method(self, request, *args, **kwargs)
         return wrapper
