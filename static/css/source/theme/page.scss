@@ -25,3 +25,14 @@ pre,
 kbd {
     font-family: $font-mono;
 }
+
+
+main .page-content {
+    a {
+        color: $colour-links;
+    }
+
+    a.permanent {
+        font-weight: bold;
+    }
+}

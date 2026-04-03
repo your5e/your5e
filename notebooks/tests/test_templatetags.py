@@ -4,8 +4,14 @@ import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
+from campaigns.models import Campaign, CampaignNotebook
+from campaigns.tests import LinkedCampaignNotebooksMixin
 from notebooks.templatetags.dates import smart_date
-from notebooks.templatetags.notebook_permissions import can_edit, can_manage
+from notebooks.templatetags.notebook_permissions import (
+    can_edit,
+    can_manage,
+    is_wiki_and_player_in_that_campaign,
+)
 from notebooks.tests import NotebookMixin
 
 
@@ -93,3 +99,43 @@ class TestCanManage(NotebookMixin):
 
     def test_anonymous_cannot_manage(self):
         assert can_manage(self.wendys_notebook, AnonymousUser()) is False
+
+
+@pytest.mark.django_db
+class TestIsWikiAndPlayerInThatCampaign(LinkedCampaignNotebooksMixin):
+    def test_campaign_player_on_wiki(self):
+        assert is_wiki_and_player_in_that_campaign(self.wiki, self.susan) is True
+
+    def test_campaign_owner_on_wiki(self):
+        assert is_wiki_and_player_in_that_campaign(self.wiki, self.wendy) is True
+
+    def test_non_player_on_wiki(self):
+        assert is_wiki_and_player_in_that_campaign(self.wiki, self.hugh) is False
+
+    def test_user_on_non_wiki_notebook(self):
+        assert is_wiki_and_player_in_that_campaign(
+            self.wendys_notebook, self.susan
+        ) is False
+
+    def test_user_on_shared_notebook(self):
+        # wiki is the campaign wiki for owned_campaign
+        # attach it to a second campaign as a regular notebook
+        other_campaign = Campaign.objects.create(owner=self.hugh, name="Other")
+        CampaignNotebook.objects.create(
+            campaign=other_campaign,
+            notebook=self.wiki,
+            linked_by=self.hugh,
+        )
+
+        # mary is a player in both campaigns, owns neither
+        self.owned_campaign.players.add(self.mary)
+        other_campaign.players.add(self.mary)
+
+        # she is a campaign player because she's in owned_campaign
+        assert is_wiki_and_player_in_that_campaign(self.wiki, self.mary) is True
+
+        # remove mary from owned_campaign, and even though she is a player in
+        # a campaign _using_ the notebook, it is now not true that she is a player
+        # in the campaign that the notebook is the wiki _for_
+        self.owned_campaign.players.remove(self.mary)
+        assert is_wiki_and_player_in_that_campaign(self.wiki, self.mary) is False

@@ -4,6 +4,7 @@ from io import BytesIO
 import pytest
 
 from campaigns.models import Campaign, CampaignNotebook
+from campaigns.tests import LinkedCampaignNotebooksMixin
 from notebooks.models import Notebook, NotebookPermission
 from users.tests import UserMixin
 from wikis.models import Page
@@ -1041,3 +1042,34 @@ class TestNotebookRenameView(NotebookMixin):
         )
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == "/notebooks/settings/wendy/heros-legendes/"
+
+
+@pytest.mark.django_db
+class TestCampaignWikiCollaborators(LinkedCampaignNotebooksMixin):
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_remove_campaign_player_from_wiki(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wiki.pk,
+            "remove": str(self.susan.pk),
+            "confirm": "true",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert NotebookPermission.objects.filter(
+            notebook=self.wiki,
+            user=self.susan,
+        ).exists()
+
+    @LinkedCampaignNotebooksMixin.as_user("wendy")
+    def test_cannot_downgrade_campaign_player_to_viewer(self, client):
+        response = client.post("/notebooks/collaborators", {
+            "notebook": self.wiki.pk,
+            "change_role": str(self.susan.pk),
+            "role": "viewer",
+            "confirm": "true",
+        })
+        assert response.status_code == HTTPStatus.FORBIDDEN
+        permission = NotebookPermission.objects.get(
+            notebook=self.wiki,
+            user=self.susan,
+        )
+        assert permission.role == NotebookPermission.Role.EDITOR

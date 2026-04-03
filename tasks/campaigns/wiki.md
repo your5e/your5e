@@ -44,7 +44,7 @@ on link, append numbers as we do elsewhere to differentiate when colliding.
       cross-campaign collection, not limited to the wiki
 - [X] recently edited should list the full pathname
 - [X] check all anciliary links resolve to the campaign wiki, not the notebook
-- [ ] creating a page in the campaign wiki should offer a dropdown of which
+- [X] creating a page in the campaign wiki should offer a dropdown of which
       place it gets created
         - defaults to the current context (either wiki or notebook)
         - read-only notebooks are excluded

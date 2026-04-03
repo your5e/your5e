@@ -8,6 +8,9 @@
   </p>
   {% if campaign|is_member:request.user %}
     <div class="actions">
+      {% if create_page_url %}
+        <a href="{{ create_page_url }}" class="button">Add new page</a>
+      {% endif %}
       {% if campaign|is_owner:request.user %}
         <a href="{% url 'campaign_settings' username=campaign.owner.username slug=campaign.slug %}"
            class="button">Settings</a>

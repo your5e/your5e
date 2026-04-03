@@ -691,6 +691,12 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookFromPOSTMixin, Vi
         user_pk = request.POST.get("remove")
         user = get_object_or_404(User, pk=user_pk)
 
+        wiki_link = CampaignNotebook.objects.filter(
+            notebook=self.object, is_wiki=True
+        ).first()
+        if wiki_link and wiki_link.campaign.players.filter(pk=user.pk).exists():
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+
         if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {
                 "notebook": self.object,
@@ -709,6 +715,13 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookFromPOSTMixin, Vi
         user_pk = request.POST.get("change_role")
         role = request.POST.get("role")
         user = get_object_or_404(User, pk=user_pk)
+
+        if role == NotebookPermission.Role.VIEWER:
+            wiki_link = CampaignNotebook.objects.filter(
+                notebook=self.object, is_wiki=True
+            ).first()
+            if wiki_link and wiki_link.campaign.players.filter(pk=user.pk).exists():
+                return HttpResponse(status=HTTPStatus.FORBIDDEN)
 
         if not confirm:
             return render(request, "notebooks/confirm_collaborator.html", {

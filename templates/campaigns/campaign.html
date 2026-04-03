@@ -45,9 +45,24 @@
 
   <h2>Wiki</h2>
   <p>
-    <a href="{% url 'campaign_wiki' username=campaign.owner.username slug=campaign.slug %}">The wiki</a>
-    is a notebook automatically created for the campaign. Use it to take notes, about
-    anything. Anyone joining the campaign can edit it.
+    <a href="{% url 'campaign_wiki' username=campaign.owner.username slug=campaign.slug %}"
+       class='permanent'
+         >Visit the wiki.</a>
+  </p>
+  <p>
+    The wiki is a special notebook automatically created for the campaign. Use it to
+    take notes, about anything. Anyone joining the campaign can make changes to it.
+  </p>
+
+  <p>
+    <strong>Link notebooks to the wiki.</strong> They will create a folder in the
+    wiki, using the name of the notebook. If a page in the wiki was created under
+    the same name, it will be obscured by the notebook and become inaccessible.
+  </p>
+  <p>
+    <strong>Private notebooks stay private.</strong> Notebooks linked to a campaign
+    do not automatically become visible to other players, nor give them the
+    ability to edit. You must give them explicit permission.
   </p>
 
   {% if notebook_data %}
@@ -103,17 +118,6 @@
     {% endfor %}
   </ul>
   {% endif %}
-
-  <p>
-    <strong>Link notebooks to the wiki.</strong> They will create a folder in the wiki,
-    with the same name as the notebook. If a page in the wiki was created under the
-    same name, it will be obscured by the notebook and become inaccessible.
-  </p>
-  <p>
-    <strong>Private notebooks stay private.</strong> Private notebooks can be linked,
-    they will not become automatically visible to other players, nor give them the
-    ability to edit, unless you give them explicit permission.
-  </p>
 
   <form method="post" action="{% url 'notebook_create' %}" class="notebook-add">
     {% csrf_token %}

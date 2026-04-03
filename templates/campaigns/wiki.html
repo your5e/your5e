@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load notebook_permissions %}
+{% load notebook_permissions dates %}
 
 {% block title %}{{ campaign.name }} Wiki - Your 5E{% endblock %}
 
@@ -63,7 +63,8 @@
         <ul>
           {% for page in recent_pages %}
             <li>
-              <a href="{{ base_url }}{{ page.path }}">{{ page.display_path }}</a>
+              <a href="{{ base_url }}{{ page.path }}">{{ page.display_path }}</a>,
+              <time datetime="{{ page.created_at|date:'c' }}">{{ page.created_at|smart_date }}</time>
             </li>
           {% endfor %}
         </ul>

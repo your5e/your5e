@@ -11,7 +11,9 @@
   </p>
   <div class="actions">
     {% if notebook|can_edit:request.user %}
-      <a href="{{ create_page_url }}" class="button">Add new page</a>
+      {% if not campaign %}
+        <a href="{{ create_page_url }}" class="button">Add new page</a>
+      {% endif %}
       <a href="{% url 'notebook_deleted' username=notebook.owner.username slug=notebook.slug %}"
          class="button">Deleted pages</a>
     {% endif %}

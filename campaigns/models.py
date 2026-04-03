@@ -3,6 +3,7 @@ import secrets
 import bleach
 import markdown
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import m2m_changed, post_delete
 from django.dispatch import receiver
 from django.utils.text import slugify
@@ -159,10 +160,6 @@ class Campaign(OwnedSlugMixin, models.Model):
         return markdown.markdown(clean)
 
     def visible_notebook_links(self, user, include_wiki=False):
-        from django.db.models import Q
-
-        from notebooks.models import Notebook
-
         links = self.campaign_notebooks.select_related(
             "notebook", "notebook__owner"
         ).prefetch_related("notebook__notebookpermission_set__user")
@@ -173,6 +170,16 @@ class Campaign(OwnedSlugMixin, models.Model):
             Q(notebook__visibility=Notebook.Visibility.INTERNAL) |
             Q(notebook__owner=user) |
             Q(notebook__notebookpermission__user=user)
+        ).distinct())
+
+    def editable_notebook_links(self, user):
+        links = self.campaign_notebooks.select_related(
+            "notebook", "notebook__owner"
+        ).prefetch_related("notebook__notebookpermission_set__user")
+        return list(links.filter(
+            Q(notebook__owner=user) |
+            Q(notebook__notebookpermission__user=user,
+              notebook__notebookpermission__role=NotebookPermission.Role.EDITOR)
         ).distinct())
 
     def resolve_wikilink(self, target):

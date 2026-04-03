@@ -5,15 +5,17 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
+from django.views.generic import TemplateView
 
 from campaigns.forms import CampaignForm
 from campaigns.models import Campaign, CampaignNotebook
 from campaigns.permissions import CampaignPermissions
+from notebooks.forms import PageForm
 from notebooks.models import Notebook
 from notebooks.permissions import NotebookPermissions
 from notebooks.views import NotebookIndexView, NotebookPageEditView, NotebookPageView
 from users.models import User, get_sentinel_user
-from wikis.models import FolderLink, Version
+from wikis.models import FolderLink, Page, Version
 
 
 class CampaignObjectMixin:
@@ -446,6 +448,15 @@ class CampaignWikiMixin:
             "slug": self.campaign.slug,
         })
 
+    def get_create_page_url(self):
+        url = reverse("campaign_wiki_create_page", kwargs={
+            "username": self.campaign.owner.username,
+            "slug": self.campaign.slug,
+        })
+        if not self.is_wiki_notebook():
+            url += f"?notebook={self.object.pk}"
+        return url
+
     def get_wiki_path_for_notebook_path(self, notebook_path):
         if self.is_wiki_notebook():
             return notebook_path
@@ -580,7 +591,7 @@ class CampaignWikiView(CampaignWikiMixin, NotebookIndexView):
             "is_wiki_notebook": self.is_wiki_notebook(),
             "base_url": self.get_base_url(),
             "notebook_base_url": self.get_notebook_base_url(),
-            "create_base": self.get_notebook_base_url(),
+            "create_base": self.get_base_url() + (self.wiki_path + "/").lstrip("/"),
         })
         return context
 
@@ -641,8 +652,21 @@ class CampaignWikiPageView(CampaignWikiMixin, NotebookPageView):
 class CampaignWikiPageEditView(CampaignWikiMixin, NotebookPageEditView):
     template_name = "campaigns/wiki_edit.html"
 
+    def get_object(self):
+        notebook_pk = self.request.POST.get("notebook")
+        if notebook_pk:
+            notebook = get_object_or_404(Notebook, pk=notebook_pk)
+            if not self.campaign.campaign_notebooks.filter(notebook=notebook).exists():
+                return None
+            self.notebook_path = self.wiki_path
+            self.path = self.wiki_path
+            return notebook
+        return super().get_object()
+
     def dispatch(self, request, *args, **kwargs):
         self.object = self.get_object()
+        if self.object is None:
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
         error = self.check_permissions(request)
         if error:
             return error
@@ -682,10 +706,91 @@ class CampaignWikiPageEditView(CampaignWikiMixin, NotebookPageEditView):
         wiki_path = self.get_wiki_path_for_notebook_path(new_path)
 
         if new_path.endswith("/index") or new_path == "index":
-            return redirect(self.get_base_url() + wiki_path.rsplit("/", 1)[0] + "/")
+            if "/" in wiki_path:
+                return redirect(self.get_base_url() + wiki_path.rsplit("/", 1)[0] + "/")
+            return redirect(self.get_base_url())
 
         return redirect(reverse("campaign_wiki_page", kwargs={
             "username": self.campaign.owner.username,
             "slug": self.campaign.slug,
             "path": wiki_path,
         }))
+
+
+class CampaignWikiPageCreateView(CampaignWikiMixin, TemplateView):
+    template_name = "campaigns/wiki_create.html"
+
+    def find_unique_path(self, editable_links, folder):
+        base_path = (folder + "/new-page").lstrip("/")
+        path = base_path
+        counter = 2
+        while True:
+            exists = False
+            for link in editable_links:
+                try:
+                    link.notebook.get_page(path=path)
+                    exists = True
+                    break
+                except Page.DoesNotExist:
+                    pass
+            if not exists:
+                return path
+            path = f"{base_path}-{counter}"
+            counter += 1
+
+    def get_default_link(self, editable_links, selected_notebook_pk):
+        wiki_link = None
+        for link in editable_links:
+            if link.is_wiki:
+                wiki_link = link
+                break
+
+        if selected_notebook_pk:
+            for link in editable_links:
+                if str(link.notebook.pk) == selected_notebook_pk:
+                    return link
+        return wiki_link
+
+    def get_breadcrumbs(self):
+        breadcrumbs = super().get_breadcrumbs()
+        breadcrumbs.append({"name": "create"})
+        return breadcrumbs
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        error = self.check_permissions(request)
+        if error:
+            return error
+
+        self.editable_links = self.campaign.editable_notebook_links(request.user)
+        if not self.editable_links:
+            return HttpResponse(status=HTTPStatus.FORBIDDEN)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        folder = self.request.GET.get("folder", "")
+        selected_notebook_pk = self.request.GET.get("notebook")
+
+        path = self.find_unique_path(self.editable_links, folder)
+        default_link = self.get_default_link(self.editable_links, selected_notebook_pk)
+
+        selected_notebook = None
+        if default_link:
+            selected_notebook = default_link.notebook
+
+        context.update({
+            "campaign": self.campaign,
+            "form": PageForm(initial={"filename": path.rsplit("/", 1)[-1]}),
+            "form_action": reverse("campaign_wiki_page", kwargs={
+                "username": self.campaign.owner.username,
+                "slug": self.campaign.slug,
+                "path": path,
+            }),
+            "editable_notebooks": self.editable_links,
+            "selected_notebook": selected_notebook,
+            "breadcrumbs": self.get_breadcrumbs(),
+            "path": path,
+        })
+        return context

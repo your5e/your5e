@@ -49,16 +49,15 @@ main.notebook {
         }
 
         li::marker {
-            color: color-mix(in srgb, $colour-text 30%, white);
+            color: $colour-text-faded;
         }
 
         a {
             color: inherit;
-            text-decoration: none;
         }
-        a:hover,
-        a:focus {
-            text-decoration: underline;
+        time {
+            font-size: $size-bourgeois;
+            font-style: italic;
         }
 
         span.editing {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load notebook_permissions %}
 
 {% block title %}Settings - {{ notebook.name }} - Your 5E{% endblock %}
 
@@ -45,22 +46,38 @@
     are kept for at least two weeks and are restorable).<br>
     <strong>Viewers</strong> can only read pages.
   </p>
+  {% for cn in notebook.campaign_notebooks.all %}
+    {% if cn.is_wiki %}
+      <p>
+        Campaign players are automatically editors of the wiki and cannot be
+        removed or downgraded here. Manage campaign membership from the
+        <a href="{% url 'campaign_settings' username=cn.campaign.owner.username slug=cn.campaign.slug %}"
+           class="permanent"
+             >campaign settings</a>.
+      </p>
+    {% endif %}
+  {% endfor %}
   {% if collaborators %}
     <ul>
       {% for permission in collaborators %}
         <li>
-          <form method="post" action="{% url 'notebook_collaborators' %}">
-            {% csrf_token %}
-            <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-            <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
+          {% if notebook|is_wiki_and_player_in_that_campaign:permission.user %}
             <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
-            <select name="role">
-              <option value="editor" {% if permission.role == "editor" %}selected{% endif %}>Editor</option>
-              <option value="viewer" {% if permission.role == "viewer" %}selected{% endif %}>Viewer</option>
-            </select>
-            <button type="submit">Change</button>
-            <button type="submit" name="remove" value="{{ permission.user.pk }}">Remove</button>
-          </form>
+            Editor (campaign player)
+          {% else %}
+            <form method="post" action="{% url 'notebook_collaborators' %}">
+              {% csrf_token %}
+              <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+              <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
+              <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
+              <select name="role">
+                <option value="editor" {% if permission.role == "editor" %}selected{% endif %}>Editor</option>
+                <option value="viewer" {% if permission.role == "viewer" %}selected{% endif %}>Viewer</option>
+              </select>
+              <button type="submit">Change</button>
+              <button type="submit" name="remove" value="{{ permission.user.pk }}">Remove</button>
+            </form>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>

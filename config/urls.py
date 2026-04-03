@@ -24,6 +24,7 @@ from campaigns.views import (
     CampaignNotebooksView,
     CampaignSettingsView,
     CampaignView,
+    CampaignWikiPageCreateView,
     CampaignWikiPageView,
     CampaignWikiView,
 )
@@ -192,8 +193,18 @@ urlpatterns = [
         view=CampaignView.as_view(),
     ),
     path(
+        route="campaigns/<str:username>/<str:slug>/create-page",
+        name="campaign_wiki_create_page",
+        view=CampaignWikiPageCreateView.as_view(),
+    ),
+    path(
         route="campaigns/<str:username>/<str:slug>/wiki/",
         name="campaign_wiki",
+        view=CampaignWikiView.as_view(),
+    ),
+    path(
+        route="campaigns/<str:username>/<str:slug>/wiki/<path:path>/",
+        name="campaign_wiki_directory",
         view=CampaignWikiView.as_view(),
     ),
     path(
