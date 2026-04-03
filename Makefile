@@ -41,7 +41,6 @@ reset: clean setup
 
 scry:
 	ruff check scrying
-	rm -f scrying/*.png
 	python scrying/scry.py
 
 server-tests:
