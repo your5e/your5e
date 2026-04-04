@@ -20,6 +20,18 @@ def get_sentinel_user():
     return user
 
 
+def get_public_owner():
+    user, _ = User.objects.get_or_create(
+        username="your5e",
+        defaults={
+            "name": "your5e",
+            "email": "system@localhost",
+            "is_active": False,
+        },
+    )
+    return user
+
+
 class UserManager(BaseUserManager):
     def create_user(self, username, email, password=None, **extra_fields):
         if not username:
