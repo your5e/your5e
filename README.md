@@ -44,3 +44,14 @@ implement a full sync bash script if you need to sync a directory.
 # monitor and poll for changes
 (computer)% tests/sync-notebook.sh -w user/notebook dir
 ```
+
+
+## Importing Public Notebooks
+
+System notebooks (owned by `your5e`) are populated using the `import_notebook`
+management command. _The notebook must already exist._
+
+```
+(computer)% docker compose exec web python manage.py import_notebook \
+    /path/to/folder notebook-slug
+```

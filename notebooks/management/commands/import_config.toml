@@ -1,0 +1,14 @@
+[dnd-52-srd-monsters]
+name = "D&D 5.2 SRD Monsters"
+repo = "https://github.com/your5e/5e-srd-markdown"
+path = "dnd/521/obsidian_vault/Monsters"
+
+[dnd-52-srd-rules-glossary]
+name = "D&D 5.2 SRD Rules Glossary"
+repo = "https://github.com/your5e/5e-srd-markdown"
+path = "dnd/521/obsidian_vault/Glossary"
+
+[dnd-52-srd-spells]
+name = "D&D 5.2 SRD Spells"
+repo = "https://github.com/your5e/5e-srd-markdown"
+path = "dnd/521/obsidian_vault/Spells"

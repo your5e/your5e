@@ -1,4 +1,3 @@
-import mimetypes
 from http import HTTPStatus
 
 from django.core.exceptions import ValidationError
@@ -13,16 +12,12 @@ from django.views.generic.edit import FormView
 from campaigns.models import Campaign, CampaignNotebook
 from campaigns.permissions import CampaignPermissions
 from notebooks.forms import CollaboratorForm, NotebookCreateForm, PageForm
+from notebooks.mime import guess_mime_type
 from notebooks.models import Notebook, NotebookPermission
 from notebooks.permissions import NotebookPermissions
 from users.models import User
 from wikis.models import Page, Version
 
-MIME_TYPE_FALLBACKS = {
-    ".md": "text/markdown",
-    ".markdown": "text/markdown",
-}
-DEFAULT_MIME_TYPE = "application/octet-stream"
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
 
 
@@ -459,13 +454,7 @@ class NotebookUploadView(NotebookFromPOSTMixin, View):
         if uploaded_file.size > MAX_UPLOAD_SIZE:
             return HttpResponse(status=HTTPStatus.BAD_REQUEST)
 
-        mime_type, _ = mimetypes.guess_type(filename)
-        if mime_type is None:
-            if "." in filename:
-                ext = "." + filename.rsplit(".", 1)[-1].lower()
-            else:
-                ext = ""
-            mime_type = MIME_TYPE_FALLBACKS.get(ext, DEFAULT_MIME_TYPE)
+        mime_type = guess_mime_type(filename)
 
         try:
             page = self.object.get_page(filename=filename)
