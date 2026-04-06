@@ -5,9 +5,11 @@
 body > header {
     padding: 0.5em $indent;
 
-    > a {
+    h1 {
         font-size: $size-double-great-primer;
         line-height: 1;
+        margin: 0;
+        padding: 0;
     }
 
     nav {

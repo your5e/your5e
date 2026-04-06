@@ -14,6 +14,7 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
 class NotebookMixin(UserMixin):
     # Permission matrix:
     #   wendy's notebook (private): susan=editor, mary=viewer
+    #   wendy's secret (private):   unshared
     #   mary's notebook (internal): wendy=editor, susan=viewer
     #   susan's notebook (public):  mary=editor, wendy=viewer
     #   hugh has no permissions
@@ -22,6 +23,10 @@ class NotebookMixin(UserMixin):
     def setup_notebooks(self, db, setup_users):
         self.wendys_notebook = Notebook.objects.create(
             name="Héros & Légendes",
+            owner=self.wendy,
+        )
+        self.wendys_secret = Notebook.objects.create(
+            name="Wendy's Secret",
             owner=self.wendy,
         )
         self.susans_notebook = Notebook.objects.create(

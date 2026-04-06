@@ -93,6 +93,33 @@ class TestNotebook(NotebookMixin):
 
 
 @pytest.mark.django_db
+class TestNotebookVisibleTo(NotebookMixin):
+    def test_owner_sees_all_own_notebooks(self):
+        notebooks = list(Notebook.visible_to(self.wendy, self.wendy))
+        assert self.wendys_notebook in notebooks
+        assert self.wendys_secret in notebooks
+
+    def test_editor_sees_shared_notebook(self):
+        notebooks = list(Notebook.visible_to(self.susan, self.wendy))
+        assert self.wendys_notebook in notebooks
+        assert self.wendys_secret not in notebooks
+
+    def test_viewer_sees_shared_notebook(self):
+        notebooks = list(Notebook.visible_to(self.mary, self.wendy))
+        assert self.wendys_notebook in notebooks
+        assert self.wendys_secret not in notebooks
+
+    def test_user_sees_public_and_internal(self):
+        notebooks = list(Notebook.visible_to(self.hugh, self.susan))
+        assert self.susans_notebook in notebooks
+
+    def test_user_does_not_see_private(self):
+        notebooks = list(Notebook.visible_to(self.hugh, self.wendy))
+        assert self.wendys_notebook not in notebooks
+        assert self.wendys_secret not in notebooks
+
+
+@pytest.mark.django_db
 class TestNotebookPermission(NotebookMixin):
     def test_cannot_duplicate_collaborator(self):
         with pytest.raises(IntegrityError):

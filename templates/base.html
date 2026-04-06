@@ -11,7 +11,7 @@
   <body>
 
     <header>
-      <a href="/">your5e.com</a>
+      <h1><a href="/">your5e.com</a></h1>
       <nav>
         <ul>
           {% if user.is_authenticated %}
@@ -19,20 +19,27 @@
               <a class="user" href="{% url 'profile' username=user.username %}">{{ user.username }}</a>
             </li>
             <li>
-              <a href="{% url 'campaign_list' %}">Campaigns</a>
+              <a href="{% url 'campaign_list' %}">My campaigns</a>
             </li>
             <li>
-              <a href="{% url 'notebook_list' %}">Notebooks</a>
+              <a href="{% url 'notebook_user_list' user.username %}">My notebooks</a>
             </li>
+          {% else %}
+            <li>
+              <a href="{% url 'login' %}">Login</a>
+            </li>
+          {% endif %}
+
+          <li>
+            <a href="{% url 'notebook_list' %}">Notebooks</a>
+          </li>
+
+          {% if user.is_authenticated %}
             <li>
               <form method="post" action="{% url 'logout' %}">
                 {% csrf_token %}
                 <button type="submit">Logout</button>
               </form>
-            </li>
-          {% else %}
-            <li>
-              <a href="{% url 'login' %}">Login</a>
             </li>
           {% endif %}
         </ul>
@@ -71,7 +78,16 @@
     <footer>
       <p>
         © 2026 your5e
-        <span class="version">(version {{git_sha}})</span>
+        <span class="version">(version
+          <a href="https://github.com/your5e/your5e/commit/{{git_sha}}">{{git_sha}}</a>)</span>
+      </p>
+      <p class="legal">
+        This site includes material from the System Reference Document 5.2.1 (“SRD
+        5.2.1”) by Wizards of the Coast LLC, available at
+        <a href='https://www.dndbeyond.com/srd'>D&D Beyond</a>.
+        The SRD 5.2.1 is licensed under the
+        <a href='https://creativecommons.org/licenses/by/4.0/legalcode'>Creative Commons
+        Attribution 4.0 International License</a>.
       </p>
     </footer>
 

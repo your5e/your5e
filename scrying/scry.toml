@@ -119,8 +119,11 @@ path = "/campaigns/norm/the-long-road/create-page"
 # notebooks
 # ----------------------------------------------------------------------------
 [pages.notebooks-list]
-user = "norm"
 path = "/notebooks/"
+
+[pages.notebooks-user-list]
+user = "norm"
+path = "/notebooks/norm/"
 
 [pages.notebook-view]
 user = "norm"

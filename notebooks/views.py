@@ -970,21 +970,40 @@ class NotebookPageView(NotebookContextMixin, NotebookPageMixin, TemplateView):
         )
 
 
-class NotebookListView(View):
-    def get(self, request):
+class NotebookListView(TemplateView):
+    template_name = "notebooks/list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        public = Notebook.objects.filter(
+            visibility=Notebook.Visibility.PUBLIC
+        ).order_by("name").select_related("owner")
+        context["system_notebooks"] = public.filter(owner__username="your5e")
+        context["public_notebooks"] = public.exclude(owner__username="your5e")
+        if self.request.user.is_authenticated:
+            context["shared_notebooks"] = Notebook.objects.filter(
+                visibility=Notebook.Visibility.INTERNAL
+            ).order_by("name").select_related("owner")
+        return context
+
+
+class NotebookUserListView(TemplateView):
+    template_name = "notebooks/user_list.html"
+
+    def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        return super().dispatch(request, *args, **kwargs)
 
-        my_notebooks = Notebook.objects.filter(owner=request.user).order_by(
-            "name"
-        ).prefetch_related("campaign_notebooks__campaign")
-        other_notebooks = Notebook.objects.filter(
-            notebookpermission__user=request.user
-        ).exclude(owner=request.user).distinct().order_by("name").prefetch_related(
-            "campaign_notebooks__campaign", "owner"
-        )
-
-        return render(request, "notebooks/list.html", {
-            "my_notebooks": my_notebooks,
-            "other_notebooks": other_notebooks,
-        })
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        owner = get_object_or_404(User, username=self.kwargs["username"])
+        context["owner"] = owner
+        context["notebooks"] = Notebook.visible_to(
+            self.request.user, owner
+        ).order_by("name")
+        if self.request.user == owner:
+            context["shared_notebooks"] = Notebook.objects.filter(
+                notebookpermission__user=self.request.user
+            ).exclude(owner=self.request.user).order_by("name")
+        return context

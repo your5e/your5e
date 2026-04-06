@@ -16,7 +16,7 @@ markdown to a known notebook.
 
 Update the notebook list.
 
-- [ ] /notebooks/ explains notebooks and lists public ones
+- [X] /notebooks/ explains notebooks and lists public ones
         - /notebooks/[user]/ lists user's own notebooks
 - [ ] a notebook with `index.md` can contain a section to explain the
       notebook, which is shown on the notebook page
