@@ -30,7 +30,10 @@ def add_source(content: str, source: str) -> str:
     else:
         formatted_source = f"_{source}_"
 
-    return f"{before}\n\n**Source:** {formatted_source}{newlines_after_source}{stripped_after}"
+    return (
+        f"{before}\n\n**Source:** {formatted_source}"
+        f"{newlines_after_source}{stripped_after}"
+    )
 
 
 class Command(BaseCommand):
@@ -63,12 +66,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         section = options["section"]
         folder_arg = options["folder"]
-        config_path = options["config"]
+        self.config_path = options["config"]
         import_all = options["import_all"]
 
         full_config = {}
-        if config_path.exists():
-            full_config = tomllib.loads(config_path.read_text())
+        if self.config_path.exists():
+            full_config = tomllib.loads(self.config_path.read_text())
 
         if import_all:
             for section_name in full_config:
@@ -104,6 +107,9 @@ class Command(BaseCommand):
             },
         )
 
+        self.stdout.write(name)
+        self.import_index(section, notebook, owner)
+
         if "sources" in config:
             sources = config["sources"]
         else:
@@ -137,28 +143,44 @@ class Command(BaseCommand):
                     content = add_source(content, source)
                     data = content.encode()
 
-                try:
-                    page = notebook.get_page(filename=filename)
-                except Page.DoesNotExist:
-                    page = Page.objects.create(wiki=notebook)
-
-                previous_version = page.latest_version
-                previous_number = 0
-                if previous_version:
-                    previous_number = previous_version.number
-
-                version = page.update(
-                    filename=filename,
-                    mime_type=mime_type,
-                    data=data,
-                    created_by=owner,
-                )
-
-                if version.number > previous_number:
-                    self.stdout.write(f"++ {filename}")
+                self.update_page(notebook, filename, mime_type, data, owner)
 
         if total_file_count == 0:
             raise CommandError(f"No files found in '{folder}'")
+
+    def import_index(self, section, notebook, owner):
+        indexes_dir = self.config_path.parent / "indexes"
+        index_file = indexes_dir / f"{section}.md"
+
+        if not index_file.exists():
+            return
+
+        data = index_file.read_bytes()
+        mime_type = "text/markdown"
+        filename = "index.md"
+
+        self.update_page(notebook, filename, mime_type, data, owner)
+
+    def update_page(self, notebook, filename, mime_type, data, owner):
+        try:
+            page = notebook.get_page(filename=filename)
+        except Page.DoesNotExist:
+            page = Page.objects.create(wiki=notebook)
+
+        previous_version = page.latest_version
+        previous_number = 0
+        if previous_version:
+            previous_number = previous_version.number
+
+        version = page.update(
+            filename=filename,
+            mime_type=mime_type,
+            data=data,
+            created_by=owner,
+        )
+
+        if version.number > previous_number:
+            self.stdout.write(f"++ {filename}")
 
     def get_source_folder(self, config, folder_arg, section):
         if "repo" in config:

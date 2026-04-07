@@ -12,6 +12,7 @@ markdown to a known notebook.
 - [X] add a filter to attribute the source back to the notebook's definitive
       URL
 - [X] import to a notebook subfolder
+- [X] import index.md from the codebase if it exists
 
 
 # Listing notebooks @phase

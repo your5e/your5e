@@ -13,27 +13,27 @@ name = "D&D 5.2 SRD Spells"
 repo = "https://github.com/your5e/5e-srd-markdown"
 path = "dnd/521/obsidian_vault/Spells"
 
-[dnd-52-srd-characters]
-name = "D&D 5.2 SRD Characters"
+[dnd-52-srd-player-characters]
+name = "D&D 5.2 SRD Player Characters"
 repo = "https://github.com/your5e/5e-srd-markdown"
 
-[[dnd-52-srd-characters.sources]]
+[[dnd-52-srd-player-characters.sources]]
 path = "dnd/521/obsidian_vault/Character Creation"
 prefix = ""
 
-[[dnd-52-srd-characters.sources]]
+[[dnd-52-srd-player-characters.sources]]
 path = "dnd/521/obsidian_vault/Backgrounds"
 prefix = "Backgrounds"
 
-[[dnd-52-srd-characters.sources]]
+[[dnd-52-srd-player-characters.sources]]
 path = "dnd/521/obsidian_vault/Classes"
 prefix = "Classes"
 
-[[dnd-52-srd-characters.sources]]
+[[dnd-52-srd-player-characters.sources]]
 path = "dnd/521/obsidian_vault/Feats"
 prefix = "Feats"
 
-[[dnd-52-srd-characters.sources]]
+[[dnd-52-srd-player-characters.sources]]
 path = "dnd/521/obsidian_vault/Species"
 prefix = "Species"
 

@@ -1,5 +1,7 @@
+import shutil
 import subprocess
 from io import StringIO
+from pathlib import Path
 from textwrap import dedent
 
 import pytest
@@ -80,6 +82,12 @@ class TestImportNotebook:
             check=True,
             capture_output=True,
         )
+
+        repo_name = repo_dir.name
+        cloned_dir = Path("/tmp") / repo_name
+        if cloned_dir.exists():
+            shutil.rmtree(cloned_dir)
+
         return repo_dir
 
     @pytest.fixture
@@ -313,7 +321,7 @@ class TestImportNotebook:
         page.update(
             filename="spells.md",
             mime_type="text/markdown",
-            data=b"# Spells",
+            data=b"# Spells\n\n**Source:** [5e SRD](/notebooks/your5e/srd)\n\n",
             created_by=owner,
         )
 
@@ -636,6 +644,38 @@ class TestImportNotebook:
         file2 = notebook.get_page(path="other/file2")
         assert file2.latest_version.filename == "Other/file2.md"
         assert b"From repo 2" in file2.latest_version.content.data
+
+    def test_imports_index_from_indexes_directory(
+        self,
+        source_dir,
+        system_notebook,
+        config_with_name,
+    ):
+        (source_dir / "spells.md").write_text("# Spells\n\nA list of spells.")
+
+        indexes_dir = config_with_name.parent / "indexes"
+        indexes_dir.mkdir()
+        (indexes_dir / "srd.md").write_text(dedent("""
+            ---
+            description: The System Reference Document for D&D 5e.
+            ---
+
+            # System Reference Document
+
+            This notebook contains the official SRD content.
+        """).lstrip())
+
+        call_command(
+            "import_notebook",
+            "srd",
+            str(source_dir),
+            config=config_with_name,
+        )
+
+        index_page = system_notebook.get_page(path="index")
+        assert index_page.latest_version.filename == "index.md"
+        assert b"System Reference Document" in index_page.latest_version.content.data
+        assert b"official SRD content" in index_page.latest_version.content.data
 
 
 class TestAddSource:
