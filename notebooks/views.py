@@ -1,7 +1,7 @@
-import mimetypes
 from http import HTTPStatus
 
 from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -13,16 +13,12 @@ from django.views.generic.edit import FormView
 from campaigns.models import Campaign, CampaignNotebook
 from campaigns.permissions import CampaignPermissions
 from notebooks.forms import CollaboratorForm, NotebookCreateForm, PageForm
+from notebooks.mime import guess_mime_type
 from notebooks.models import Notebook, NotebookPermission
 from notebooks.permissions import NotebookPermissions
 from users.models import User
 from wikis.models import Page, Version
 
-MIME_TYPE_FALLBACKS = {
-    ".md": "text/markdown",
-    ".markdown": "text/markdown",
-}
-DEFAULT_MIME_TYPE = "application/octet-stream"
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
 
 
@@ -459,13 +455,7 @@ class NotebookUploadView(NotebookFromPOSTMixin, View):
         if uploaded_file.size > MAX_UPLOAD_SIZE:
             return HttpResponse(status=HTTPStatus.BAD_REQUEST)
 
-        mime_type, _ = mimetypes.guess_type(filename)
-        if mime_type is None:
-            if "." in filename:
-                ext = "." + filename.rsplit(".", 1)[-1].lower()
-            else:
-                ext = ""
-            mime_type = MIME_TYPE_FALLBACKS.get(ext, DEFAULT_MIME_TYPE)
+        mime_type = guess_mime_type(filename)
 
         try:
             page = self.object.get_page(filename=filename)
@@ -981,21 +971,137 @@ class NotebookPageView(NotebookContextMixin, NotebookPageMixin, TemplateView):
         )
 
 
-class NotebookListView(View):
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+class NotebookDescriptionMixin:
+    def get_notebook_descriptions(self, notebooks):
+        index_versions = Version.objects.filter(
+                page__wiki__in=notebooks,
+                path="index",
+                page__deleted_at__isnull=True,
+                number=Subquery(
+                    Version.objects.filter(page=OuterRef("page"))
+                        .order_by("-number")
+                        .values("number")[:1]
+                )
+            ).select_related("content", "page")
 
-        my_notebooks = Notebook.objects.filter(owner=request.user).order_by(
-            "name"
-        ).prefetch_related("campaign_notebooks__campaign")
-        other_notebooks = Notebook.objects.filter(
-            notebookpermission__user=request.user
-        ).exclude(owner=request.user).distinct().order_by("name").prefetch_related(
-            "campaign_notebooks__campaign", "owner"
+        descriptions = {}
+        for version in index_versions:
+            fm = version.frontmatter()
+            if "notebook" in fm:
+                descriptions[version.page.wiki_id] = fm["notebook"]
+
+        return descriptions
+
+
+class NotebookListView(NotebookDescriptionMixin, TemplateView):
+    template_name = "notebooks/list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        all_public = (
+            Notebook.objects
+                .filter(visibility=Notebook.Visibility.PUBLIC)
+                .order_by("name")
+                .select_related("owner")
         )
 
-        return render(request, "notebooks/list.html", {
-            "my_notebooks": my_notebooks,
-            "other_notebooks": other_notebooks,
-        })
+        all_public_list = []
+        system_notebooks = []
+        public_notebooks = []
+        for nb in all_public:
+            all_public_list.append(nb)
+            if nb.owner.username == "your5e":
+                system_notebooks.append(nb)
+            else:
+                public_notebooks.append(nb)
+
+        if self.request.user.is_authenticated:
+            shared_notebooks = (
+                Notebook.objects
+                    .filter(visibility=Notebook.Visibility.INTERNAL)
+                    .order_by("name")
+                    .select_related("owner")
+            )
+
+            all_notebooks = all_public_list + list(shared_notebooks)
+        else:
+            shared_notebooks = None
+            all_notebooks = all_public_list
+
+        descriptions = self.get_notebook_descriptions(all_notebooks)
+
+        context["system_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in system_notebooks
+        ]
+        context["public_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in public_notebooks
+        ]
+        if shared_notebooks is not None:
+            context["shared_notebooks"] = [
+                (nb, descriptions.get(nb.pk))
+                    for nb in shared_notebooks
+            ]
+
+        return context
+
+
+class NotebookUserListView(NotebookDescriptionMixin, TemplateView):
+    template_name = "notebooks/user_list.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.owner = get_object_or_404(User, username=kwargs["username"])
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["owner"] = self.owner
+
+        if self.request.user.is_authenticated:
+            viewer = self.request.user
+        else:
+            viewer = None
+
+        users_notebooks = (
+            Notebook.visible_to(viewer, self.owner)
+                .order_by("name")
+                .select_related("owner")
+        )
+
+        if not self.request.user.is_authenticated:
+            # anonymous only gets to see public notebooks
+            users_notebooks = users_notebooks.filter(
+                visibility=Notebook.Visibility.PUBLIC
+            )
+
+        users_notebooks_list = list(users_notebooks)
+
+        if self.request.user == self.owner:
+            shared_with_owner = (
+                Notebook.objects
+                    .filter(notebookpermission__user=self.owner)
+                    .exclude(owner=self.owner)
+                    .order_by("name")
+                    .select_related("owner")
+            )
+            shared_with_owner_list = list(shared_with_owner)
+            all_notebooks = users_notebooks_list + shared_with_owner_list
+        else:
+            shared_with_owner_list = None
+            all_notebooks = users_notebooks_list
+
+        descriptions = self.get_notebook_descriptions(all_notebooks)
+
+        context["users_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in users_notebooks_list
+        ]
+        if shared_with_owner_list is not None:
+            context["shared_notebooks"] = [
+                (nb, descriptions.get(nb.pk))
+                    for nb in shared_with_owner_list
+            ]
+
+        return context

@@ -153,4 +153,3 @@ We should not have dead pages in the URL hierarchy.
 
 - [X] `/notebooks/{user}/` redirects to list
 - [X] `/notebooks/` lists the notebooks the user owns and can edit
-- [ ] somewhere to list the system notebooks

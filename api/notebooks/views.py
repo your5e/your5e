@@ -165,26 +165,7 @@ class NotebookPrivateView(NotebookAPIView):
 class NotebookUserView(NotebookAPIView):
     def get_queryset(self):
         owner = get_object_or_404(User, username=self.kwargs["username"])
-        user = self.request.user
-
-        if user == owner:
-            return (
-                Notebook.objects
-                    .filter(owner=owner)
-                    .select_related("owner")
-            )
-
-        return (
-            Notebook.objects
-                .filter(owner=owner)
-                .filter(
-                    Q(pk__in=self.get_shared_notebook_ids())
-                    | Q(visibility=Notebook.Visibility.INTERNAL)
-                    | Q(visibility=Notebook.Visibility.PUBLIC)
-                )
-                .select_related("owner")
-                .distinct()
-        )
+        return Notebook.visible_to(self.request.user, owner).select_related("owner")
 
 
 class PageSerializer(serializers.Serializer):

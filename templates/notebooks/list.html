@@ -5,41 +5,55 @@
 {% block page_content %}
   <h1>Notebooks</h1>
 
-  <h2>My notebooks</h2>
-  {% if my_notebooks %}
-    <ul>
-      {% for notebook in my_notebooks %}
-        <li>
-          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
-          {% if notebook.campaign_notebooks.exists %}
-            (campaigns: {% for cn in notebook.campaign_notebooks.all %}{% if not forloop.first %}, {% endif %}<a
-              href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% endfor %})
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No notebooks yet.</p>
-  {% endif %}
-
   <p>
-    <a href="{% url 'notebook_create' %}" class="button">Create a new notebook</a>
+    A notebook is a collection of pages, used to organise campaign notes,
+    world lore, rules, and monster statblocks. They can be kept private,
+    shared with other players in your campaigns, shared to all users of
+    this site, or made completely public.
   </p>
 
-  <h2>Other notebooks</h2>
-  {% if other_notebooks %}
+  {% if user_list_url %}
+    <p><a href="{{ user_list_url }}">My notebooks</a></p>
+  {% endif %}
+
+  {% if system_notebooks %}
+    <h2>System Notebooks</h2>
+    <p>Public 5th edition reference material.</p>
     <ul>
-      {% for notebook in other_notebooks %}
+      {% for notebook, description in system_notebooks %}
         <li>
           <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
-          (owner: <a href="/profile/{{ notebook.owner.username }}/"
-             >{{ notebook.owner.username }}</a>{% if notebook.campaign_notebooks.exists %},
-           campaigns: {% for cn in notebook.campaign_notebooks.all %}{% if not forloop.first %}, {% endif %}
-             <a href="{{ cn.campaign.get_absolute_url }}">{{ cn.campaign.name }}</a>{% endfor %}{% endif %})
+          {% if description %} — {{ description }}{% endif %}
         </li>
       {% endfor %}
     </ul>
-  {% else %}
-    <p>None.</p>
+  {% endif %}
+
+  {% if public_notebooks %}
+    <h2>Public Notebooks</h2>
+    <p>Notebooks shared publicly by users of the site.</p>
+    <ul>
+      {% for notebook, description in public_notebooks %}
+        <li>
+          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>,
+          shared by <a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>
+          {% if description %} — “{{ description }}”{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if shared_notebooks is not None %}
+    <h2>Shared Notebooks</h2>
+    <p>Notebooks shared by users only to other users of the site.</p>
+    <ul>
+      {% for notebook, description in shared_notebooks %}
+        <li>
+          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
+          shared by <a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>
+          {% if description %} — “{{ description }}”{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
   {% endif %}
 {% endblock %}

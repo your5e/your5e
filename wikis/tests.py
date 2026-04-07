@@ -1,4 +1,5 @@
 from datetime import timedelta
+from textwrap import dedent
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -63,7 +64,7 @@ class WikiMixin(UserMixin):
         self.page_with_links.update(
             filename="Rules/Status/Index.md",
             mime_type="text/markdown",
-            data=b"\n".join([
+            data=b"---\ntitle: Status Index\nauthor: Wendy\n---\n" + b"\n".join([
                 b"[Relative](./exhaustion)",
                 b"[Parent](../combat)",
                 b"[Bare](conditions)",
@@ -78,7 +79,7 @@ class WikiMixin(UserMixin):
         self.page_with_wikilinks.update(
             filename="Index.md",
             mime_type="text/markdown",
-            data=b"\n".join([
+            data=b"---\nnotebook: Test notebook\n---\n" + b"\n".join([
                 b"[[Combat]]",
                 b"[[combat]]",
                 b"[[Theron Blackwood]]",
@@ -97,6 +98,22 @@ class WikiMixin(UserMixin):
             filename="getting_started.md",
             mime_type="text/markdown",
             data=b"# Getting Started",
+            created_by=self.wendy,
+        )
+
+        self.page_with_incomplete_frontmatter = Page.objects.create(wiki=self.wiki)
+        self.page_with_incomplete_frontmatter.update(
+            filename="incomplete.md",
+            mime_type="text/markdown",
+            data=b"---\ntitle: Test\nNo closing delimiter",
+            created_by=self.wendy,
+        )
+
+        self.page_with_invalid_yaml = Page.objects.create(wiki=self.wiki)
+        self.page_with_invalid_yaml.update(
+            filename="invalid.md",
+            mime_type="text/markdown",
+            data=b"---\n  bad: yaml: structure:\n---\n# Content",
             created_by=self.wendy,
         )
 
@@ -402,6 +419,56 @@ class TestVersion(WikiMixin):
         )
         html = page.latest_version.render(base_url="/wiki")
         assert html == '<p><a href="https://example.com" title="A title">link</a></p>'
+
+    def test_split_content_with_frontmatter(self):
+        frontmatter, markdown = self.page_with_links.latest_version.split_content()
+        assert frontmatter == "title: Status Index\nauthor: Wendy"
+        assert markdown == dedent("""\
+            [Relative](./exhaustion)
+            [Parent](../combat)
+            [Bare](conditions)
+            [Absolute](/characters)
+            [External](https://example.com)
+            [Anchor](#section)
+        """)
+
+    def test_split_content_without_frontmatter(self):
+        frontmatter, markdown = self.markdown_pages[0].latest_version.split_content()
+        assert frontmatter == ""
+        assert markdown == "Content of Rules/Combat.md\n"
+
+    def test_split_content_with_incomplete_delimiter(self):
+        version = self.page_with_incomplete_frontmatter.latest_version
+        frontmatter, markdown = version.split_content()
+        assert frontmatter == ""
+        assert markdown == "---\ntitle: Test\nNo closing delimiter\n"
+
+    def test_split_content_for_non_markdown(self):
+        frontmatter, content = self.version.split_content()
+        assert frontmatter == ""
+        assert content == "Test content\n"
+
+    def test_frontmatter_parses_yaml(self):
+        fm = self.page_with_wikilinks.latest_version.frontmatter()
+        assert fm == {"notebook": "Test notebook"}
+
+    def test_frontmatter_returns_empty_dict_for_invalid_yaml(self):
+        assert self.page_with_invalid_yaml.latest_version.frontmatter() == {}
+
+    def test_frontmatter_returns_empty_dict_when_none(self):
+        assert self.markdown_pages[0].latest_version.frontmatter() == {}
+
+    def test_split_content_with_windows_line_endings(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="windows.md",
+            mime_type="text/markdown",
+            data=b"---\r\nnotebook: Test\r\n---\r\n# Content",
+            created_by=self.wendy,
+        )
+        frontmatter, markdown = page.latest_version.split_content()
+        assert frontmatter == "notebook: Test"
+        assert markdown == "# Content\n"
 
 
 @pytest.mark.django_db
@@ -728,11 +795,13 @@ class TestWiki(WikiMixin):
             self.page_with_links.latest_version,
             self.page_with_wikilinks.latest_version,
             self.page_with_underscore.latest_version,
+            self.page_with_incomplete_frontmatter.latest_version,
+            self.page_with_invalid_yaml.latest_version,
         ]
 
     def test_all_pages_excludes_deleted(self):
         self.page.soft_delete()
-        assert len(self.wiki.all_pages()) == 10
+        assert len(self.wiki.all_pages()) == 12
 
     def test_deleted_pages(self):
         self.page.soft_delete()
@@ -786,6 +855,8 @@ class TestWiki(WikiMixin):
             "document.txt",
             "getting_started",
             "history.txt",
+            "incomplete",
+            "invalid",
             "shared.txt",
         ]
         assert [(f.name, f.href) for f in contents["folders"]] == [

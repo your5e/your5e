@@ -1,8 +1,22 @@
 @use "../base/colours" as *;
 @use "../base/fonts" as *;
+@use "../theme/typography" as *;
 
 body > footer {
     background-color: $colour-footer;
     color: $colour-footer-text;
     font-family: $font-site;
+
+    a {
+        color: $colour-footer-text;
+    }
+
+    span.version {
+        font-family: $font-mono;
+        font-size: $size-long-primer;
+    }
+
+    p.legal {
+        font-size: $size-bourgeois;
+    }
 }

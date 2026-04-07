@@ -7,7 +7,7 @@ ENV DART_SASS_VERSION=${DART_SASS_VERSION} TARGETARCH=${TARGETARCH}
 RUN <<EOF
     set -e
     apt-get update
-    apt-get install -y --no-install-recommends curl ca-certificates
+    apt-get install -y --no-install-recommends curl ca-certificates git
 
     # dart-sass
     SASS_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64")

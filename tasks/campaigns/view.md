@@ -14,3 +14,5 @@ Add more views.
 - [X] `/campaigns/create` is the form, not on the profile
 - [X] `/campaigns/{user}` redirects
 - [X] `/campaigns/` lists the campaigns the user owns and is a part of
+
+- [ ] consider public campaign to illustrate notebook inclusion in wikis?

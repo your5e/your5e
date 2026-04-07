@@ -6,7 +6,13 @@ import pytest
 from django.db import IntegrityError
 
 from users.backends import EmailOrUserBackend
-from users.models import AuthToken, ProfileLink, User, get_sentinel_user
+from users.models import (
+    AuthToken,
+    ProfileLink,
+    User,
+    get_public_owner,
+    get_sentinel_user,
+)
 
 
 class UserMixin:
@@ -96,6 +102,17 @@ class TestUser(UserMixin):
     def test_sentinel_user_is_reused(self):
         first = get_sentinel_user()
         second = get_sentinel_user()
+        assert first.pk == second.pk
+
+    def test_public_owner_is_inactive(self):
+        public_owner = get_public_owner()
+        assert public_owner.username == "your5e"
+        assert public_owner.name == "your5e"
+        assert public_owner.is_active is False
+
+    def test_public_owner_is_reused(self):
+        first = get_public_owner()
+        second = get_public_owner()
         assert first.pk == second.pk
 
     def test_create_user_requires_username(self):

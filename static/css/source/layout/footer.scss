@@ -2,8 +2,13 @@
 
 body > footer {
     padding: 1rem $indent;
-}
 
-body > footer p {
-    margin: 0;
+    p {
+        margin: 0;
+        padding-bottom: $one-line;
+    }
+
+    p.legal {
+        max-width: 80%;
+    }
 }

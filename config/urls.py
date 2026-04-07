@@ -43,6 +43,7 @@ from notebooks.views import (
     NotebookRenameView,
     NotebookSettingsView,
     NotebookUploadView,
+    NotebookUserListView,
     NotebookVisibilityView,
 )
 from users.views import (
@@ -220,7 +221,8 @@ urlpatterns = [
     ),
     path(
         route="notebooks/<str:username>/",
-        view=RedirectView.as_view(url=reverse_lazy("notebook_list"), permanent=False),
+        name="notebook_user_list",
+        view=NotebookUserListView.as_view(),
     ),
     path(
         route="notebooks/create",

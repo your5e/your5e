@@ -2,6 +2,7 @@ import hashlib
 import uuid
 from collections import namedtuple
 
+import yaml
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Coalesce, Greatest
@@ -439,12 +440,41 @@ class Version(models.Model):
             if conflicting:
                 raise ValidationError(f"Path '{parent_path}' already exists.")
 
+    def split_content(self):
+        if self.mime_type != "text/markdown":
+            return "", self.content.data.decode()
+
+        text = self.content.data.decode()
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+        if not text.startswith("---\n"):
+            return "", text
+
+        end_marker = text.find("\n---\n", 4)
+        if end_marker == -1:
+            return "", text
+
+        frontmatter = text[4:end_marker]
+        markdown = text[end_marker + 5:]
+        return frontmatter, markdown
+
+    def frontmatter(self):
+        frontmatter_text, _ = self.split_content()
+        if not frontmatter_text:
+            return {}
+
+        try:
+            return yaml.safe_load(frontmatter_text) or {}
+        except yaml.YAMLError:
+            return {}
+
     def render(self, base_url=None, resolve_wikilink=None):
         if resolve_wikilink is None:
             resolve_wikilink = self.resolve_wikilink
         if self.mime_type == "text/markdown":
+            _, markdown_text = self.split_content()
             return render_wiki_content(
-                self.content.data.decode(),
+                markdown_text,
                 resolve_wikilink,
                 base_url,
             )

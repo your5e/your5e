@@ -39,6 +39,7 @@ class TestNotebooksList(NotebookApiMixin):
             "World Lore",
             "Campaign Notes",
             "Héros & Légendes",
+            "Wendy's Secret",
         ]
 
     @ApiMixin.as_api_user("susan")
@@ -125,7 +126,7 @@ class TestNotebooksList(NotebookApiMixin):
 
         second_page = api_client.get(first_page.json()["next"])
         assert second_page.status_code == HTTPStatus.OK
-        assert len(second_page.json()["results"]) == 5
+        assert len(second_page.json()["results"]) == 6
         assert second_page.json()["previous"] is not None
 
 
@@ -249,6 +250,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
                 for n in response.json()["results"]
         ] == [
             "Héros & Légendes",
+            "Wendy's Secret",
         ]
 
     @ApiMixin.as_api_user("susan")
@@ -299,6 +301,7 @@ class TestNotebooksUser(NotebookApiMixin):
                 for n in response.json()["results"]
         ] == [
             "Héros & Légendes",
+            "Wendy's Secret",
         ]
 
     @ApiMixin.as_api_user("susan")

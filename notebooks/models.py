@@ -104,6 +104,16 @@ class Notebook(OwnedSlugMixin, Wiki):
             raise ValueError("Cannot delete a campaign wiki notebook")
         super().delete(*args, **kwargs)
 
+    @classmethod
+    def visible_to(cls, viewer, owner):
+        if viewer == owner:
+            return cls.objects.filter(owner=owner)
+        return cls.objects.filter(owner=owner).filter(
+            models.Q(visibility=cls.Visibility.PUBLIC)
+            | models.Q(visibility=cls.Visibility.INTERNAL)
+            | models.Q(notebookpermission__user=viewer)
+        ).distinct()
+
 
 class NotebookPermission(models.Model):
     class Role(models.TextChoices):

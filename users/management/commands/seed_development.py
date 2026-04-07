@@ -95,6 +95,9 @@ class Command(BaseCommand):
             filename="index.md",
             mime_type="text/markdown",
             data=dedent("""\
+                ---
+                notebook: A public notebook for sharing campaign information
+                ---
                 # Campaign Notes
 
                 Welcome to our campaign wiki.
@@ -387,7 +390,7 @@ class Command(BaseCommand):
                 "Blighted Territories Including Appendices on Local Customs"
             ),
             owner=norm,
-            visibility=Notebook.Visibility.PUBLIC,
+            visibility=Notebook.Visibility.INTERNAL,
         )
         long_index = Page.objects.create(wiki=long_notebook)
         long_index.update(
