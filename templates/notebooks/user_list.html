@@ -5,11 +5,12 @@
 {% block page_content %}
   <h1>{{ owner.username }}'s Notebooks</h1>
 
-  {% if notebooks %}
+  {% if users_notebooks %}
     <ul>
-      {% for notebook in notebooks %}
+      {% for notebook, description in users_notebooks %}
         <li>
           <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
+          {% if description %} — {{ description }}{% endif %}
         </li>
       {% endfor %}
     </ul>
@@ -20,10 +21,11 @@
   {% if shared_notebooks %}
     <h2>Shared with me</h2>
     <ul>
-      {% for notebook in shared_notebooks %}
+      {% for notebook, description in shared_notebooks %}
         <li>
           <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
           ({{ notebook.owner.username }})
+          {% if description %} — {{ description }}{% endif %}
         </li>
       {% endfor %}
     </ul>

@@ -5,8 +5,9 @@ Support the conversion of Markdown in wiki pages, anything with the mime type
 "text/markdown".
 
 - [X] render standard Markdown elements
-- [ ] do not render frontmatter
-- [ ] redact/escape embedded HTML
+- [X] do not render frontmatter
+- [X] redact/escape embedded HTML
+- [ ] replace bleach (deprecated) with nh3
 - [X] relative and absolute paths in hrefs resolve to a given base
 - [X] match wikilinks to pages
         - ignores `.md`

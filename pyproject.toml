@@ -11,6 +11,7 @@ dependencies = [
     "markdown>=3.7",
     "psycopg[binary]>=3.2",
     "python-slugify>=8.0",
+    "pyyaml>=6.0",
     "whitenoise>=6.8",
 ]
 

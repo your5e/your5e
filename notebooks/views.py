@@ -1,6 +1,7 @@
 from http import HTTPStatus
 
 from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -970,24 +971,84 @@ class NotebookPageView(NotebookContextMixin, NotebookPageMixin, TemplateView):
         )
 
 
-class NotebookListView(TemplateView):
+class NotebookDescriptionMixin:
+    def get_notebook_descriptions(self, notebooks):
+        index_versions = Version.objects.filter(
+                page__wiki__in=notebooks,
+                path="index",
+                page__deleted_at__isnull=True,
+                number=Subquery(
+                    Version.objects.filter(page=OuterRef("page"))
+                        .order_by("-number")
+                        .values("number")[:1]
+                )
+            ).select_related("content", "page")
+
+        descriptions = {}
+        for version in index_versions:
+            fm = version.frontmatter()
+            if "notebook" in fm:
+                descriptions[version.page.wiki_id] = fm["notebook"]
+
+        return descriptions
+
+
+class NotebookListView(NotebookDescriptionMixin, TemplateView):
     template_name = "notebooks/list.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        public = Notebook.objects.filter(
-            visibility=Notebook.Visibility.PUBLIC
-        ).order_by("name").select_related("owner")
-        context["system_notebooks"] = public.filter(owner__username="your5e")
-        context["public_notebooks"] = public.exclude(owner__username="your5e")
+
+        all_public = (
+            Notebook.objects
+                .filter(visibility=Notebook.Visibility.PUBLIC)
+                .order_by("name")
+                .select_related("owner")
+        )
+
+        all_public_list = []
+        system_notebooks = []
+        public_notebooks = []
+        for nb in all_public:
+            all_public_list.append(nb)
+            if nb.owner.username == "your5e":
+                system_notebooks.append(nb)
+            else:
+                public_notebooks.append(nb)
+
         if self.request.user.is_authenticated:
-            context["shared_notebooks"] = Notebook.objects.filter(
-                visibility=Notebook.Visibility.INTERNAL
-            ).order_by("name").select_related("owner")
+            shared_notebooks = (
+                Notebook.objects
+                    .filter(visibility=Notebook.Visibility.INTERNAL)
+                    .order_by("name")
+                    .select_related("owner")
+            )
+
+            all_notebooks = all_public_list + list(shared_notebooks)
+        else:
+            shared_notebooks = None
+            all_notebooks = all_public_list
+
+        descriptions = self.get_notebook_descriptions(all_notebooks)
+
+        context["system_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in system_notebooks
+        ]
+        context["public_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in public_notebooks
+        ]
+        if shared_notebooks is not None:
+            context["shared_notebooks"] = [
+                (nb, descriptions.get(nb.pk))
+                    for nb in shared_notebooks
+            ]
+
         return context
 
 
-class NotebookUserListView(TemplateView):
+class NotebookUserListView(NotebookDescriptionMixin, TemplateView):
     template_name = "notebooks/user_list.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -999,11 +1060,39 @@ class NotebookUserListView(TemplateView):
         context = super().get_context_data(**kwargs)
         owner = get_object_or_404(User, username=self.kwargs["username"])
         context["owner"] = owner
-        context["notebooks"] = Notebook.visible_to(
-            self.request.user, owner
-        ).order_by("name")
+
+        users_notebooks = (
+            Notebook.visible_to(self.request.user, owner)
+                .order_by("name")
+                .select_related("owner")
+        )
+
+        users_notebooks_list = list(users_notebooks)
+
         if self.request.user == owner:
-            context["shared_notebooks"] = Notebook.objects.filter(
-                notebookpermission__user=self.request.user
-            ).exclude(owner=self.request.user).order_by("name")
+            shared_with_owner = (
+                Notebook.objects
+                    .filter(notebookpermission__user=owner)
+                    .exclude(owner=owner)
+                    .order_by("name")
+                    .select_related("owner")
+            )
+            shared_with_owner_list = list(shared_with_owner)
+            all_notebooks = users_notebooks_list + shared_with_owner_list
+        else:
+            shared_with_owner_list = None
+            all_notebooks = users_notebooks_list
+
+        descriptions = self.get_notebook_descriptions(all_notebooks)
+
+        context["users_notebooks"] = [
+            (nb, descriptions.get(nb.pk))
+                for nb in users_notebooks_list
+        ]
+        if shared_with_owner_list is not None:
+            context["shared_notebooks"] = [
+                (nb, descriptions.get(nb.pk))
+                    for nb in shared_with_owner_list
+            ]
+
         return context

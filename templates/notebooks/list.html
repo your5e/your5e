@@ -20,9 +20,10 @@
     <h2>System Notebooks</h2>
     <p>Public 5th edition reference material.</p>
     <ul>
-      {% for notebook in system_notebooks %}
+      {% for notebook, description in system_notebooks %}
         <li>
           <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
+          {% if description %} — {{ description }}{% endif %}
         </li>
       {% endfor %}
     </ul>
@@ -32,10 +33,11 @@
     <h2>Public Notebooks</h2>
     <p>Notebooks shared publicly by users of the site.</p>
     <ul>
-      {% for notebook in public_notebooks %}
+      {% for notebook, description in public_notebooks %}
         <li>
-          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
-          (<a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>)
+          <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>,
+          shared by <a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>
+          {% if description %} — “{{ description }}”{% endif %}
         </li>
       {% endfor %}
     </ul>
@@ -45,10 +47,11 @@
     <h2>Shared Notebooks</h2>
     <p>Notebooks shared by users only to other users of the site.</p>
     <ul>
-      {% for notebook in shared_notebooks %}
+      {% for notebook, description in shared_notebooks %}
         <li>
           <a href="{{ notebook.get_absolute_url }}">{{ notebook.name }}</a>
-          (<a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>)
+          shared by <a href="{% url 'profile' username=notebook.owner.username %}">{{ notebook.owner.username }}</a>
+          {% if description %} — “{{ description }}”{% endif %}
         </li>
       {% endfor %}
     </ul>

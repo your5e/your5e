@@ -23,6 +23,23 @@ class TestNotebookListView(NotebookMixin):
         assert 'href="/notebooks/wendy/"' in content
         assert response.status_code == HTTPStatus.OK
 
+    def test_notebook_with_description_shows_in_list(self, client):
+        index_page = self.susans_notebook.get_page(path="index")
+        index_page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"---\nnotebook: Public campaign reference material\n---\n# Welcome",
+            created_by=self.susan,
+        )
+        response = client.get("/notebooks/")
+        content = response.content.decode()
+        assert "Public campaign reference material" in content
+
+    def test_notebook_without_description_shows_in_list(self, client):
+        response = client.get("/notebooks/")
+        content = response.content.decode()
+        assert html.escape("Campaign Notes") in content
+
 
 @pytest.mark.django_db
 class TestNotebookUserListView(NotebookMixin):

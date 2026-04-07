@@ -18,5 +18,5 @@ Update the notebook list.
 
 - [X] /notebooks/ explains notebooks and lists public ones
         - /notebooks/[user]/ lists user's own notebooks
-- [ ] a notebook with `index.md` can contain a section to explain the
-      notebook, which is shown on the notebook page
+- [X] a notebook with `index.md` can contain frontmatter to explain the
+      notebook, which is shown on the notebooks list

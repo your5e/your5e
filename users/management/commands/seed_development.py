@@ -95,6 +95,9 @@ class Command(BaseCommand):
             filename="index.md",
             mime_type="text/markdown",
             data=dedent("""\
+                ---
+                notebook: A public notebook for sharing campaign information
+                ---
                 # Campaign Notes
 
                 Welcome to our campaign wiki.
