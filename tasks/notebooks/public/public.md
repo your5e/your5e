@@ -23,3 +23,4 @@ Update the notebook list.
         - /notebooks/[user]/ lists user's own notebooks
 - [X] a notebook with `index.md` can contain frontmatter to explain the
       notebook, which is shown on the notebooks list
+- [X] /notebooks/[user]/ shows only public notebooks to anonymous users

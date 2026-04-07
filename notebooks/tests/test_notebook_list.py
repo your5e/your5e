@@ -76,6 +76,15 @@ class TestNotebookUserListView(NotebookMixin):
         assert html.escape("Wendy's Secret") not in content
         assert response.status_code == HTTPStatus.OK
 
-    def test_anonymous_viewing_other_users_list(self, client):
+    def test_anonymous_viewing_non_public_profile_list(self, client):
         response = client.get("/notebooks/wendy/")
-        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        content = response.content.decode()
+        assert html.escape("Héros & Légendes") not in content
+        assert html.escape("Wendy's Secret") not in content
+        assert response.status_code == HTTPStatus.OK
+
+    def test_anonymous_viewing_public_profile_list(self, client):
+        response = client.get("/notebooks/susan/")
+        content = response.content.decode()
+        assert html.escape("Campaign Notes") in content
+        assert response.status_code == HTTPStatus.OK

@@ -27,6 +27,7 @@ def get_public_owner():
             "name": "your5e",
             "email": "system@localhost",
             "is_active": False,
+            "is_public": True,
         },
     )
     return user

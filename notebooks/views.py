@@ -1052,28 +1052,37 @@ class NotebookUserListView(NotebookDescriptionMixin, TemplateView):
     template_name = "notebooks/user_list.html"
 
     def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return HttpResponse(status=HTTPStatus.UNAUTHORIZED)
+        self.owner = get_object_or_404(User, username=kwargs["username"])
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        owner = get_object_or_404(User, username=self.kwargs["username"])
-        context["owner"] = owner
+        context["owner"] = self.owner
+
+        if self.request.user.is_authenticated:
+            viewer = self.request.user
+        else:
+            viewer = None
 
         users_notebooks = (
-            Notebook.visible_to(self.request.user, owner)
+            Notebook.visible_to(viewer, self.owner)
                 .order_by("name")
                 .select_related("owner")
         )
 
+        if not self.request.user.is_authenticated:
+            # anonymous only gets to see public notebooks
+            users_notebooks = users_notebooks.filter(
+                visibility=Notebook.Visibility.PUBLIC
+            )
+
         users_notebooks_list = list(users_notebooks)
 
-        if self.request.user == owner:
+        if self.request.user == self.owner:
             shared_with_owner = (
                 Notebook.objects
-                    .filter(notebookpermission__user=owner)
-                    .exclude(owner=owner)
+                    .filter(notebookpermission__user=self.owner)
+                    .exclude(owner=self.owner)
                     .order_by("name")
                     .select_related("owner")
             )
