@@ -14,19 +14,23 @@ CONFIG_PATH = Path(__file__).parent / "import_config.toml"
 
 
 def add_source(content: str, source: str) -> str:
-    match = re.match(r"(# .+\n)", content)
+    match = re.search(r"^# (?!#).+", content, re.MULTILINE)
     if not match:
         return content
 
-    heading = match.group(1)
-    rest = content[len(heading):].lstrip("\n")
+    before = content[: match.end()]
+    after = content[match.end() :]
+
+    stripped_after = after.lstrip("\n")
+    original_newlines = len(after) - len(stripped_after)
+    newlines_after_source = "\n" * max(2, original_newlines)
 
     if source.startswith("["):
         formatted_source = source
     else:
         formatted_source = f"_{source}_"
 
-    return f"{heading}\n**Source:** {formatted_source}\n\n{rest}"
+    return f"{before}\n\n**Source:** {formatted_source}{newlines_after_source}{stripped_after}"
 
 
 class Command(BaseCommand):
@@ -90,8 +94,6 @@ class Command(BaseCommand):
             f"[{name}](/notebooks/your5e/{slug})",
         )
 
-        folder = self.get_source_folder(config, folder_arg, section)
-
         owner = get_public_owner()
         notebook, _ = Notebook.objects.get_or_create(
             slug=slug,
@@ -102,46 +104,60 @@ class Command(BaseCommand):
             },
         )
 
-        file_count = 0
-        for file_path in folder.rglob("*"):
-            if file_path.is_dir():
-                continue
-            relative = file_path.relative_to(folder)
-            if any(part.startswith(".") for part in relative.parts):
-                continue
+        if "sources" in config:
+            sources = config["sources"]
+        else:
+            sources = [{"prefix": ""}]
 
-            file_count += 1
-            relative_path = file_path.relative_to(folder)
-            filename = str(relative_path)
-            mime_type = guess_mime_type(filename)
-            data = file_path.read_bytes()
+        total_file_count = 0
+        for source_config in sources:
+            merged_config = {**config, **source_config}
+            prefix = source_config.get("prefix", "")
 
-            if mime_type == "text/markdown":
-                content = data.decode()
-                content = add_source(content, source)
-                data = content.encode()
+            folder = self.get_source_folder(merged_config, folder_arg, section)
 
-            try:
-                page = notebook.get_page(filename=filename)
-            except Page.DoesNotExist:
-                page = Page.objects.create(wiki=notebook)
+            for file_path in folder.rglob("*"):
+                if file_path.is_dir():
+                    continue
+                relative = file_path.relative_to(folder)
+                if any(part.startswith(".") for part in relative.parts):
+                    continue
 
-            previous_version = page.latest_version
-            previous_number = 0
-            if previous_version:
-                previous_number = previous_version.number
+                total_file_count += 1
+                relative_path = file_path.relative_to(folder)
+                if prefix:
+                    filename = str(Path(prefix) / relative_path)
+                else:
+                    filename = str(relative_path)
+                mime_type = guess_mime_type(filename)
+                data = file_path.read_bytes()
 
-            version = page.update(
-                filename=filename,
-                mime_type=mime_type,
-                data=data,
-                created_by=owner,
-            )
+                if mime_type == "text/markdown":
+                    content = data.decode()
+                    content = add_source(content, source)
+                    data = content.encode()
 
-            if version.number > previous_number:
-                self.stdout.write(f"++ {filename}")
+                try:
+                    page = notebook.get_page(filename=filename)
+                except Page.DoesNotExist:
+                    page = Page.objects.create(wiki=notebook)
 
-        if file_count == 0:
+                previous_version = page.latest_version
+                previous_number = 0
+                if previous_version:
+                    previous_number = previous_version.number
+
+                version = page.update(
+                    filename=filename,
+                    mime_type=mime_type,
+                    data=data,
+                    created_by=owner,
+                )
+
+                if version.number > previous_number:
+                    self.stdout.write(f"++ {filename}")
+
+        if total_file_count == 0:
             raise CommandError(f"No files found in '{folder}'")
 
     def get_source_folder(self, config, folder_arg, section):
@@ -169,14 +185,13 @@ class Command(BaseCommand):
 
             return repo_dir / path
 
+        folder = None
         if "folder" in config:
             folder = Path(config["folder"])
-            if not folder.is_dir():
-                raise CommandError(f"Folder '{folder}' does not exist")
-            return folder
-
-        if folder_arg:
+        elif folder_arg:
             folder = Path(folder_arg)
+
+        if folder:
             if not folder.is_dir():
                 raise CommandError(f"Folder '{folder}' does not exist")
             return folder

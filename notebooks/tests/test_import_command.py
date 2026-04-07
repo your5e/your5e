@@ -65,9 +65,7 @@ class TestImportNotebook:
         """).lstrip())
         return config_path
 
-    @pytest.fixture
-    def git_repo(self, tmp_path, request):
-        repo_dir = tmp_path / request.node.name
+    def create_git_repo(self, repo_dir):
         repo_dir.mkdir()
         subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
         subprocess.run(
@@ -83,6 +81,26 @@ class TestImportNotebook:
             capture_output=True,
         )
         return repo_dir
+
+    @pytest.fixture
+    def multiple_source_dirs(self, tmp_path):
+        main_dir = tmp_path / "main"
+        main_dir.mkdir()
+        (main_dir / "overview.md").write_text("# Overview\n\nMain content.")
+
+        backgrounds_dir = tmp_path / "backgrounds"
+        backgrounds_dir.mkdir()
+        (backgrounds_dir / "acolyte.md").write_text("# Acolyte\n\nBackground.")
+
+        feats_dir = tmp_path / "feats"
+        feats_dir.mkdir()
+        (feats_dir / "alert.md").write_text("# Alert\n\nFeat.")
+
+        return {
+            "main": main_dir,
+            "backgrounds": backgrounds_dir,
+            "feats": feats_dir,
+        }
 
     def test_raises_error_when_folder_does_not_exist(self, config_with_name):
         with pytest.raises(CommandError, match="does not exist"):
@@ -414,7 +432,8 @@ class TestImportNotebook:
             capture_output=True,
         )
 
-    def test_imports_from_git_repo(self, git_repo, config_dir):
+    def test_imports_from_git_repo(self, tmp_path, config_dir):
+        git_repo = self.create_git_repo(tmp_path / "git-repo-import")
         content_dir = git_repo / "content"
         content_dir.mkdir()
         (content_dir / "spells.md").write_text("# Spells\n\nFrom git.")
@@ -435,7 +454,8 @@ class TestImportNotebook:
         page = notebook.get_page(path="spells")
         assert b"From git" in page.latest_version.content.data
 
-    def test_pulls_updates_from_git_repo(self, git_repo, config_dir):
+    def test_pulls_updates_from_git_repo(self, tmp_path, config_dir):
+        git_repo = self.create_git_repo(tmp_path / "git-repo-pull")
         (git_repo / "spells.md").write_text("# Spells\n\nVersion 1.")
         self.git_commit(git_repo, "initial")
 
@@ -487,17 +507,148 @@ class TestImportNotebook:
         assert monsters_notebook.get_page(path="goblin") is not None
         assert spells_notebook.get_page(path="fireball") is not None
 
+    def test_imports_from_sources_array_with_empty_prefix(
+        self,
+        source_dir,
+        system_notebook,
+        config_dir,
+    ):
+        (source_dir / "test.md").write_text("# Test\n\nSingle source.")
+
+        config_path = config_dir / "sources_config.toml"
+        config_path.write_text(dedent(f"""
+            [srd]
+            name = "5e SRD"
+
+            [[srd.sources]]
+            path = ""
+            prefix = ""
+            folder = "{source_dir}"
+        """).lstrip())
+
+        call_command("import_notebook", "srd", config=config_path)
+
+        page = system_notebook.get_page(path="test")
+        assert page.latest_version.filename == "test.md"
+        assert b"Single source" in page.latest_version.content.data
+
+    def test_imports_from_multiple_sources_with_prefixes(
+        self,
+        config_dir,
+        multiple_source_dirs,
+    ):
+        owner = get_public_owner()
+        notebook = Notebook.objects.create(
+            name="Character Creation",
+            slug="character-creation",
+            owner=owner,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+
+        config_path = config_dir / "import_config.toml"
+        config_path.write_text(dedent(f"""
+            [character-creation]
+            name = "Character Creation"
+
+            [[character-creation.sources]]
+            folder = "{multiple_source_dirs['main']}"
+            prefix = ""
+
+            [[character-creation.sources]]
+            folder = "{multiple_source_dirs['backgrounds']}"
+            prefix = "Backgrounds"
+
+            [[character-creation.sources]]
+            folder = "{multiple_source_dirs['feats']}"
+            prefix = "Feats"
+        """).lstrip())
+
+        call_command("import_notebook", "character-creation", config=config_path)
+
+        overview = notebook.get_page(path="overview")
+        assert overview.latest_version.filename == "overview.md"
+        assert b"Main content" in overview.latest_version.content.data
+
+        acolyte = notebook.get_page(path="backgrounds/acolyte")
+        assert acolyte.latest_version.filename == "Backgrounds/acolyte.md"
+        assert b"Background" in acolyte.latest_version.content.data
+
+        alert = notebook.get_page(path="feats/alert")
+        assert alert.latest_version.filename == "Feats/alert.md"
+        assert b"Feat" in alert.latest_version.content.data
+
+    def test_sources_array_inherits_repo_from_top_level(self, tmp_path, config_dir):
+        git_repo = self.create_git_repo(tmp_path / "sources-inherit-repo")
+        (git_repo / "content.md").write_text("# Content\n\nFrom repo.")
+        self.git_commit(git_repo, "initial")
+
+        config_path = config_dir / "import_config.toml"
+        config_path.write_text(dedent(f"""
+            [test-repo]
+            name = "Test Repo"
+            repo = "{git_repo}"
+
+            [[test-repo.sources]]
+            path = ""
+            prefix = ""
+        """).lstrip())
+
+        call_command("import_notebook", "test-repo", config=config_path)
+
+        owner = get_public_owner()
+        notebook = Notebook.objects.get(slug="test-repo", owner=owner)
+        page = notebook.get_page(path="content")
+        assert b"From repo" in page.latest_version.content.data
+
+    def test_sources_array_can_override_repo(self, tmp_path, config_dir):
+        repo1 = self.create_git_repo(tmp_path / "multi-repo-1")
+        (repo1 / "file1.md").write_text("# File 1\n\nFrom repo 1.")
+        self.git_commit(repo1, "initial")
+
+        repo2 = self.create_git_repo(tmp_path / "multi-repo-2")
+        (repo2 / "file2.md").write_text("# File 2\n\nFrom repo 2.")
+        self.git_commit(repo2, "initial")
+
+        config_path = config_dir / "import_config.toml"
+        config_path.write_text(dedent(f"""
+            [multi-repo]
+            name = "Multi Repo"
+            repo = "{repo1}"
+
+            [[multi-repo.sources]]
+            path = ""
+            prefix = ""
+
+            [[multi-repo.sources]]
+            repo = "{repo2}"
+            path = ""
+            prefix = "Other"
+        """).lstrip())
+
+        call_command("import_notebook", "multi-repo", config=config_path)
+
+        owner = get_public_owner()
+        notebook = Notebook.objects.get(slug="multi-repo", owner=owner)
+
+        file1 = notebook.get_page(path="file1")
+        assert b"From repo 1" in file1.latest_version.content.data
+
+        file2 = notebook.get_page(path="other/file2")
+        assert file2.latest_version.filename == "Other/file2.md"
+        assert b"From repo 2" in file2.latest_version.content.data
+
 
 class TestAddSource:
     def test_inserts_source_after_h1(self):
-        content = dedent("""
+        content = dedent("""\
             # Adult Brass Dragon
 
             _Huge Dragon (Metallic), Chaotic Good_
 
             - **AC** 18
-        """).lstrip()
-        expected = dedent("""
+
+        """)
+        expected = dedent("""\
             # Adult Brass Dragon
 
             **Source:** _Monster Manual_
@@ -505,48 +656,83 @@ class TestAddSource:
             _Huge Dragon (Metallic), Chaotic Good_
 
             - **AC** 18
-        """).lstrip()
+
+        """)
         result = add_source(content, "Monster Manual")
         assert result == expected
 
     def test_inserts_source_when_no_blank_line_after_heading(self):
-        content = dedent("""
+        content = dedent("""\
+
             # Adult Brass Dragon
             _Huge Dragon (Metallic), Chaotic Good_
-        """).lstrip()
-        expected = dedent("""
+
+        """)
+        expected = dedent("""\
+
             # Adult Brass Dragon
 
             **Source:** _Monster Manual_
 
             _Huge Dragon (Metallic), Chaotic Good_
-        """).lstrip()
+
+        """)
         result = add_source(content, "Monster Manual")
         assert result == expected
 
     def test_inserts_source_when_multiple_blank_lines_after_heading(self):
-        content = dedent("""
+        content = dedent("""\
             # Adult Brass Dragon
 
 
 
             _Huge Dragon (Metallic), Chaotic Good_
-        """).lstrip()
-        expected = dedent("""
+        """)
+        expected = dedent("""\
+            # Adult Brass Dragon
+
+            **Source:** _Monster Manual_
+
+
+
+            _Huge Dragon (Metallic), Chaotic Good_
+        """)
+        result = add_source(content, "Monster Manual")
+        assert result == expected
+
+    def test_inserts_source_after_h1_with_frontmatter(self):
+        content = dedent("""\
+            ---
+            tags: [dragon, metallic]
+            cr: 13
+            ---
+
+            # Adult Brass Dragon
+
+            _Huge Dragon (Metallic), Chaotic Good_
+
+        """)
+        expected = dedent("""\
+            ---
+            tags: [dragon, metallic]
+            cr: 13
+            ---
+
             # Adult Brass Dragon
 
             **Source:** _Monster Manual_
 
             _Huge Dragon (Metallic), Chaotic Good_
-        """).lstrip()
+
+        """)
         result = add_source(content, "Monster Manual")
         assert result == expected
 
     def test_no_source_when_no_h1(self):
-        content = dedent("""
+        content = dedent("""\
             ## Subheading
 
             Some content.
-        """).lstrip()
+        """)
         result = add_source(content, "Monster Manual")
         assert result == content

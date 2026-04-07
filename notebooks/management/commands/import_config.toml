@@ -12,3 +12,56 @@ path = "dnd/521/obsidian_vault/Glossary"
 name = "D&D 5.2 SRD Spells"
 repo = "https://github.com/your5e/5e-srd-markdown"
 path = "dnd/521/obsidian_vault/Spells"
+
+[dnd-52-srd-characters]
+name = "D&D 5.2 SRD Characters"
+repo = "https://github.com/your5e/5e-srd-markdown"
+
+[[dnd-52-srd-characters.sources]]
+path = "dnd/521/obsidian_vault/Character Creation"
+prefix = ""
+
+[[dnd-52-srd-characters.sources]]
+path = "dnd/521/obsidian_vault/Backgrounds"
+prefix = "Backgrounds"
+
+[[dnd-52-srd-characters.sources]]
+path = "dnd/521/obsidian_vault/Classes"
+prefix = "Classes"
+
+[[dnd-52-srd-characters.sources]]
+path = "dnd/521/obsidian_vault/Feats"
+prefix = "Feats"
+
+[[dnd-52-srd-characters.sources]]
+path = "dnd/521/obsidian_vault/Species"
+prefix = "Species"
+
+[dnd-52-srd-magic-items]
+name = "D&D 5.2 SRD Magic Items"
+repo = "https://github.com/your5e/5e-srd-markdown"
+path = "dnd/521/obsidian_vault/Magic Items"
+
+[dnd-52-srd-equipment]
+name = "D&D 5.2 SRD Equipment"
+repo = "https://github.com/your5e/5e-srd-markdown"
+
+[[dnd-52-srd-equipment.sources]]
+path = "dnd/521/obsidian_vault/Equipment"
+prefix = ""
+
+[[dnd-52-srd-equipment.sources]]
+path = "dnd/521/obsidian_vault/Services"
+prefix = "Services"
+
+[dnd-52-srd-dm-rules]
+name = "D&D 5.2 SRD Dungeon Master Rules"
+repo = "https://github.com/your5e/5e-srd-markdown"
+
+[[dnd-52-srd-dm-rules.sources]]
+path = "dnd/521/obsidian_vault/Gameplay"
+prefix = "Gameplay"
+
+[[dnd-52-srd-dm-rules.sources]]
+path = "dnd/521/obsidian_vault/Playing"
+prefix = "Playing"

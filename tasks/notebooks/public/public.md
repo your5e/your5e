@@ -11,6 +11,8 @@ markdown to a known notebook.
 - [X] add import notebook from folder management command
 - [X] add a filter to attribute the source back to the notebook's definitive
       URL
+- [X] import to a notebook subfolder
+
 
 # Listing notebooks @phase
 
