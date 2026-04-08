@@ -98,6 +98,7 @@ class Command(BaseCommand):
                 ---
                 notebook: A public notebook for sharing campaign information
                 ---
+
                 # Campaign Notes
 
                 Welcome to our campaign wiki.
