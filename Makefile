@@ -1,5 +1,5 @@
 .PHONY: clean setup reset dev
-.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration
+.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration test-obsidian-plugin
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 .PHONY: build deploy update-notebooks
@@ -66,6 +66,10 @@ test-sync-integration:
 	shellcheck tests/*.sh
 	awk -f tests/check-line-length.awk tests/*.sh
 	bats tests/*.bats
+
+test-obsidian-plugin:
+	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
+	cd obsidian-plugin && npm run lint && npm test
 
 test: test-django test-sync-integration
 

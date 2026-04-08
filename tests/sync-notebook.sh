@@ -295,7 +295,7 @@ function apply_remote_updates {
     shift 3
 
     # In order to handle rename cycles (file a renamed to b, b renamed c, c renamed a),
-    # apply_remote_updates_impl is a recursive function that can call itself with the
+    # apply_remote_updates is a recursive function that can call itself with the
     # current argument removed. So two things are unintuitive about this function, that
     # it will process its arguments in reverse order (see below), and that it will
     # return success early when there are no arguments to signal a cycle can be broken:

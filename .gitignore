@@ -7,6 +7,8 @@ tests/seed.sql
 
 static/css/*.css*
 
+obsidian-plugin/node_modules/
+
 deploy/terraform/.terraform/
 deploy/terraform/*.tfstate
 deploy/terraform/*.tfstate.*

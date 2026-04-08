@@ -20,6 +20,7 @@ Development is done with docker, spinning up the stack is:
 # make the server for running integration tests available
 (computer)% make server-tests
 (computer)% make test-sync-integration
+(computer)% make test-obsidian-plugin
 ...
 (computer)% make server-tests-down
 
@@ -31,7 +32,7 @@ Test data includes [a map](users/management/commands/random-hexmap-7.png) by
 [Dyson Logos](https://dysonlogos.blog/2025/02/07/the-autumn-lands-hex-map-g/).
 
 The integration tests `tests/*.bats` serve as both tests of the API, and as a
-reference implentation of how I think notebook sync should work. What possible
+reference implementation of how I think notebook sync should work. What possible
 scenarios can happen, and how to handle them. Happily, it also happens to
 implement a full sync bash script if you need to sync a directory.
 
