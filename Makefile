@@ -1,4 +1,8 @@
-.PHONY: build clean css deploy dev lint-django makemigrations migrate reset scry setup shell test test-django test-sync-integration server-tests server-tests-down terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
+.PHONY: clean setup reset dev
+.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration
+.PHONY: css makemigrations migrate scry shell
+.PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
+.PHONY: build deploy update-notebooks
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -86,3 +90,6 @@ build:
 
 deploy:
 	cd deploy/ansible && ansible-playbook app.yml
+
+update-notebooks:
+	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py import_notebook --all'

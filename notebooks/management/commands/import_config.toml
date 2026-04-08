@@ -37,6 +37,10 @@ prefix = "Feats"
 path = "dnd/521/obsidian_vault/Species"
 prefix = "Species"
 
+[[dnd-52-srd-player-characters.sources]]
+path = "dnd/521/obsidian_vault/Playing"
+prefix = "Playing"
+
 [dnd-52-srd-magic-items]
 name = "D&D 5.2 SRD Magic Items"
 repo = "https://github.com/your5e/5e-srd-markdown"
@@ -57,11 +61,5 @@ prefix = "Services"
 [dnd-52-srd-dm-rules]
 name = "D&D 5.2 SRD Dungeon Master Rules"
 repo = "https://github.com/your5e/5e-srd-markdown"
-
-[[dnd-52-srd-dm-rules.sources]]
 path = "dnd/521/obsidian_vault/Gameplay"
-prefix = "Gameplay"
 
-[[dnd-52-srd-dm-rules.sources]]
-path = "dnd/521/obsidian_vault/Playing"
-prefix = "Playing"
