@@ -36,6 +36,16 @@ export async function createTempDir(): Promise<string> {
     return fs.mkdtemp(path.join(tmpdir(), "your5e-test-"));
 }
 
+export async function createTestDir(): Promise<{ testDir: string; outputDir: string }> {
+    const testDir = await fs.mkdtemp(path.join(tmpdir(), "your5e-test-"));
+    const outputDir = path.join(testDir, "output");
+    return { testDir, outputDir };
+}
+
+export async function cleanupTestDir(testDir: string): Promise<void> {
+    await fs.rm(testDir, { recursive: true, force: true });
+}
+
 export async function createFile(
     outputDir: string,
     filePath: string,
@@ -729,6 +739,25 @@ export async function assertNoOutputDir(outputDir: string): Promise<void> {
         .then((s) => s.isDirectory())
         .catch(() => false);
     expect(exists).toBe(false);
+}
+
+export async function assertOutputDirExists(outputDir: string): Promise<void> {
+    const exists = await fs
+        .stat(outputDir)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+    expect(exists).toBe(true);
+}
+
+export async function assertStateIsEmpty(outputDir: string): Promise<void> {
+    const stateFile = path.join(outputDir, ".sync-state");
+    const exists = await fs
+        .stat(stateFile)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(true);
+    const content = await fs.readFile(stateFile, "utf-8");
+    expect(content.trim()).toBe("");
 }
 
 export async function removeFile(outputDir: string, filename: string): Promise<void> {

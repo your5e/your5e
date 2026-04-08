@@ -288,6 +288,15 @@ function assert_no_output_dir {
     [[ ! -d "$output_dir" ]]
 }
 
+function assert_output_dir_exists {
+    [[ -d "$output_dir" ]]
+}
+
+function assert_state_is_empty {
+    [[ -f "$output_dir/.sync-state" ]]
+    [[ ! -s "$output_dir/.sync-state" ]]
+}
+
 function fail_on_multiple_curl_calls {
     # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
     curl() {

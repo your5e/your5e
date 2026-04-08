@@ -29,10 +29,10 @@ import {
     assertTrackedFileDeleted,
     assertTrackedFileIntact,
     assertTrackedFileMatchesFixture,
-    cleanupTempDir,
+    cleanupTestDir,
     clearPagesCache,
     createFile,
-    createTempDir,
+    createTestDir,
     deleteTrackedFile,
     fileTracksDeletedRemote,
     getToken,
@@ -50,6 +50,7 @@ import {
 
 describe("subsequent sync push", () => {
     let token: string;
+    let testDir: string;
     let outputDir: string;
 
     beforeAll(async () => {
@@ -59,12 +60,12 @@ describe("subsequent sync push", () => {
     beforeEach(async () => {
         restoreDatabase();
         clearPagesCache();
-        outputDir = await createTempDir();
+        ({ testDir, outputDir } = await createTestDir());
         await initSyncedDir(outputDir, token);
     });
 
     afterEach(async () => {
-        await cleanupTempDir(outputDir);
+        await cleanupTestDir(testDir);
     });
 
     test("no change", async () => {

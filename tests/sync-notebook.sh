@@ -77,6 +77,9 @@ function sync_notebook {
         $(get_remote_state "" active_uuids)
 
     check_for_stale_files "$output_dir"
+
+    mkdir -p "$output_dir"
+    touch "$state_file"
 }
 
 function detect_untracked_renames {

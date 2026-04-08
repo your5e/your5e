@@ -17,6 +17,8 @@ import {
     API_BASE,
     assertFileDownloaded,
     assertFileInState,
+    cleanupTestDir,
+    createTestDir,
     getToken,
     restoreDatabase,
 } from "./helpers.js";
@@ -26,6 +28,7 @@ const PAGE_SIZE = 50;
 
 describe("sync pagination", () => {
     let token: string;
+    let testDir: string;
     let outputDir: string;
     const pagesToCreate = PAGE_SIZE + 1;
 
@@ -44,11 +47,11 @@ describe("sync pagination", () => {
             );
         }
 
-        outputDir = await fs.mkdtemp(path.join("/tmp", "your5e-test-"));
+        ({ testDir, outputDir } = await createTestDir());
     });
 
     afterAll(async () => {
-        await fs.rm(outputDir, { recursive: true, force: true });
+        await cleanupTestDir(testDir);
     });
 
     test("sync fetches all pages across pagination boundaries", async () => {

@@ -20,17 +20,20 @@ import {
     assertFileNotInState,
     assertFilePushed,
     assertFileUnchanged,
+    assertOutputDirExists,
+    assertStateIsEmpty,
     assertStateMatchesFixture,
-    cleanupTempDir,
+    cleanupTestDir,
     copyFixture,
     createFile,
-    createTempDir,
+    createTestDir,
     getToken,
     restoreDatabase,
 } from "./helpers.js";
 
 describe("first sync push", () => {
     let token: string;
+    let testDir: string;
     let outputDir: string;
 
     beforeAll(async () => {
@@ -39,11 +42,11 @@ describe("first sync push", () => {
 
     beforeEach(async () => {
         restoreDatabase();
-        outputDir = await createTempDir();
+        ({ testDir, outputDir } = await createTestDir());
     });
 
     afterEach(async () => {
-        await cleanupTempDir(outputDir);
+        await cleanupTestDir(testDir);
     });
 
     test("empty directory", async () => {
@@ -72,6 +75,22 @@ describe("first sync push", () => {
         await assertFileNotDownloaded(outputDir, "Old Notes.md");
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(outputDir);
+    });
+
+    test("empty notebook", async () => {
+        const sync = new SyncEngine({
+            baseUrl: API_BASE,
+            token,
+            notebook: "norm/empty-notebook",
+            outputDir,
+            fileSystem: new NodeFileSystem(),
+        });
+
+        const result = await sync.run();
+
+        expect(result.output).toEqual([]);
+        await assertOutputDirExists(outputDir);
+        await assertStateIsEmpty(outputDir);
     });
 
     test("local files", async () => {

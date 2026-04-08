@@ -19,8 +19,8 @@ import {
     assertFileNotDownloaded,
     assertNoOutputDir,
     assertStateMatchesFixture,
-    cleanupTempDir,
-    getTempPath,
+    cleanupTestDir,
+    createTestDir,
     getToken,
     restoreDatabase,
 } from "./helpers.js";
@@ -30,6 +30,7 @@ describe("sync permissions", () => {
     let susanToken: string;
     let hughToken: string;
     let wendyToken: string;
+    let testDir: string;
     let outputDir: string;
 
     beforeAll(async () => {
@@ -41,11 +42,11 @@ describe("sync permissions", () => {
 
     beforeEach(async () => {
         restoreDatabase();
-        outputDir = "test-output/permissions";
+        ({ testDir, outputDir } = await createTestDir());
     });
 
     afterEach(async () => {
-        await cleanupTempDir(outputDir);
+        await cleanupTestDir(testDir);
     });
 
     test("full sync switches to pull when user is viewer", async () => {

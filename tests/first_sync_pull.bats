@@ -45,6 +45,17 @@ setup() {
     assert_success
 }
 
+@test "empty notebook" {
+    run tests/sync-notebook.sh -p norm/empty-notebook "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_output_dir_exists
+    assert_state_is_empty
+    assert_success
+}
+
 @test "local files" {
     create_file "Home.md"
     create_file "index.md"

@@ -72,6 +72,7 @@ export class SyncEngine {
         await this.applyRemoteDeletions(deletedUuids);
         await this.applyRemoteUpdates(activeUuids, new Set<string>());
         await this.checkForStaleFiles();
+        await this.writeSyncState();
 
         return { output: this.output };
     }

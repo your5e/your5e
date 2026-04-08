@@ -48,6 +48,7 @@ Test the initial sync completes correctly.
 | Test | Local | Remote | Content | Filename |
 |------|-------|--------|---------|----------|
 | empty directory | — | file | | |
+| empty notebook | — | — | | |
 | local files | file | file | ❌ | ✔️ |
 | local matches remote | file | file | ✔️ | ✔️ |
 | local file clashes | file | dir | | |

@@ -7,5 +7,5 @@ independently.
 - [X] integrate into CI
 
 - [X] reimplement the subsequent sync tests
-- [ ] reimplement the permissions tests
-- [ ] reimplement the pagination tests
+- [X] reimplement the permissions tests
+- [X] reimplement the pagination tests
