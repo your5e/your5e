@@ -73,9 +73,9 @@ describe("sync permissions", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileNotDownloaded(outputDir, "Old Notes.md");
+        await assertFileNotDownloaded(outputDir, "Old Notes.md", result.state);
         await assertDirMatchesFixture(outputDir);
-        await assertStateMatchesFixture(outputDir);
+        await assertStateMatchesFixture(result.state);
     });
 
     test("pull, non-collaborator, public", async () => {
@@ -102,9 +102,9 @@ describe("sync permissions", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileNotDownloaded(outputDir, "Old Notes.md");
+        await assertFileNotDownloaded(outputDir, "Old Notes.md", result.state);
         await assertDirMatchesFixture(outputDir);
-        await assertStateMatchesFixture(outputDir);
+        await assertStateMatchesFixture(result.state);
     });
 
     test("pull, non-collaborator, private", async () => {

@@ -1,31 +1,27 @@
+import * as path from "node:path";
 import { Notice, Plugin } from "obsidian";
-import { ObsidianFileSystem } from "./obsidian-fs.js";
-import { DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
 import { Your5eSyncSettingTab } from "./settings-tab.js";
+import { DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
+import { NodeFileSystem } from "./sync/node-fs.js";
 import { SyncEngine } from "./sync/sync-engine.js";
-import type { SyncConfig } from "./sync/types.js";
+import type { SyncConfig, SyncStateEntry } from "./sync/types.js";
 
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
+    settingsOpen = false;
 
     async onload() {
         await this.loadSettings();
 
         this.addSettingTab(new Your5eSyncSettingTab(this.app, this));
 
-        this.registerInterval(
-            window.setInterval(() => this.runSync(), 60000),
-        );
+        this.registerInterval(window.setInterval(() => this.runSync(), 60000));
 
         new Notice("Your5e Sync plugin loaded");
     }
 
     async loadSettings() {
-        this.settings = Object.assign(
-            {},
-            DEFAULT_SETTINGS,
-            await this.loadData(),
-        );
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
 
     async saveSettings() {
@@ -33,28 +29,31 @@ export default class Your5eSyncPlugin extends Plugin {
     }
 
     async runSync() {
+        if (this.settingsOpen) {
+            return;
+        }
+
         for (const folderMapping of this.settings.folders) {
             const baseUrl = folderMapping.baseUrl || this.settings.baseUrl;
             const token = folderMapping.token || this.settings.token;
 
             if (!baseUrl || !token) {
-                console.warn(
-                    `Skipping folder "${folderMapping.folder}": missing baseUrl or token`,
-                );
                 continue;
             }
 
-            const fileSystem = new ObsidianFileSystem(
-                this.app.vault,
-                folderMapping.folder,
-            );
+            // biome-ignore lint/suspicious/noExplicitAny: basePath exists on FileSystemAdapter but isn't in public types
+            const vaultPath = (this.app.vault.adapter as any).basePath as string;
+            const outputDir = path.join(vaultPath, folderMapping.folder);
+
+            const initialState = this.loadFolderState(folderMapping.folder);
 
             const config: SyncConfig = {
                 baseUrl,
                 token,
                 notebook: folderMapping.notebook,
-                outputDir: "",
-                fileSystem,
+                outputDir,
+                fileSystem: new NodeFileSystem(),
+                initialState,
             };
 
             try {
@@ -62,10 +61,11 @@ export default class Your5eSyncPlugin extends Plugin {
                 const result = await engine.run();
 
                 for (const line of result.output) {
-                    console.log(
-                        `[${folderMapping.folder}] ${line}`,
-                    );
+                    console.log(`[${folderMapping.folder}] ${line}`);
                 }
+
+                this.saveFolderState(folderMapping.folder, result.state);
+                await this.saveSettings();
             } catch (error) {
                 console.error(
                     `Sync failed for folder "${folderMapping.folder}":`,
@@ -76,5 +76,34 @@ export default class Your5eSyncPlugin extends Plugin {
                 );
             }
         }
+    }
+
+    private loadFolderState(folder: string): Map<string, SyncStateEntry> {
+        if (!this.settings.syncStates) {
+            this.settings.syncStates = {};
+        }
+
+        const stateData = this.settings.syncStates[folder];
+        if (!stateData) {
+            return new Map();
+        }
+
+        const state = new Map<string, SyncStateEntry>();
+        for (const [uuid, entry] of Object.entries(stateData)) {
+            state.set(uuid, entry);
+        }
+        return state;
+    }
+
+    private saveFolderState(folder: string, state: Map<string, SyncStateEntry>): void {
+        if (!this.settings.syncStates) {
+            this.settings.syncStates = {};
+        }
+
+        const stateData: { [uuid: string]: SyncStateEntry } = {};
+        for (const [uuid, entry] of state) {
+            stateData[uuid] = entry;
+        }
+        this.settings.syncStates[folder] = stateData;
     }
 }

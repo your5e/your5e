@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { type App, PluginSettingTab, Setting } from "obsidian";
 import type Your5eSyncPlugin from "./main.js";
 import type { FolderMapping } from "./settings.js";
 
@@ -11,6 +11,8 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
     }
 
     display(): void {
+        this.plugin.settingsOpen = true;
+
         const { containerEl } = this;
         containerEl.empty();
 
@@ -59,6 +61,10 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                 this.display();
             }),
         );
+    }
+
+    hide(): void {
+        this.plugin.settingsOpen = false;
     }
 
     displayFolderMapping(

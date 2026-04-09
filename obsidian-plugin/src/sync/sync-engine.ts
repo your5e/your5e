@@ -1,5 +1,6 @@
+import * as crypto from "node:crypto";
 import * as path from "node:path";
-import type { FileSystem, SyncConfig, SyncResult } from "./types.js";
+import type { FileSystem, SyncConfig, SyncResult, SyncStateEntry } from "./types.js";
 
 interface RemotePage {
     uuid: string;
@@ -9,14 +10,6 @@ interface RemotePage {
     deleted_at: string | null;
 }
 
-interface SyncStateEntry {
-    uuid: string;
-    serverFilename: string;
-    localFilename: string;
-    serverHash: string;
-    localHash: string;
-}
-
 const DEFAULT_TIMEOUT_MS = 30000;
 
 export class SyncEngine {
@@ -24,27 +17,29 @@ export class SyncEngine {
     private remotePages: Map<string, RemotePage> = new Map();
     private syncState: Map<string, SyncStateEntry> = new Map();
     private fs: FileSystem;
-    private stateFile: string;
     private timeoutMs: number;
 
     constructor(private config: SyncConfig) {
         this.fs = config.fileSystem;
-        this.stateFile = path.join(config.outputDir, ".sync-state");
         this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     }
 
     async run(): Promise<SyncResult> {
         this.output = [];
         this.remotePages = new Map();
-        this.syncState = new Map();
+        this.syncState = this.config.initialState ?? new Map();
 
         if (!this.config.token) {
             this.output.push("sync: ERROR API token missing");
             throw new Error("API token missing");
         }
 
-        await this.loadSyncState();
         const editable = await this.fetchRemoteState();
+
+        if (!(await this.fs.isDirectory(this.config.outputDir))) {
+            await this.fs.mkdir(this.config.outputDir);
+        }
+
         await this.detectUntrackedRenames();
 
         let pullOnly = this.config.pullOnly;
@@ -72,35 +67,8 @@ export class SyncEngine {
         await this.applyRemoteDeletions(deletedUuids);
         await this.applyRemoteUpdates(activeUuids, new Set<string>());
         await this.checkForStaleFiles();
-        await this.writeSyncState();
 
-        return { output: this.output };
-    }
-
-    private async loadSyncState(): Promise<void> {
-        try {
-            const content = await this.fs.read(this.stateFile);
-            const text = content.toString("utf-8").trim();
-            if (!text) {
-                return;
-            }
-
-            for (const line of text.split("\n")) {
-                if (!line) {
-                    continue;
-                }
-                const [uuid, serverFn, localFn, sHash, lHash] = line.split("\t");
-                this.syncState.set(uuid, {
-                    uuid,
-                    serverFilename: serverFn,
-                    localFilename: localFn,
-                    serverHash: sHash,
-                    localHash: lHash,
-                });
-            }
-        } catch {
-            // No existing state file
-        }
+        return { output: this.output, state: this.syncState };
     }
 
     private async detectUntrackedRenames(): Promise<void> {
@@ -118,7 +86,7 @@ export class SyncEngine {
             this.output.push(
                 `info: detected rename "${entry.localFilename}" to "${newFilename}"`,
             );
-            await this.updateSyncState(uuid, "", newFilename);
+            this.updateSyncState(uuid, "", newFilename);
         }
     }
 
@@ -212,7 +180,7 @@ export class SyncEngine {
                     );
                     staleUuids.push(uuid);
                 } else {
-                    await this.deleteSyncState(uuid);
+                    this.deleteSyncState(uuid);
                 }
                 continue;
             }
@@ -266,7 +234,7 @@ export class SyncEngine {
         // Clean up stale UUIDs after the untracked files loop, otherwise the
         // file would be picked up as "new" and tried again
         for (const uuid of staleUuids) {
-            await this.deleteSyncState(uuid);
+            this.deleteSyncState(uuid);
         }
     }
 
@@ -276,7 +244,7 @@ export class SyncEngine {
         remote: RemotePage | undefined,
     ): Promise<void> {
         if (!remote || remote.deleted_at !== null) {
-            await this.deleteSyncState(uuid);
+            this.deleteSyncState(uuid);
             return;
         }
 
@@ -325,7 +293,7 @@ export class SyncEngine {
             } else {
                 this.output.push(`push: deleted "${entry.localFilename}"`);
             }
-            await this.deleteSyncState(uuid);
+            this.deleteSyncState(uuid);
             this.remotePages.delete(uuid);
         }
     }
@@ -384,7 +352,7 @@ export class SyncEngine {
         entry: SyncStateEntry,
         remote: RemotePage | undefined,
         remoteEdited: boolean,
-        remoteDeleted: boolean,
+        _remoteDeleted: boolean,
     ): Promise<void> {
         const localPath = path.join(this.config.outputDir, entry.localFilename);
         const content = await this.fs.read(localPath);
@@ -471,7 +439,7 @@ export class SyncEngine {
                 } else {
                     this.output.push(`pull: deleted "${entry.localFilename}"`);
                 }
-                await this.deleteSyncState(uuid);
+                this.deleteSyncState(uuid);
             }
         }
     }
@@ -538,7 +506,7 @@ export class SyncEngine {
             if (await this.fs.isFile(destPath)) {
                 await this.fs.delete(destPath);
             }
-            await this.deleteSyncState(cachedUuid);
+            this.deleteSyncState(cachedUuid);
         }
 
         if (await this.fileBlockedByDirectory(destPath, uuid, destFile)) {
@@ -556,7 +524,7 @@ export class SyncEngine {
             );
         } else if ((await this.fileMatchesHash(destPath, hash)) && !entry) {
             this.output.push(`pull: tracking "${destFile}" (v${version})`);
-            await this.updateSyncState(uuid, destFile, destFile, hash, hash);
+            this.updateSyncState(uuid, destFile, destFile, hash, hash);
         } else if (entry && this.isBeingRenamed(uuid, destFile)) {
             // To break a rename cycle, the last in the chain is put in a
             // temporary location.
@@ -602,13 +570,7 @@ export class SyncEngine {
                     this.output.push(`pull: renamed "${srcFile}" to "${destFile}"`);
 
                     if (await this.fileMatchesHash(destPath, hash)) {
-                        await this.updateSyncState(
-                            uuid,
-                            destFile,
-                            destFile,
-                            hash,
-                            hash,
-                        );
+                        this.updateSyncState(uuid, destFile, destFile, hash, hash);
                     } else {
                         await this.fetchRemoteFile(uuid, destFile, hash);
                         this.output.push(`pull: "${destFile}" (v${version})`);
@@ -639,7 +601,7 @@ export class SyncEngine {
                 this.output.push(`pull: renamed "${srcFile}" to "${destFile}"`);
 
                 if (await this.fileMatchesHash(destPath, hash)) {
-                    await this.updateSyncState(uuid, destFile, destFile, hash, hash);
+                    this.updateSyncState(uuid, destFile, destFile, hash, hash);
                 } else {
                     await this.fetchRemoteFile(uuid, destFile, hash);
                     this.output.push(`pull: "${destFile}" (v${version})`);
@@ -684,7 +646,7 @@ export class SyncEngine {
             this.output.push(`pull: "${destFile}" to "${srcFile}" (v${version})`);
         } else {
             if (await this.fileMatchesHash(destPath, hash)) {
-                await this.updateSyncState(uuid, destFile, destFile, hash, hash);
+                this.updateSyncState(uuid, destFile, destFile, hash, hash);
             } else {
                 await this.fetchRemoteFile(uuid, destFile, hash);
                 this.output.push(`pull: "${destFile}" (v${version})`);
@@ -830,7 +792,7 @@ export class SyncEngine {
         const destPath = path.join(this.config.outputDir, destFile);
         await this.fs.write(destPath, content);
 
-        await this.updateSyncState(uuid, destFile, destFile, hash, hash);
+        this.updateSyncState(uuid, destFile, destFile, hash, hash);
     }
 
     private async checkForStaleFiles(): Promise<void> {
@@ -845,7 +807,7 @@ export class SyncEngine {
 
             if (!localExists) {
                 // Already deleted locally - clean up state
-                await this.deleteSyncState(uuid);
+                this.deleteSyncState(uuid);
                 continue;
             }
 
@@ -873,7 +835,7 @@ export class SyncEngine {
             // Delete stale file
             await this.fs.delete(localPath);
             this.output.push(`pull: deleted "${entry.localFilename}"`);
-            await this.deleteSyncState(uuid);
+            this.deleteSyncState(uuid);
         }
     }
 
@@ -890,7 +852,7 @@ export class SyncEngine {
     }
 
     private fileIsTrackedByLocalFilename(file: string): boolean {
-        for (const [uuid, entry] of this.syncState) {
+        for (const [_uuid, entry] of this.syncState) {
             if (entry.localFilename === file) {
                 return true;
             }
@@ -945,7 +907,7 @@ export class SyncEngine {
         if (response.status === 201) {
             const data = await response.json();
             const hash = await this.fs.hash(filePath);
-            await this.updateSyncState(data.uuid, file, file, data.content_hash, hash);
+            this.updateSyncState(data.uuid, file, file, data.content_hash, hash);
             // Add to remotePages so pull phase sees it
             this.remotePages.set(data.uuid, {
                 uuid: data.uuid,
@@ -1011,29 +973,13 @@ export class SyncEngine {
         return !(await this.fs.isFile(filePath));
     }
 
-    private async writeSyncState(): Promise<void> {
-        const lines: string[] = [];
-        for (const entry of this.syncState.values()) {
-            lines.push(
-                [
-                    entry.uuid,
-                    entry.serverFilename,
-                    entry.localFilename,
-                    entry.serverHash,
-                    entry.localHash,
-                ].join("\t"),
-            );
-        }
-        await this.fs.write(this.stateFile, Buffer.from(lines.join("\n")));
-    }
-
-    private async updateSyncState(
+    private updateSyncState(
         uuid: string,
         serverFn?: string,
         localFn?: string,
         serverHash?: string,
         localHash?: string,
-    ): Promise<void> {
+    ): void {
         const entry = this.syncState.get(uuid);
         if (entry) {
             if (serverFn !== undefined && serverFn !== "") {
@@ -1057,11 +1003,9 @@ export class SyncEngine {
                 localHash: localHash || "",
             });
         }
-        await this.writeSyncState();
     }
 
-    private async deleteSyncState(uuid: string): Promise<void> {
+    private deleteSyncState(uuid: string): void {
         this.syncState.delete(uuid);
-        await this.writeSyncState();
     }
 }

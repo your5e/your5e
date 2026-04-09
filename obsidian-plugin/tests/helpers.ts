@@ -4,10 +4,10 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { expect } from "vitest";
+import type { SyncStateEntry } from "../src/sync/types.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURES_DIR = path.join(PROJECT_ROOT, "tests/fixtures");
-const TOKEN_FILE = path.join(PROJECT_ROOT, "tests/norm.token");
 
 export const API_BASE = "http://localhost:5844";
 
@@ -32,11 +32,10 @@ SQL
     );
 }
 
-export async function createTempDir(): Promise<string> {
-    return fs.mkdtemp(path.join(tmpdir(), "your5e-test-"));
-}
-
-export async function createTestDir(): Promise<{ testDir: string; outputDir: string }> {
+export async function createTestDir(): Promise<{
+    testDir: string;
+    outputDir: string;
+}> {
     const testDir = await fs.mkdtemp(path.join(tmpdir(), "your5e-test-"));
     const outputDir = path.join(testDir, "output");
     return { testDir, outputDir };
@@ -72,41 +71,22 @@ async function hashFile(filePath: string): Promise<string> {
     return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-async function readSyncState(
-    outputDir: string,
-): Promise<Map<string, { serverFn: string; localFn: string; hash: string }>> {
-    const stateFile = path.join(outputDir, ".sync-state");
-    const state = new Map();
-    try {
-        const content = await fs.readFile(stateFile, "utf-8");
-        for (const line of content.trim().split("\n")) {
-            if (!line) {
-                continue;
-            }
-            const [uuid, serverFn, localFn, serverHash] = line.split("\t");
-            state.set(uuid, { serverFn, localFn, hash: serverHash });
-        }
-    } catch {
-        // No state file
-    }
-    return state;
-}
-
 function findByLocalFilename(
-    state: Map<string, { serverFn: string; localFn: string; hash: string }>,
+    state: Map<string, SyncStateEntry>,
     filename: string,
-): { uuid: string; serverFn: string; localFn: string; hash: string } | null {
-    for (const [uuid, entry] of state) {
-        if (entry.localFn === filename) {
-            return { uuid, ...entry };
+): SyncStateEntry | undefined {
+    for (const entry of state.values()) {
+        if (entry.localFilename === filename) {
+            return entry;
         }
     }
-    return null;
+    return undefined;
 }
 
 export async function assertFileDownloaded(
     outputDir: string,
     filename: string,
+    state: Map<string, SyncStateEntry>,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
     const fixturePath = path.join(FIXTURES_DIR, "campaign-notes", filename);
@@ -115,14 +95,14 @@ export async function assertFileDownloaded(
     const expected = await fs.readFile(fixturePath);
     expect(actual.equals(expected)).toBe(true);
 
-    const state = await readSyncState(outputDir);
     const entry = findByLocalFilename(state, filename);
-    expect(entry).not.toBeNull();
+    expect(entry).toBeDefined();
 }
 
 export async function assertFileNotDownloaded(
     outputDir: string,
     filename: string,
+    state: Map<string, SyncStateEntry>,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
     const isFile = await fs
@@ -131,22 +111,21 @@ export async function assertFileNotDownloaded(
         .catch(() => false);
     expect(isFile).toBe(false);
 
-    const state = await readSyncState(outputDir);
     const entry = findByLocalFilename(state, filename);
-    expect(entry).toBeNull();
+    expect(entry).toBeUndefined();
 }
 
 export async function assertFileIgnored(
     outputDir: string,
     filename: string,
+    state: Map<string, SyncStateEntry>,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
     const content = await fs.readFile(filePath, "utf-8");
     expect(content).toBe("local content\n");
 
-    const state = await readSyncState(outputDir);
     const entry = findByLocalFilename(state, filename);
-    expect(entry).toBeNull();
+    expect(entry).toBeUndefined();
 }
 
 export async function assertFileUnchanged(
@@ -158,13 +137,20 @@ export async function assertFileUnchanged(
     expect(content).toBe("local content\n");
 }
 
-export async function assertFileNotInState(
-    outputDir: string,
+export function assertFileNotInState(
     filename: string,
-): Promise<void> {
-    const state = await readSyncState(outputDir);
+    state: Map<string, SyncStateEntry>,
+): void {
     const entry = findByLocalFilename(state, filename);
-    expect(entry).toBeNull();
+    expect(entry).toBeUndefined();
+}
+
+export function assertFileInState(
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): void {
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeDefined();
 }
 
 export async function assertFileMatchesFixture(
@@ -187,9 +173,6 @@ async function walkDir(
 ): Promise<void> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-        if (entry.name === ".sync-state") {
-            continue;
-        }
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
             await walkDir(base, fullPath, onFile);
@@ -221,7 +204,9 @@ export async function assertDirMatchesFixture(outputDir: string): Promise<void> 
     }
 }
 
-export async function assertStateMatchesFixture(outputDir: string): Promise<void> {
+export async function assertStateMatchesFixture(
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
     const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
 
     const expected = new Map<string, string>();
@@ -230,10 +215,9 @@ export async function assertStateMatchesFixture(outputDir: string): Promise<void
         expected.set(relativePath, hash);
     });
 
-    const state = await readSyncState(outputDir);
     const actual = new Map<string, string>();
-    for (const [, entry] of state) {
-        actual.set(entry.localFn, entry.hash);
+    for (const entry of state.values()) {
+        actual.set(entry.localFilename, entry.serverHash);
     }
 
     expect(actual).toEqual(expected);
@@ -242,10 +226,10 @@ export async function assertStateMatchesFixture(outputDir: string): Promise<void
 export async function assertFilePushed(
     outputDir: string,
     filename: string,
+    state: Map<string, SyncStateEntry>,
     token: string,
     expectedContentType?: string,
 ): Promise<void> {
-    const state = await readSyncState(outputDir);
     const entry = findByLocalFilename(state, filename);
     if (!entry) {
         throw new Error(`File ${filename} not found in sync state`);
@@ -253,7 +237,7 @@ export async function assertFilePushed(
 
     const filePath = path.join(outputDir, filename);
     const actualHash = await hashFile(filePath);
-    expect(actualHash).toBe(entry.hash);
+    expect(actualHash).toBe(entry.serverHash);
 
     const response = await fetch(
         `${API_BASE}/api/notebooks/norm/campaign-notes/${entry.uuid}`,
@@ -270,23 +254,44 @@ export async function assertFilePushed(
     }
 }
 
-export async function cleanupTempDir(dir: string): Promise<void> {
-    await fs.rm(dir, { recursive: true, force: true });
+export async function assertOutputDirExists(outputDir: string): Promise<void> {
+    const exists = await fs
+        .stat(outputDir)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+    expect(exists).toBe(true);
 }
+
+export function assertStateIsEmpty(state: Map<string, SyncStateEntry>): void {
+    expect(state.size).toBe(0);
+}
+
+export async function assertNoOutputDir(outputDir: string): Promise<void> {
+    const exists = await fs
+        .stat(outputDir)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(false);
+}
+
+export function assertNotInState(
+    state: Map<string, SyncStateEntry>,
+    uuidPrefix: string,
+): void {
+    for (const uuid of state.keys()) {
+        if (uuid.startsWith(uuidPrefix)) {
+            throw new Error(`Found entry with UUID starting with ${uuidPrefix}`);
+        }
+    }
+}
+
+// State building functions
 
 interface PageData {
     filename: string;
     uuid: string;
     contentHash: string;
     deletedAt: string | null;
-}
-
-interface StateEntry {
-    uuid: string;
-    serverFn: string;
-    localFn: string;
-    sHash: string;
-    lHash: string;
 }
 
 let cachedPages: PageData[] | null = null;
@@ -321,14 +326,6 @@ export function clearPagesCache(): void {
     cachedPages = null;
 }
 
-function uuidFor(pages: PageData[], filename: string): string {
-    const page = pages.find((p) => p.filename === filename);
-    if (!page) {
-        throw new Error(`No page found for ${filename}`);
-    }
-    return page.uuid;
-}
-
 async function copyDir(src: string, dest: string): Promise<void> {
     await fs.mkdir(dest, { recursive: true });
     const entries = await fs.readdir(src, { withFileTypes: true });
@@ -343,50 +340,30 @@ async function copyDir(src: string, dest: string): Promise<void> {
     }
 }
 
-export async function initSyncedDir(outputDir: string, token: string): Promise<void> {
+export async function initSyncedDir(
+    outputDir: string,
+    token: string,
+): Promise<Map<string, SyncStateEntry>> {
     const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
     await copyDir(fixtureDir, outputDir);
 
     const pages = await fetchPagesData(token);
-    const lines: string[] = [];
+    const state = new Map<string, SyncStateEntry>();
+
     for (const page of pages) {
         if (page.deletedAt) {
             continue;
         }
-        lines.push(
-            [
-                page.uuid,
-                page.filename,
-                page.filename,
-                page.contentHash,
-                page.contentHash,
-            ].join("\t"),
-        );
-    }
-    await fs.writeFile(path.join(outputDir, ".sync-state"), lines.join("\n"));
-}
-
-async function readSyncStateRaw(outputDir: string): Promise<StateEntry[]> {
-    const stateFile = path.join(outputDir, ".sync-state");
-    const content = await fs.readFile(stateFile, "utf-8");
-    return content
-        .trim()
-        .split("\n")
-        .filter((line) => line)
-        .map((line) => {
-            const [uuid, serverFn, localFn, sHash, lHash] = line.split("\t");
-            return { uuid, serverFn, localFn, sHash, lHash };
+        state.set(page.uuid, {
+            uuid: page.uuid,
+            serverFilename: page.filename,
+            localFilename: page.filename,
+            serverHash: page.contentHash,
+            localHash: page.contentHash,
         });
-}
+    }
 
-async function writeSyncStateRaw(
-    outputDir: string,
-    entries: StateEntry[],
-): Promise<void> {
-    const lines = entries.map((e) =>
-        [e.uuid, e.serverFn, e.localFn, e.sHash, e.lHash].join("\t"),
-    );
-    await fs.writeFile(path.join(outputDir, ".sync-state"), lines.join("\n"));
+    return state;
 }
 
 async function removeEmptyParents(dir: string, stopAt: string): Promise<void> {
@@ -406,6 +383,7 @@ async function removeEmptyParents(dir: string, stopAt: string): Promise<void> {
 
 export async function setOlderFilename(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     from: string,
     to: string,
 ): Promise<void> {
@@ -415,18 +393,17 @@ export async function setOlderFilename(
     await fs.rename(fromPath, toPath);
     await removeEmptyParents(path.dirname(fromPath), outputDir);
 
-    const entries = await readSyncStateRaw(outputDir);
-    for (const entry of entries) {
-        if (entry.localFn === from) {
-            entry.serverFn = to;
-            entry.localFn = to;
+    for (const entry of state.values()) {
+        if (entry.localFilename === from) {
+            entry.serverFilename = to;
+            entry.localFilename = to;
         }
     }
-    await writeSyncStateRaw(outputDir, entries);
 }
 
 export async function setOlderContent(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
     const content = "old content";
@@ -434,14 +411,12 @@ export async function setOlderContent(
 
     await fs.writeFile(path.join(outputDir, filename), content);
 
-    const entries = await readSyncStateRaw(outputDir);
-    for (const entry of entries) {
-        if (entry.localFn === filename) {
-            entry.sHash = hash;
-            entry.lHash = hash;
+    for (const entry of state.values()) {
+        if (entry.localFilename === filename) {
+            entry.serverHash = hash;
+            entry.localHash = hash;
         }
     }
-    await writeSyncStateRaw(outputDir, entries);
 }
 
 export async function modifyFile(outputDir: string, filename: string): Promise<void> {
@@ -450,6 +425,7 @@ export async function modifyFile(outputDir: string, filename: string): Promise<v
 
 export async function renameLocalFile(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     from: string,
     to: string,
 ): Promise<void> {
@@ -459,13 +435,11 @@ export async function renameLocalFile(
     await fs.rename(fromPath, toPath);
     await removeEmptyParents(path.dirname(fromPath), outputDir);
 
-    const entries = await readSyncStateRaw(outputDir);
-    for (const entry of entries) {
-        if (entry.localFn === from) {
-            entry.localFn = to;
+    for (const entry of state.values()) {
+        if (entry.localFilename === from) {
+            entry.localFilename = to;
         }
     }
-    await writeSyncStateRaw(outputDir, entries);
 }
 
 export async function renameLocalFileUntracked(
@@ -487,21 +461,32 @@ export async function deleteTrackedFile(
     await fs.unlink(path.join(outputDir, filename));
 }
 
-export async function untrackFile(outputDir: string, filename: string): Promise<void> {
-    const entries = await readSyncStateRaw(outputDir);
-    const filtered = entries.filter((e) => e.localFn !== filename);
-    await writeSyncStateRaw(outputDir, filtered);
+export function untrackFile(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): void {
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            state.delete(uuid);
+            return;
+        }
+    }
 }
 
 export async function untrackAndRemoveFile(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
-    await untrackFile(outputDir, filename);
+    untrackFile(state, filename);
     await fs.rm(path.join(outputDir, filename), { recursive: true, force: true });
 }
 
-export async function addStaleFile(outputDir: string, filename: string): Promise<void> {
+export async function addStaleFile(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
     const content = "local content";
     const hash = crypto.createHash("sha256").update(content).digest("hex");
     const uuid = `stale-uuid-${Math.random().toString(36).slice(2)}`;
@@ -511,61 +496,61 @@ export async function addStaleFile(outputDir: string, filename: string): Promise
     });
     await fs.writeFile(path.join(outputDir, filename), content);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry: StateEntry = {
+    state.set(uuid, {
         uuid,
-        serverFn: filename,
-        localFn: filename,
-        sHash: hash,
-        lHash: hash,
-    };
-    entries.push(entry);
-    await writeSyncStateRaw(outputDir, entries);
+        serverFilename: filename,
+        localFilename: filename,
+        serverHash: hash,
+        localHash: hash,
+    });
 }
 
-export async function markFileStale(
-    outputDir: string,
+export function markFileStale(
+    state: Map<string, SyncStateEntry>,
     filename: string,
-): Promise<void> {
+): void {
     const newUuid = `stale-uuid-${Math.random().toString(36).slice(2)}`;
-    const entries = await readSyncStateRaw(outputDir);
-    for (const entry of entries) {
-        if (entry.localFn === filename) {
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            state.delete(uuid);
             entry.uuid = newUuid;
+            state.set(newUuid, entry);
+            return;
         }
     }
-    await writeSyncStateRaw(outputDir, entries);
 }
 
 export async function fileTracksDeletedRemote(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
     token: string,
 ): Promise<void> {
     const content = "# Old Notes\n\nThese notes are no longer needed.\n";
     const hash = crypto.createHash("sha256").update(content).digest("hex");
     const pages = await fetchPagesData(token);
-    const uuid = uuidFor(pages, "Old Notes.md");
+    const page = pages.find((p) => p.filename === "Old Notes.md");
+    if (!page) {
+        throw new Error("Old Notes.md not found");
+    }
 
     await fs.mkdir(path.dirname(path.join(outputDir, filename)), {
         recursive: true,
     });
     await fs.writeFile(path.join(outputDir, filename), content);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry: StateEntry = {
-        uuid,
-        serverFn: filename,
-        localFn: filename,
-        sHash: hash,
-        lHash: hash,
-    };
-    entries.push(entry);
-    await writeSyncStateRaw(outputDir, entries);
+    state.set(page.uuid, {
+        uuid: page.uuid,
+        serverFilename: filename,
+        localFilename: filename,
+        serverHash: hash,
+        localHash: hash,
+    });
 }
 
 export async function assertTrackedFileIntact(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
@@ -575,16 +560,16 @@ export async function assertTrackedFileIntact(
         .catch(() => false);
     expect(exists).toBe(true);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === filename);
+    const entry = findByLocalFilename(state, filename);
     expect(entry).toBeDefined();
 
     const actualHash = await hashFile(filePath);
-    expect(actualHash).toBe(entry?.sHash);
+    expect(actualHash).toBe(entry?.serverHash);
 }
 
 export async function assertTrackedFileDeleted(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
@@ -594,13 +579,13 @@ export async function assertTrackedFileDeleted(
         .catch(() => false);
     expect(exists).toBe(false);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === filename);
+    const entry = findByLocalFilename(state, filename);
     expect(entry).toBeUndefined();
 }
 
 export async function assertTrackedFileNotRestored(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
     const filePath = path.join(outputDir, filename);
@@ -610,8 +595,7 @@ export async function assertTrackedFileNotRestored(
         .catch(() => false);
     expect(exists).toBe(false);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === filename);
+    const entry = findByLocalFilename(state, filename);
     expect(entry).toBeDefined();
 }
 
@@ -627,26 +611,9 @@ export async function assertEmptyDirRemoved(
     expect(exists).toBe(false);
 }
 
-export async function assertFileInState(
-    outputDir: string,
-    filename: string,
-): Promise<void> {
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === filename);
-    expect(entry).toBeDefined();
-}
-
-export async function assertNotInState(
-    outputDir: string,
-    pattern: string,
-): Promise<void> {
-    const stateFile = path.join(outputDir, ".sync-state");
-    const content = await fs.readFile(stateFile, "utf-8");
-    expect(content).not.toContain(pattern);
-}
-
 export async function assertTrackedFileMatchesFixture(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     fixture: string,
     filename?: string,
 ): Promise<void> {
@@ -658,8 +625,7 @@ export async function assertTrackedFileMatchesFixture(
     const expected = await fs.readFile(fixturePath);
     expect(actual.equals(expected)).toBe(true);
 
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === localFile);
+    const entry = findByLocalFilename(state, localFile);
     expect(entry).toBeDefined();
 }
 
@@ -680,11 +646,11 @@ export async function assertServerFileDeleted(
 
 export async function assertFileDeletedOnServer(
     outputDir: string,
+    state: Map<string, SyncStateEntry>,
     filename: string,
     token: string,
 ): Promise<void> {
-    const entries = await readSyncStateRaw(outputDir);
-    const entry = entries.find((e) => e.localFn === filename);
+    const entry = findByLocalFilename(state, filename);
     expect(entry).toBeUndefined();
 
     const filePath = path.join(outputDir, filename);
@@ -731,33 +697,6 @@ export function downgradeToViewer(
   `,
         { cwd: PROJECT_ROOT, stdio: "pipe" },
     );
-}
-
-export async function assertNoOutputDir(outputDir: string): Promise<void> {
-    const exists = await fs
-        .stat(outputDir)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
-    expect(exists).toBe(false);
-}
-
-export async function assertOutputDirExists(outputDir: string): Promise<void> {
-    const exists = await fs
-        .stat(outputDir)
-        .then((s) => s.isDirectory())
-        .catch(() => false);
-    expect(exists).toBe(true);
-}
-
-export async function assertStateIsEmpty(outputDir: string): Promise<void> {
-    const stateFile = path.join(outputDir, ".sync-state");
-    const exists = await fs
-        .stat(stateFile)
-        .then(() => true)
-        .catch(() => false);
-    expect(exists).toBe(true);
-    const content = await fs.readFile(stateFile, "utf-8");
-    expect(content.trim()).toBe("");
 }
 
 export async function removeFile(outputDir: string, filename: string): Promise<void> {

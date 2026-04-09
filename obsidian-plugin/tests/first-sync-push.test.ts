@@ -2,7 +2,7 @@
  * First sync push tests
  *
  * Tests for syncing to a directory that has never been synced before
- * (no .sync-state file exists), with push enabled.
+ * (no sync state exists), with push enabled.
  *
  * Ported from tests/first_sync_push.bats
  */
@@ -72,9 +72,9 @@ describe("first sync push", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileNotDownloaded(outputDir, "Old Notes.md");
+        await assertFileNotDownloaded(outputDir, "Old Notes.md", result.state);
         await assertDirMatchesFixture(outputDir);
-        await assertStateMatchesFixture(outputDir);
+        await assertStateMatchesFixture(result.state);
     });
 
     test("empty notebook", async () => {
@@ -90,7 +90,7 @@ describe("first sync push", () => {
 
         expect(result.output).toEqual([]);
         await assertOutputDirExists(outputDir);
-        await assertStateIsEmpty(outputDir);
+        assertStateIsEmpty(result.state);
     });
 
     test("local files", async () => {
@@ -125,18 +125,31 @@ describe("first sync push", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileIgnored(outputDir, "Home.md");
-        await assertFileIgnored(outputDir, "index.md");
-        await assertFilePushed(outputDir, "notes.txt", token, "text/plain");
-        await assertFilePushed(outputDir, "sessions/notes.txt", token, "text/plain");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        await assertFileIgnored(outputDir, "Home.md", result.state);
+        await assertFileIgnored(outputDir, "index.md", result.state);
+        await assertFilePushed(
+            outputDir,
+            "notes.txt",
+            result.state,
+            token,
+            "text/plain",
+        );
+        await assertFilePushed(
+            outputDir,
+            "sessions/notes.txt",
+            result.state,
+            token,
+            "text/plain",
+        );
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
+        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 
@@ -166,7 +179,7 @@ describe("first sync push", () => {
         expect(result.output).toEqual(expectedOutput);
 
         await assertDirMatchesFixture(outputDir);
-        await assertStateMatchesFixture(outputDir);
+        await assertStateMatchesFixture(result.state);
     });
 
     test("local file clashes", async () => {
@@ -196,16 +209,21 @@ describe("first sync push", () => {
         expect(result.output).toEqual(expectedOutput);
 
         await assertFileUnchanged(outputDir, "sessions");
-        await assertFileNotDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "index.md");
-        await assertFileDownloaded(outputDir, "Home.md");
-        await assertFileDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        await assertFileNotDownloaded(
+            outputDir,
+            "sessions/session-01.md",
+            result.state,
+        );
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "index.md", result.state);
+        await assertFileDownloaded(outputDir, "Home.md", result.state);
+        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 
@@ -237,16 +255,17 @@ describe("first sync push", () => {
         expect(result.output).toEqual(expectedOutput);
 
         await assertFileUnchanged(outputDir, "Bestiary.md/notes.txt");
-        await assertFileNotDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "index.md");
-        await assertFileDownloaded(outputDir, "Home.md");
-        await assertFileDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        await assertFileNotDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "index.md", result.state);
+        await assertFileDownloaded(outputDir, "Home.md", result.state);
+        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 
@@ -310,16 +329,17 @@ describe("first sync push", () => {
         expect(result.output).toEqual(expectedOutput);
 
         await assertFileUnchanged(outputDir, "home.md");
-        await assertFileNotInState(outputDir, "Home.md");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "index.md");
-        await assertFileDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        assertFileNotInState("Home.md", result.state);
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "index.md", result.state);
+        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
+        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 
@@ -351,16 +371,17 @@ describe("first sync push", () => {
         expect(result.output).toEqual(expectedOutput);
 
         await assertFileMatchesFixture(outputDir, "Home.md", "home.md");
-        await assertFileNotInState(outputDir, "Home.md");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "index.md");
-        await assertFileDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        assertFileNotInState("Home.md", result.state);
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "index.md", result.state);
+        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
+        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 });

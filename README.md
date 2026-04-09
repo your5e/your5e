@@ -8,24 +8,35 @@ Tools for running your 5th edition adjacent roleplaying games.
 Development is done with docker, spinning up the stack is:
 
 ```
+# install prerequisites
+(computer)% brew install bats-core shellcheck node
+
+# install npm dependencies for Obsidian plugin development
+(computer)% make setup-obsidian-plugin
+
 # reset the development database
 (computer)% make reset
 
 # make the site available at http://localhost:5843/
 (computer)% make dev
 
-# run tests on the website
-(computer)% make test-django
-
-# make the server for running integration tests available
+# run all tests (requires test server)
 (computer)% make server-tests
+(computer)% make test
+
+# or run individual test suites
+(computer)% make test-django
 (computer)% make test-sync-integration
 (computer)% make test-obsidian-plugin
-...
-(computer)% make server-tests-down
 
 # update archival/testing screenshots
 (computer)% make scry
+
+# build the Obsidian plugin
+(computer)% make build-obsidian-plugin
+
+# shut down the test server when done
+(computer)% make server-tests-down
 ```
 
 Test data includes [a map](users/management/commands/random-hexmap-7.png) by

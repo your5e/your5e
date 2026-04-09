@@ -12,16 +12,26 @@ export interface FileSystem {
     findCaseInsensitive(dir: string, name: string): Promise<string | null>;
 }
 
+export interface SyncStateEntry {
+    uuid: string;
+    serverFilename: string;
+    localFilename: string;
+    serverHash: string;
+    localHash: string;
+}
+
 export interface SyncConfig {
     baseUrl: string;
     token: string;
     notebook: string;
     outputDir: string;
     fileSystem: FileSystem;
+    initialState?: Map<string, SyncStateEntry>;
     pullOnly?: boolean;
     timeoutMs?: number;
 }
 
 export interface SyncResult {
     output: string[];
+    state: Map<string, SyncStateEntry>;
 }

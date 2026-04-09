@@ -87,19 +87,20 @@ describe("sync pagination", () => {
             const filePath = path.join(outputDir, `page-${i}.md`);
             const content = await fs.readFile(filePath, "utf-8");
             expect(content).toBe(`# Page ${i}\n`);
-            await assertFileInState(outputDir, `page-${i}.md`);
+            assertFileInState(`page-${i}.md`, result.state);
         }
 
-        await assertFileDownloaded(outputDir, "Home.md");
-        await assertFileDownloaded(outputDir, "Bestiary.md");
-        await assertFileDownloaded(outputDir, "index.md");
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png");
-        await assertFileDownloaded(outputDir, "sessions/session-01.md");
-        await assertFileDownloaded(outputDir, "characters/NPCs.md");
-        await assertFileDownloaded(outputDir, "The Old Café.md");
+        await assertFileDownloaded(outputDir, "Home.md", result.state);
+        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
+        await assertFileDownloaded(outputDir, "index.md", result.state);
+        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
+        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
+        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
+        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
         await assertFileDownloaded(
             outputDir,
             "World Regions/Northern Kingdoms/Frosthold.md",
+            result.state,
         );
     });
 });
