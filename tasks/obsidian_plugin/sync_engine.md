@@ -1,3 +1,6 @@
+@after ../api/sync.md
+@queue
+
 Reimplement the sync-notebook script in Typescript, so it can be tested
 independently.
 

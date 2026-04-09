@@ -3,6 +3,7 @@
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 .PHONY: build deploy update-notebooks
+.PHONY: build-obsidian-plugin
 
 COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
 export COMPOSE_FILE
@@ -70,6 +71,9 @@ test-sync-integration:
 test-obsidian-plugin:
 	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
 	cd obsidian-plugin && npm run lint && npm test
+
+build-obsidian-plugin:
+	cd obsidian-plugin && npm run build
 
 test: test-django test-sync-integration
 

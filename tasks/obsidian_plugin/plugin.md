@@ -1,0 +1,23 @@
+@after sync_engine.md
+@queue
+
+An Obsidian plugin to sync a folder in a Vault with a Campaign Notebook.
+Configuration allows general base URL and API token, but can be overridden
+per folder. Per-folder config is vault folder, notebook ID (and overrides).
+
+- [X] create plugin using sync_engine
+        - configuration settings
+        - syncs once per minute for testing
+
+- [ ] do not sync when editing config
+- [ ] sync each folder on a different irregular interval between 4-6 minutes,
+      to avoid swamping the server with multiple notebooks configured
+- [ ] initial sync on launch should also not swamp the server
+
+- [ ] add 'sync now' to command palette
+- [ ] add 'show sync log' to command palette
+- [ ] add 'show sync log' for the ribbon, but not on by default
+- [ ] add sync status to statusbar, context menu includes opening the log
+
+- [ ] submit to Obsidian community plugins repository for automatic
+      distribution
