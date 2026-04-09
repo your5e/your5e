@@ -89,6 +89,7 @@ Test updating the state from an existing synced directory works.
 | remote renamed, cycle, local edited | ✔️ | ✔️ | | | | ✔️ | | |
 | remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | |
 | local edited | ✔️ | ✔️ | | | | | | |
+| local edited, CRLF line endings | ✔️ | ✔️ | | | | | | |
 | local edited, remote edited | ✔️ | ✔️ | | | ✔️ | | | |
 | local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
 | local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |

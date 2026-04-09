@@ -7,6 +7,8 @@
  * Ported from tests/subsequent_sync_push.bats
  */
 
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
@@ -663,6 +665,64 @@ describe("subsequent sync push", () => {
         await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
         await assertTrackedFileIntact(
             outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+    });
+
+    test("local edited, CRLF line endings", async () => {
+        await createFile(
+            outputDir,
+            "Home.md",
+            "First line\r\nSecond line\r\nThird line",
+        );
+
+        const sync1 = new SyncEngine({
+            baseUrl: API_BASE,
+            token,
+            notebook: "norm/campaign-notes",
+            outputDir,
+            fileSystem: new NodeFileSystem(),
+            initialState,
+        });
+
+        // first run, sends the modification, server will normalise line endings
+        const result1 = await sync1.run();
+
+        expect(result1.output).toEqual(['push: "Home.md" (v3)']);
+        const normalizedContent = await fs.readFile(
+            path.join(outputDir, "Home.md"),
+            "utf-8",
+        );
+        expect(normalizedContent).toBe("First line\nSecond line\nThird line\n");
+
+        const sync2 = new SyncEngine({
+            baseUrl: API_BASE,
+            token,
+            notebook: "norm/campaign-notes",
+            outputDir,
+            fileSystem: new NodeFileSystem(),
+            initialState: result1.state,
+        });
+
+        // second run, no changes as the on-server modified Home.md has been pulled
+        const result2 = await sync2.run();
+
+        expect(result2.output).toEqual([]);
+        await assertTrackedFileIntact(outputDir, result2.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result2.state, "index.md");
+        await assertTrackedFileIntact(outputDir, result2.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result2.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result2.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result2.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result2.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result2.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
     });

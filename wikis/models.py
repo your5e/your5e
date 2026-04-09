@@ -186,8 +186,10 @@ class Page(models.Model):
         return self.version_set.order_by("-number").first()
 
     def update(self, *, filename, mime_type, data, created_by):
-        if mime_type.startswith("text/") and not data.endswith(b"\n"):
-            data = data + b"\n"
+        if mime_type == "text/markdown":
+            data = data.replace(b"\r\n", b"\n")
+            if not data.endswith(b"\n"):
+                data = data + b"\n"
         content_hash = hashlib.sha256(data).hexdigest()
         content, _ = Content.objects.get_or_create(
             hash=content_hash,

@@ -126,7 +126,7 @@ class TestContent(WikiMixin):
     def test_content_primary_key_is_hash_of_data(self):
         assert self.version.content.pk == self.version.content.hash
         assert self.version.content.hash == (
-            "d5ef9984be135ec74cbc5dee24825199ca433e1ffd7a2fb22db12a3c5324ea1d"
+            "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87"
         )
 
     def test_content_is_shared_between_wikis(self):
@@ -274,7 +274,7 @@ class TestVersion(WikiMixin):
         assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_render_non_markdown_returns_bytes(self):
-        assert self.version.render() == b"Test content\n"
+        assert self.version.render() == b"Test content"
 
     def test_display_name_markdown(self):
         page = Page.objects.create(wiki=self.wiki)
@@ -446,7 +446,7 @@ class TestVersion(WikiMixin):
     def test_split_content_for_non_markdown(self):
         frontmatter, content = self.version.split_content()
         assert frontmatter == ""
-        assert content == "Test content\n"
+        assert content == "Test content"
 
     def test_frontmatter_parses_yaml(self):
         fm = self.page_with_wikilinks.latest_version.frontmatter()
@@ -635,7 +635,7 @@ class TestPage(WikiMixin):
         )
         assert reverted.number == 4
         assert reverted.filename == "history.txt"
-        assert reverted.content.data == b"First revision\n"
+        assert reverted.content.data == b"First revision"
 
     def test_revert_to_current_version_does_not_create_version(self):
         reverted = self.page_with_history.revert(
@@ -704,7 +704,7 @@ class TestPage(WikiMixin):
     def test_get_version_returns_specific_version(self):
         version = self.page_with_history.get_version(number=2)
         assert version.number == 2
-        assert version.content.data == b"Second revision\n"
+        assert version.content.data == b"Second revision"
 
     def test_get_version_raises_for_nonexistent_version(self):
         with pytest.raises(Page.DoesNotExist):
@@ -732,7 +732,7 @@ class TestPage(WikiMixin):
             data=b"hello",
             created_by=self.wendy,
         )
-        assert version_b.content.data == b"hello\n"
+        assert version_b.content.data == b"hello"
         assert version_b.mime_type == "text/plain"
 
     def test_update_text_preserves_existing_trailing_newline(self):

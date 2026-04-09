@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import type { SyncStateEntry } from "../src/sync/types.js";
@@ -658,6 +658,47 @@ describe("subsequent sync pull", () => {
         await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
         await assertTrackedFileIntact(
             outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+    });
+
+    test("local edited, CRLF line endings", async () => {
+        await createFile(
+            outputDir,
+            "Home.md",
+            "First line\r\nSecond line\r\nThird line",
+        );
+
+        const sync = new SyncEngine({
+            baseUrl: API_BASE,
+            token,
+            notebook: "norm/campaign-notes",
+            outputDir,
+            fileSystem: new NodeFileSystem(),
+            initialState,
+            pullOnly: true,
+        });
+
+        const result = await sync.run();
+
+        expect(result.output).toEqual([]);
+        const homeContent = await fs.readFile(path.join(outputDir, "Home.md"), "utf-8");
+        expect(homeContent).toBe("First line\r\nSecond line\r\nThird line");
+        assertFileInState("Home.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
     });

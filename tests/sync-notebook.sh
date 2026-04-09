@@ -952,6 +952,15 @@ function update_remote_file {
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
 
+    local actual_hash
+    actual_hash=$(sha256sum "$filepath" | awk '{print $1}')
+
+    if [[ "$new_hash" != "$actual_hash" ]]; then
+        # the server normalised the line endings
+        fetch_remote_file \
+            "$notebook" "$(dirname "$filepath")" "$uuid" "$file" "$new_hash"
+    fi
+
     update_remote_state "$uuid" "" "$new_hash" "$version"
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 

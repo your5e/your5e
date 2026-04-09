@@ -906,6 +906,21 @@ class TestPageContentPut(NotebookApiMixin):
             "previous_hash": original_hash,
         }
 
+    @ApiMixin.as_api_user("wendy")
+    def test_updating_sanitises_crlf_line_endings(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"First line\r\nSecond line\r\nThird line\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+        page = self.wendys_notebook.get_page(path="index")
+        assert (
+            page.latest_version.content.data
+            == b"First line\nSecond line\nThird line\n"
+        )
+
 
 @pytest.mark.django_db
 class TestPageContentPatch(NotebookApiMixin):
@@ -1668,6 +1683,26 @@ class TestPageCreate(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.CONFLICT
         assert response.json() == {"error": "Path 'notes' already exists."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_creating_sanitises_crlf_line_endings(self, api_client):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = api_client.post(
+            "/api/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile(
+                    "crlf-test.md",
+                    b"First line\r\nSecond line\r\nThird line\n",
+                )
+            },
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CREATED
+        page = self.wendys_notebook.get_page(path="crlf-test")
+        assert (
+            page.latest_version.content.data
+            == b"First line\nSecond line\nThird line\n"
+        )
 
 
 @pytest.mark.django_db

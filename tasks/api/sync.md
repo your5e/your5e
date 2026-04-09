@@ -19,6 +19,7 @@ Once the API is read-write, we can implement the rest of the algorithm.
 - [X] add any push-specific tests missing from the matrix
 - [X] implement user permission scenarios
 - [X] ensure results pagination
+- [ ] pull using updates-since not full results
 - [ ] cover any remaining API error scenarios
 
 We could also make the script a watcher to push updates real-time.

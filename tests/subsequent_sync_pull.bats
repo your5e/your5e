@@ -383,6 +383,27 @@ setup() {
     assert_success
 }
 
+@test "local edited, CRLF line endings" {
+    printf "First line\r\nSecond line\r\nThird line" > "$output_dir/Home.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    expected_content=$'First line\r\nSecond line\r\nThird line'
+    diff -u <(echo -n "$expected_content") "$output_dir/Home.md"
+    assert_file_in_state "Home.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_success
+}
+
 @test "local edited, remote edited" {
     set_older_content "Bestiary.md"
     modify_file "Bestiary.md"

@@ -403,6 +403,39 @@ setup() {
     assert_success
 }
 
+@test "local edited, CRLF line endings" {
+    printf "First line\r\nSecond line\r\nThird line" > "$output_dir/Home.md"
+
+    # first run, sends the modification, server will normalise line endings
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: "Home.md" (v3)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+    assert_success
+
+    expected_content=$'First line\nSecond line\nThird line\n'
+    diff -u <(echo -n "$expected_content") "$output_dir/Home.md"
+
+    # second run, no changes as the on-server modified Home.md has been pulled
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_success
+}
+
 @test "local edited, remote edited" {
     set_older_content "Bestiary.md"
     modify_file "Bestiary.md"

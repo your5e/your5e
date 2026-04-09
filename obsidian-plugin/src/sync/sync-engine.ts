@@ -356,6 +356,8 @@ export class SyncEngine {
     ): Promise<void> {
         const localPath = path.join(this.config.outputDir, entry.localFilename);
         const content = await this.fs.read(localPath);
+        const contentHash = await this.fs.hash(localPath);
+        const sentHash = crypto.createHash("sha256").update(content).digest("hex");
 
         const ext = entry.localFilename.split(".").pop()?.toLowerCase();
         let contentType = "application/octet-stream";
@@ -384,6 +386,18 @@ export class SyncEngine {
 
         if (response.ok) {
             const data = await response.json();
+            const localPath = path.join(this.config.outputDir, entry.localFilename);
+            const actualHash = await this.fs.hash(localPath);
+
+            if (data.content_hash !== actualHash) {
+                // the server normalised the line endings
+                await this.fetchRemoteFile(
+                    uuid,
+                    entry.localFilename,
+                    data.content_hash,
+                );
+            }
+
             entry.serverHash = data.content_hash;
             entry.localHash = data.content_hash;
 
