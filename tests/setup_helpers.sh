@@ -512,6 +512,16 @@ function downgrade_to_viewer {
         >/dev/null 2>&1
 }
 
+function delete_page_by_uuid {
+    local page_uuid="$1"
+    COMPOSE_FILE=docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db-test \
+        psql -U your5e your5e_test \
+        -c "UPDATE wikis_page SET deleted_at = NOW()
+            WHERE uuid = '$page_uuid'" \
+        >/dev/null 2>&1
+}
+
 function remove_file {
     rm "$output_dir/$1"
 }

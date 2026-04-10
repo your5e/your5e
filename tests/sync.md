@@ -157,6 +157,8 @@ notebook.
 | mid-sync, revoked, local delete | editor | ✔️ |
 | mid-sync, downgraded, local delete | editor | ✔️ |
 | mid-sync, revoked, content update | editor | ✔️ |
+| mid-sync, page deleted, content update | editor | ✔️ |
+| mid-sync, page deleted, new file | editor | ✔️ |
 
 ### `sync_pagination.bats`
 
