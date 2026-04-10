@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from users.models import get_sentinel_user
 from users.tests import UserMixin
-from wikis.models import Content, Page, Wiki
+from wikis.models import Content, Page, Version, Wiki
 
 
 class WikiMixin(UserMixin):
@@ -116,6 +116,10 @@ class WikiMixin(UserMixin):
             data=b"---\n  bad: yaml: structure:\n---\n# Content",
             created_by=self.wendy,
         )
+
+        # backdate fixture data for "since..." tests
+        past = timezone.now() - timedelta(seconds=1)
+        Version.objects.filter(page__wiki=self.wiki).update(created_at=past)
 
         self.wiki.refresh_from_db()
         self.last_updated_after_setup = self.wiki.last_updated
@@ -812,7 +816,7 @@ class TestWiki(WikiMixin):
         ]
 
     def test_changes_since(self):
-        before = timezone.now()
+        before = timezone.now() - timedelta(seconds=1)
         self.page.update(
             filename="document.txt",
             mime_type="text/plain",
@@ -831,7 +835,7 @@ class TestWiki(WikiMixin):
         ]
 
     def test_changes_since_includes_deleted_pages(self):
-        before = timezone.now()
+        before = timezone.now() - timedelta(seconds=1)
         self.page.update(
             filename="document.txt",
             mime_type="text/plain",

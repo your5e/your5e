@@ -12,7 +12,7 @@ independently.
 - [X] reimplement the subsequent sync tests
 - [X] reimplement the permissions tests
 - [X] reimplement the pagination tests
-- [ ] pull using updates-since
+- [X] pull using updates-since
 
 Using Node or Electron APIs means the plugin can't work on mobile.
 

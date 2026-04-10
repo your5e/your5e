@@ -24,6 +24,8 @@ setup() {
 
 
 @test "empty directory" {
+    fail_on_since_parameter
+
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -42,21 +44,26 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "empty notebook" {
+    fail_on_since_parameter
+
     run tests/sync-notebook.sh -p norm/empty-notebook "$output_dir"
 
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_output_dir_exists
-    assert_state_is_empty
+    assert_state_has_no_files
+    assert_last_updated_is_epoch
     assert_success
 }
 
 @test "local files" {
+    fail_on_since_parameter
     create_file "Home.md"
     create_file "index.md"
     create_file "notes.txt"
@@ -87,10 +94,12 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local matches remote" {
+    fail_on_since_parameter
     copy_fixture "Home.md"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -110,10 +119,12 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local file clashes" {
+    fail_on_since_parameter
     create_file "sessions"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -140,10 +151,12 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local dir clashes" {
+    fail_on_since_parameter
     create_file "Bestiary.md/notes.txt"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -170,10 +183,12 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "hidden files ignored" {
+    fail_on_since_parameter
     create_file ".hidden.md"
     create_file ".obsidian/app.json"
 
@@ -195,10 +210,12 @@ setup() {
     assert_file_unchanged ".hidden.md"
     assert_file_unchanged ".obsidian/app.json"
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision" {
+    fail_on_since_parameter
     create_file "home.md"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -225,10 +242,12 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision, matches" {
+    fail_on_since_parameter
     copy_fixture "Home.md" "home.md"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -255,5 +274,6 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }

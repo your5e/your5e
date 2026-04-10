@@ -699,6 +699,65 @@ export function downgradeToViewer(
     );
 }
 
+export function deletePageByUuid(uuid: string): void {
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db-test \\
+      psql -U your5e your5e_test \\
+      -c "UPDATE wikis_page SET deleted_at = NOW() WHERE uuid = '${uuid}'"
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
+export async function uuidFor(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<string> {
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            return uuid;
+        }
+    }
+    throw new Error(`No UUID found for ${filename}`);
+}
+
 export async function removeFile(outputDir: string, filename: string): Promise<void> {
     await fs.unlink(path.join(outputDir, filename));
+}
+
+export async function assertLastUpdateMatchesExpected(
+    lastUpdate: string | undefined,
+): Promise<void> {
+    expect(lastUpdate).toBeDefined();
+    const expectedFile = path.join(PROJECT_ROOT, "tests/last_update");
+    const expected = (await fs.readFile(expectedFile, "utf-8")).trim();
+    expect(lastUpdate).toBe(expected);
+}
+
+export function assertLastUpdateIsEpoch(lastUpdate: string | undefined): void {
+    expect(lastUpdate).toBe("0001-01-01T00:00:00Z");
+}
+
+export function assertLastUpdateExists(lastUpdate: string | undefined): void {
+    expect(lastUpdate).toBeDefined();
+}
+
+export function assertSyncMetadataUpdated(
+    lastUpdate: string | undefined,
+    lastFullSync: string | undefined,
+): void {
+    expect(lastUpdate).toBeDefined();
+    expect(lastUpdate).not.toBe("2020-01-01T00:00:00Z");
+
+    expect(lastFullSync).toBeDefined();
+    if (!lastFullSync) {
+        throw new Error("lastFullSync is undefined");
+    }
+
+    const now = Date.now();
+    const lastFullSyncTime = new Date(lastFullSync).getTime();
+    const ageSeconds = (now - lastFullSyncTime) / 1000;
+    expect(ageSeconds).toBeLessThan(60);
 }

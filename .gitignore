@@ -4,6 +4,7 @@ __pycache__/
 *.token
 tests/*.token
 tests/seed.sql
+tests/last_update
 
 static/css/*.css*
 

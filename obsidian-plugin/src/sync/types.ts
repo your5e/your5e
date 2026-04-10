@@ -29,9 +29,14 @@ export interface SyncConfig {
     initialState?: Map<string, SyncStateEntry>;
     pullOnly?: boolean;
     timeoutMs?: number;
+    lastUpdate?: string;
+    lastFullSync?: string;
+    afterFetchHook?: () => Promise<void>;
 }
 
 export interface SyncResult {
     output: string[];
     state: Map<string, SyncStateEntry>;
+    lastUpdate?: string;
+    lastFullSync?: string;
 }

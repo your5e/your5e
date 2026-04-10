@@ -13,6 +13,7 @@ pull_only=0
 verbose=0
 watch=0
 state_file=""
+last_update=""
 remote_state_file="$(mktemp)"
 trap 'rm -f "$remote_state_file"' EXIT
 
@@ -56,10 +57,31 @@ function main {
 function sync_notebook {
     local notebook="$1"
     local output_dir="$2"
+    local incremental_sync=0
 
     : > "$remote_state_file"
 
-    fetch_remote_state "$notebook"
+    if [[ -f "$state_file" ]]; then
+        local last_full_sync
+        last_full_sync=$(get_sync_state "LAST_FULL_SYNC" server_filename)
+
+        if [[ -n "$last_full_sync" ]]; then
+            local now last_full_sync_epoch age_seconds
+            now=$(date +%s)
+            last_full_sync_epoch=$(
+                TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last_full_sync" +%s 2>/dev/null \
+                    || date -d "$last_full_sync" +%s 2>/dev/null
+            )
+            age_seconds=$((now - last_full_sync_epoch))
+
+            # incremental sync when less than one hour has passed since the last sync
+            if [[ $age_seconds -lt 3600 ]]; then
+                incremental_sync=1
+            fi
+        fi
+    fi
+
+    fetch_remote_state "$notebook" "$incremental_sync"
 
     [[ -n "${AFTER_FETCH_HOOK:-}" ]] \
         && eval "$AFTER_FETCH_HOOK"
@@ -76,10 +98,21 @@ function sync_notebook {
     apply_remote_updates "$notebook" "$output_dir" "" \
         $(get_remote_state "" active_uuids)
 
-    check_for_stale_files "$output_dir"
+    [[ $incremental_sync -eq 0 ]] \
+        && check_for_stale_files "$output_dir"
 
     mkdir -p "$output_dir"
     touch "$state_file"
+
+    if [[ -n "$last_update" ]]; then
+        update_sync_state "LAST_UPDATED" "$last_update" "" "" ""
+    fi
+
+    if [[ $incremental_sync -eq 0 ]]; then
+        local now_iso
+        now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        update_sync_state "LAST_FULL_SYNC" "$now_iso" "" "" ""
+    fi
 }
 
 function detect_untracked_renames {
@@ -124,8 +157,17 @@ function find_untracked_file_by_hash {
 
 function fetch_remote_state {
     local notebook="$1"
+    local incremental_sync="$2"
     local next_page="${base_url}/api/notebooks/${notebook}/"
     local body first_page=1 http_code response
+
+    if [[ -f "$state_file" && $incremental_sync -eq 1 ]]; then
+        local since
+        since=$(get_sync_state "LAST_UPDATED" server_filename)
+        if [[ -n "$since" ]]; then
+            next_page="${next_page}?since=${since}"
+        fi
+    fi
 
     while [[ -n "$next_page" ]]; do
         response=$(
@@ -158,6 +200,8 @@ function fetch_remote_state {
                 echo "sync: NOTE read-only access, switching to pull-only mode"
                 pull_only=1
             fi
+
+            last_update=$(echo "$body" | jq -r '.last_update // ""')
         fi
 
         next_page=$(echo "$body" | jq -r '.next // ""')
@@ -185,6 +229,9 @@ function apply_local_updates {
 
     if has_local_state; then
         while IFS=$'\t' read -r uuid _ local_fn hash _; do
+            [[ "$uuid" == "LAST_UPDATED" || "$uuid" == "LAST_FULL_SYNC" ]] \
+                && continue
+
             [[ $pull_only -eq 1 ]] \
                 && break
 
@@ -248,7 +295,11 @@ function apply_local_updates {
 
         create_remote_file "$notebook" "$file" "$filepath" \
             || true
-    done < <(find "$output_dir" -type f ! -name ".sync-state" -print0 | sort -z)
+    done < <(
+        find "$output_dir" -type f \
+            ! -name ".sync-state" \
+            -print0 | sort -z
+    )
 
     # stale UUIDs must stay in cache until after the new files loop,
     # otherwise the file would be picked up as "new" and tried again

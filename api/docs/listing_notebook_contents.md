@@ -47,9 +47,14 @@ The response structure is:
       ...
     }
   ],
-  "total_results": 8
+  "total_results": 8,
+  "last_update": "2024-01-15T10:30:00Z"
 }
 ```
+
+The `last_update` field contains the timestamp of the most recent update or
+deletion across all pages in the notebook, useful for tracking when the
+notebook last changed.
 
 Arguments:
 

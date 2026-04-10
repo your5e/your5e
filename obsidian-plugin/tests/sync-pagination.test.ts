@@ -17,6 +17,7 @@ import {
     API_BASE,
     assertFileDownloaded,
     assertFileInState,
+    assertLastUpdateExists,
     cleanupTestDir,
     createTestDir,
     getToken,
@@ -102,5 +103,6 @@ describe("sync pagination", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        assertLastUpdateExists(result.lastUpdate);
     });
 });

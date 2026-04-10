@@ -255,7 +255,7 @@ class NotebookMixin(UserMixin):
         )
 
         # backdate fixture data for "since..." tests
-        past = timezone.now() - timedelta(hours=1)
+        past = timezone.now() - timedelta(seconds=1)
         Version.objects.update(created_at=past)
         Page.objects.filter(deleted_at__isnull=False).update(deleted_at=past)
 

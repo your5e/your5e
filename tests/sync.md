@@ -26,12 +26,19 @@ The algorithm to sync the local directory is:
     has changed (remote updates).
 9.  _rm_ any files deleted remotely (any local editeds will have already
     un-deleted them in step 3).
-10. Cache the new state, either as a separate step or after each individual
-    operation.
+10. Check for stale files (UUIDs in cache but not on remote).
+11. Cache the new state (either as a separate step at the end, or update
+    the state after each successful individual operation).
 
 Some API errors (400, 401, 404, 409) should be expected and handled, they are
 for the user to resolve. Other errors (network failures, 5xx server errors,
 authentication problems) should abort the sync for a later retry.
+
+## Incremental vs Full Sync
+
+The API supports incremental changes using the `?since=` parameter, which
+should be used to speed up repeated short-term syncs. The implemented sync
+engines do this, but also then a full sync every hour to ensure data fidelity.
 
 
 ## Sync Test Matrix
@@ -72,7 +79,8 @@ Test updating the state from an existing synced directory works.
 
 | Test | Tracked | Local Edited | Local Renamed | Local Deleted | Remote Edited | Remote Renamed | Remote Deleted | Stale |
 |------|---------|--------------|---------------|---------------|---------------|----------------|----------------|--------|
-| no change | ✔️ | | | | | | | |
+| no change, outdated timestamp | ✔️ | | | | | | | |
+| no change, recent timestamp | ✔️ | | | | | | | |
 | untracked file | | | | | | | | |
 | untracked file, local edited, directory | | ✔️ | | | | | | |
 | untracked file, local edited | | ✔️ | | | | | | |

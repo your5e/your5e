@@ -336,6 +336,13 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
         response.data["editable"] = NotebookPermissions.can_edit(
             self.notebook, request.user
         )
+        response.data["last_update"] = self.notebook.page_set.aggregate(
+            last_update=Greatest(
+                Coalesce(Max("version__created_at"), datetime.min.replace(tzinfo=UTC)),
+                Coalesce(Max("deleted_at"), datetime.min.replace(tzinfo=UTC)),
+            )
+        )["last_update"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
         return response
 
     def get_serializer_context(self):

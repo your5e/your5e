@@ -18,23 +18,37 @@ export class SyncEngine {
     private syncState: Map<string, SyncStateEntry> = new Map();
     private fs: FileSystem;
     private timeoutMs: number;
+    private lastUpdate?: string;
+    private lastFullSync?: string;
+    private isIncrementalSync = false;
+    private permissionDenied = false;
 
     constructor(private config: SyncConfig) {
         this.fs = config.fileSystem;
         this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+        this.lastUpdate = config.lastUpdate;
+        this.lastFullSync = config.lastFullSync;
     }
 
     async run(): Promise<SyncResult> {
         this.output = [];
         this.remotePages = new Map();
         this.syncState = this.config.initialState ?? new Map();
+        this.permissionDenied = false;
 
         if (!this.config.token) {
             this.output.push("sync: ERROR API token missing");
             throw new Error("API token missing");
         }
 
+        // Determine if we should do incremental sync
+        this.isIncrementalSync = this.shouldUseIncrementalSync();
+
         const editable = await this.fetchRemoteState();
+
+        if (this.config.afterFetchHook) {
+            await this.config.afterFetchHook();
+        }
 
         if (!(await this.fs.isDirectory(this.config.outputDir))) {
             await this.fs.mkdir(this.config.outputDir);
@@ -66,9 +80,35 @@ export class SyncEngine {
 
         await this.applyRemoteDeletions(deletedUuids);
         await this.applyRemoteUpdates(activeUuids, new Set<string>());
-        await this.checkForStaleFiles();
 
-        return { output: this.output, state: this.syncState };
+        // Skip stale file checks during incremental sync
+        if (!this.isIncrementalSync) {
+            await this.checkForStaleFiles();
+        }
+
+        // Update lastFullSync if we did a full sync
+        if (!this.isIncrementalSync) {
+            this.lastFullSync = new Date().toISOString();
+        }
+
+        return {
+            output: this.output,
+            state: this.syncState,
+            lastUpdate: this.lastUpdate,
+            lastFullSync: this.lastFullSync,
+        };
+    }
+
+    private shouldUseIncrementalSync(): boolean {
+        if (!this.lastUpdate || !this.lastFullSync) {
+            return false;
+        }
+
+        const lastFullSyncTime = new Date(this.lastFullSync).getTime();
+        const now = new Date().getTime();
+        const oneHourInMs = 1 * 60 * 60 * 1000;
+
+        return now - lastFullSyncTime < oneHourInMs;
     }
 
     private async detectUntrackedRenames(): Promise<void> {
@@ -110,8 +150,14 @@ export class SyncEngine {
     }
 
     private async fetchRemoteState(): Promise<boolean> {
-        let nextPage: string | null =
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/`;
+        let baseUrl = `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/`;
+
+        // Add ?since= parameter for incremental sync
+        if (this.isIncrementalSync && this.lastUpdate) {
+            baseUrl += `?since=${encodeURIComponent(this.lastUpdate)}`;
+        }
+
+        let nextPage: string | null = baseUrl;
         let editable = true;
 
         while (nextPage) {
@@ -139,6 +185,11 @@ export class SyncEngine {
 
             if (data.editable !== undefined) {
                 editable = data.editable;
+            }
+
+            // Extract and store lastUpdate from API response
+            if (data.last_update) {
+                this.lastUpdate = data.last_update;
             }
 
             for (const page of data.results as RemotePage[]) {
@@ -243,6 +294,9 @@ export class SyncEngine {
         entry: SyncStateEntry,
         remote: RemotePage | undefined,
     ): Promise<void> {
+        if (this.permissionDenied) {
+            return;
+        }
         if (!remote || remote.deleted_at !== null) {
             this.deleteSyncState(uuid);
             return;
@@ -264,6 +318,9 @@ export class SyncEngine {
                 },
             );
 
+            if (this.handlePushAuthError(renameResponse)) {
+                return;
+            }
             if (renameResponse.ok) {
                 this.output.push(
                     `push: renamed "${remote.filename}" to "${entry.localFilename}"`,
@@ -285,6 +342,9 @@ export class SyncEngine {
             },
         );
 
+        if (this.handlePushAuthError(response)) {
+            return;
+        }
         if (response.ok) {
             if (remoteEdited) {
                 this.output.push(
@@ -298,11 +358,31 @@ export class SyncEngine {
         }
     }
 
+    private handlePushAuthError(response: Response): boolean {
+        if (response.status === 401) {
+            this.output.push("sync: ERROR API token invalid");
+            throw new Error("API token invalid");
+        }
+        if (response.status === 403) {
+            if (!this.permissionDenied) {
+                this.output.push(
+                    "sync: NOTE permission denied, switching to pull-only mode",
+                );
+                this.permissionDenied = true;
+            }
+            return true;
+        }
+        return false;
+    }
+
     private async pushLocalRename(
         uuid: string,
         entry: SyncStateEntry,
         remote: RemotePage | undefined,
     ): Promise<boolean> {
+        if (this.permissionDenied) {
+            return false;
+        }
         if (!remote) {
             return false;
         }
@@ -325,6 +405,9 @@ export class SyncEngine {
             },
         );
 
+        if (this.handlePushAuthError(response)) {
+            return false;
+        }
         if (response.ok) {
             const data = await response.json();
             this.output.push(
@@ -354,10 +437,11 @@ export class SyncEngine {
         remoteEdited: boolean,
         _remoteDeleted: boolean,
     ): Promise<void> {
+        if (this.permissionDenied) {
+            return;
+        }
         const localPath = path.join(this.config.outputDir, entry.localFilename);
         const content = await this.fs.read(localPath);
-        const contentHash = await this.fs.hash(localPath);
-        const sentHash = crypto.createHash("sha256").update(content).digest("hex");
 
         const ext = entry.localFilename.split(".").pop()?.toLowerCase();
         let contentType = "application/octet-stream";
@@ -384,6 +468,9 @@ export class SyncEngine {
             },
         );
 
+        if (this.handlePushAuthError(response)) {
+            return;
+        }
         if (response.ok) {
             const data = await response.json();
             const localPath = path.join(this.config.outputDir, entry.localFilename);
@@ -564,10 +651,16 @@ export class SyncEngine {
                             "local changes would be lost",
                     );
                 } else if (this.hasRemoteChanges(uuid)) {
-                    await this.fetchRemoteToLocalPath(uuid, srcFile, hash);
-                    this.output.push(
-                        `pull: "${destFile}" to "${srcFile}" (v${version})`,
+                    const fetched = await this.fetchRemoteToLocalPath(
+                        uuid,
+                        srcFile,
+                        hash,
                     );
+                    if (fetched) {
+                        this.output.push(
+                            `pull: "${destFile}" to "${srcFile}" (v${version})`,
+                        );
+                    }
                 }
             } else if (await this.hasLocalChanges(uuid, actualSrcPath)) {
                 this.output.push(
@@ -586,8 +679,14 @@ export class SyncEngine {
                     if (await this.fileMatchesHash(destPath, hash)) {
                         this.updateSyncState(uuid, destFile, destFile, hash, hash);
                     } else {
-                        await this.fetchRemoteFile(uuid, destFile, hash);
-                        this.output.push(`pull: "${destFile}" (v${version})`);
+                        const fetched = await this.fetchRemoteFile(
+                            uuid,
+                            destFile,
+                            hash,
+                        );
+                        if (fetched) {
+                            this.output.push(`pull: "${destFile}" (v${version})`);
+                        }
                     }
                 } else {
                     this.output.push(
@@ -602,8 +701,10 @@ export class SyncEngine {
                 );
             } else if (await this.localFileWasRemoved(actualSrcPath)) {
                 if (this.hasRemoteChanges(uuid)) {
-                    await this.fetchRemoteFile(uuid, destFile, hash);
-                    this.output.push(`pull: "${destFile}" (v${version})`);
+                    const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
+                    if (fetched) {
+                        this.output.push(`pull: "${destFile}" (v${version})`);
+                    }
                 } else {
                     this.output.push(
                         `pull: SKIPPING rename "${srcFile}" to "${destFile}", ` +
@@ -617,8 +718,10 @@ export class SyncEngine {
                 if (await this.fileMatchesHash(destPath, hash)) {
                     this.updateSyncState(uuid, destFile, destFile, hash, hash);
                 } else {
-                    await this.fetchRemoteFile(uuid, destFile, hash);
-                    this.output.push(`pull: "${destFile}" (v${version})`);
+                    const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
+                    if (fetched) {
+                        this.output.push(`pull: "${destFile}" (v${version})`);
+                    }
                 }
             }
         } else if (await this.hasLocalChanges(uuid, destPath)) {
@@ -656,14 +759,18 @@ export class SyncEngine {
             this.isLocallyRenamed(uuid) &&
             this.hasRemoteChanges(uuid)
         ) {
-            await this.fetchRemoteToLocalPath(uuid, srcFile, hash);
-            this.output.push(`pull: "${destFile}" to "${srcFile}" (v${version})`);
+            const fetched = await this.fetchRemoteToLocalPath(uuid, srcFile, hash);
+            if (fetched) {
+                this.output.push(`pull: "${destFile}" to "${srcFile}" (v${version})`);
+            }
         } else {
             if (await this.fileMatchesHash(destPath, hash)) {
                 this.updateSyncState(uuid, destFile, destFile, hash, hash);
             } else {
-                await this.fetchRemoteFile(uuid, destFile, hash);
-                this.output.push(`pull: "${destFile}" (v${version})`);
+                const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
+                if (fetched) {
+                    this.output.push(`pull: "${destFile}" (v${version})`);
+                }
             }
         }
     }
@@ -761,7 +868,7 @@ export class SyncEngine {
         uuid: string,
         localFile: string,
         hash: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         const response = await fetch(
             `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
             {
@@ -770,6 +877,16 @@ export class SyncEngine {
             },
         );
 
+        if (response.status === 401) {
+            this.output.push("sync: ERROR API token invalid");
+            throw new Error("API token invalid");
+        }
+        if (response.status === 404) {
+            this.output.push(
+                `pull: SKIPPING "${localFile}", deleted remotely during sync`,
+            );
+            return false;
+        }
         if (!response.ok) {
             throw new Error(`Failed to fetch ${localFile}: HTTP ${response.status}`);
         }
@@ -783,13 +900,14 @@ export class SyncEngine {
             entry.serverHash = hash;
             entry.localHash = hash;
         }
+        return true;
     }
 
     private async fetchRemoteFile(
         uuid: string,
         destFile: string,
         hash: string,
-    ): Promise<void> {
+    ): Promise<boolean> {
         const response = await fetch(
             `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
             {
@@ -798,6 +916,16 @@ export class SyncEngine {
             },
         );
 
+        if (response.status === 401) {
+            this.output.push("sync: ERROR API token invalid");
+            throw new Error("API token invalid");
+        }
+        if (response.status === 404) {
+            this.output.push(
+                `pull: SKIPPING "${destFile}", deleted remotely during sync`,
+            );
+            return false;
+        }
         if (!response.ok) {
             throw new Error(`Failed to fetch ${destFile}: HTTP ${response.status}`);
         }
@@ -807,6 +935,7 @@ export class SyncEngine {
         await this.fs.write(destPath, content);
 
         this.updateSyncState(uuid, destFile, destFile, hash, hash);
+        return true;
     }
 
     private async checkForStaleFiles(): Promise<void> {
@@ -896,6 +1025,9 @@ export class SyncEngine {
     }
 
     private async tryCreateRemoteFile(file: string): Promise<string | null> {
+        if (this.permissionDenied) {
+            return null;
+        }
         const filePath = path.join(this.config.outputDir, file);
         const content = await this.fs.read(filePath);
 
@@ -913,6 +1045,9 @@ export class SyncEngine {
             },
         );
 
+        if (this.handlePushAuthError(response)) {
+            return null;
+        }
         if (response.status === 400 || response.status === 409) {
             const data = await response.json();
             return data.error;

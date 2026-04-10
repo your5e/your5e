@@ -267,11 +267,19 @@ function assert_state_matches_fixture {
                 printf "%s\t%s\n" "$relative" "$hash"
             done | sort
     )
-    diff -u <(echo "$expected") <(cut -f3,4 "$output_dir/.sync-state" | sort)
+    diff -u <(echo "$expected") <(
+        awk -F'\t' '
+            $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC" {
+                print $3 "\t" $4
+            }
+        ' "$output_dir/.sync-state" | sort
+    )
 }
 
 function assert_dir_matches_fixture {
-    diff -ru --exclude=".sync-state" "$output_dir" "$fixtures/campaign-notes"
+    diff -ru \
+        --exclude=".sync-state" \
+        "$output_dir" "$fixtures/campaign-notes"
 }
 
 function assert_success {
@@ -292,9 +300,15 @@ function assert_output_dir_exists {
     [[ -d "$output_dir" ]]
 }
 
-function assert_state_is_empty {
+function assert_state_has_no_files {
     [[ -f "$output_dir/.sync-state" ]]
-    [[ ! -s "$output_dir/.sync-state" ]]
+    local file_count
+    file_count=$(
+        awk -F'\t' '
+            $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC" {print}
+        ' "$output_dir/.sync-state" | wc -l
+    )
+    [[ $file_count -eq 0 ]]
 }
 
 function fail_on_multiple_curl_calls {
@@ -309,6 +323,114 @@ function fail_on_multiple_curl_calls {
         command curl "$@"
     }
     export -f curl
+}
+
+function fail_on_missing_since_parameter {
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        if [[ "$*" == *"-X GET"* ]] || [[ "$*" != *"-X "* ]]; then
+            if [[ "$*" == *"/api/notebooks/"*"/" ]] \
+                    && [[ "$*" != *"/api/notebooks/"*"/"*"/" ]] \
+                    && [[ "$*" != *"since="* ]]; then
+                echo "TEST GUARD: since parameter required but not passed" >&2
+                return 1
+            fi
+        fi
+        command curl "$@"
+    }
+    export -f curl
+}
+
+function fail_on_since_parameter {
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        if [[ "$*" == *"since="* ]]; then
+            echo "TEST GUARD: since parameter forbidden but was passed" >&2
+            return 1
+        fi
+        command curl "$@"
+    }
+    export -f curl
+}
+
+function setup_recent_sync_metadata {
+    awk -F'\t' -v OFS='\t' '
+        $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC"
+    ' "$output_dir/.sync-state" > "$output_dir/.sync-state.tmp" || true
+    printf "LAST_UPDATED\t2020-01-01T00:00:00Z\t\t\t\n" >> "$output_dir/.sync-state.tmp"
+    local now_iso
+    now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    printf "LAST_FULL_SYNC\t%s\t\t\t\n" "$now_iso" >> "$output_dir/.sync-state.tmp"
+    mv "$output_dir/.sync-state.tmp" "$output_dir/.sync-state"
+}
+
+function setup_old_sync_metadata {
+    local state="$output_dir/.sync-state"
+    awk -F'\t' -v OFS='\t' '
+        $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC"
+    ' "$state" > "$state.tmp" || true
+    printf "LAST_UPDATED\t2020-01-01T00:00:00Z\t\t\t\n" >> "$state.tmp"
+    printf "LAST_FULL_SYNC\t2020-01-01T00:00:00Z\t\t\t\n" >> "$state.tmp"
+    mv "$state.tmp" "$state"
+}
+
+function assert_last_updated_matches_expected {
+    local timestamp expected state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    expected=$(cat "$BATS_TEST_DIRNAME/last_update")
+    diff -u <(echo "$expected") <(echo "$timestamp")
+}
+
+function assert_last_updated_exists {
+    local timestamp state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+}
+
+function assert_last_updated_not_set {
+    local timestamp state="$output_dir/.sync-state"
+    [[ ! -f "$state" ]] && return 0
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -z "$timestamp" ]]
+}
+
+function assert_last_updated_is_epoch {
+    local timestamp expected state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    expected="0001-01-01T00:00:00Z"
+    diff -u <(echo "$expected") <(echo "$timestamp")
+}
+
+function assert_sync_metadata_updated {
+    local last_updated last_full_sync state="$output_dir/.sync-state"
+    last_updated=$(
+        awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state"
+    )
+    [[ -n "$last_updated" ]]
+    [[ "$last_updated" != "2020-01-01T00:00:00Z" ]]
+
+    last_full_sync=$(
+        awk -F'\t' '$1 == "LAST_FULL_SYNC" {print $2; exit}' "$state"
+    )
+    [[ -n "$last_full_sync" ]]
+
+    local now last_full_sync_epoch age_seconds
+    now=$(date +%s)
+    last_full_sync_epoch=$(
+        TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last_full_sync" +%s 2>/dev/null \
+            || date -d "$last_full_sync" +%s 2>/dev/null
+    )
+    age_seconds=$((now - last_full_sync_epoch))
+    [[ $age_seconds -lt 60 ]]
+}
+
+function assert_last_updated_unchanged {
+    local timestamp state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ "$timestamp" == "2020-01-01T00:00:00Z" ]]
 }
 
 function assert_file_pushed {

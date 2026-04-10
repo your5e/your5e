@@ -29,11 +29,15 @@ setup() {
             export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/wendy.token")"
         fi
         init_synced_dir
+        setup_recent_sync_metadata
+        fail_on_missing_since_parameter
+    else
+        fail_on_since_parameter
     fi
 }
 
 
-@test "full sync switches to pull when user is viewer" {
+@test "full sync switches to pull" {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/susan.token")"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -55,6 +59,7 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -80,6 +85,7 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -96,6 +102,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -112,6 +119,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -128,6 +136,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -144,6 +153,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -159,6 +169,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -174,6 +185,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -189,6 +201,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -214,6 +227,7 @@ setup() {
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
     assert_state_matches_fixture
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -239,6 +253,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -262,6 +277,7 @@ setup() {
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
     assert_state_matches_fixture
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -286,6 +302,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -309,6 +326,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -334,6 +352,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -356,6 +375,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -381,6 +401,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -403,5 +424,6 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
 }

@@ -9,7 +9,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import type { SyncStateEntry } from "../src/sync/types.js";
@@ -28,6 +28,7 @@ import {
     assertNotInState,
     assertServerFileDeleted,
     assertStateMatchesFixture,
+    assertSyncMetadataUpdated,
     assertTrackedFileDeleted,
     assertTrackedFileIntact,
     assertTrackedFileMatchesFixture,
@@ -55,6 +56,7 @@ describe("subsequent sync push", () => {
     let testDir: string;
     let outputDir: string;
     let initialState: Map<string, SyncStateEntry>;
+    let recentTimestamp: string;
 
     beforeAll(async () => {
         token = await getToken();
@@ -65,40 +67,70 @@ describe("subsequent sync push", () => {
         clearPagesCache();
         ({ testDir, outputDir } = await createTestDir());
         initialState = await initSyncedDir(outputDir, token);
+        recentTimestamp = new Date().toISOString();
     });
 
     afterEach(async () => {
         await cleanupTestDir(testDir);
+        vi.restoreAllMocks();
     });
 
-    test("no change", async () => {
-        const sync = new SyncEngine({
+    function createSync(
+        overrides: {
+            lastFullSync?: string;
+        } = {},
+    ): SyncEngine {
+        return new SyncEngine({
             baseUrl: API_BASE,
             token,
             notebook: "norm/campaign-notes",
             outputDir,
             fileSystem: new NodeFileSystem(),
             initialState,
+            lastUpdate: "2020-01-01T00:00:00Z",
+            lastFullSync: overrides.lastFullSync ?? recentTimestamp,
         });
+    }
+
+    test("no change, outdated timestamp", async () => {
+        const fetchSpy = vi.spyOn(global, "fetch");
+
+        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
 
         const result = await sync.run();
+
+        // Verify full sync (no ?since= parameter)
+        const firstFetch = fetchSpy.mock.calls[0][0];
+        expect(firstFetch).not.toContain("since=");
 
         expect(result.output).toEqual([]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("no change, recent timestamp", async () => {
+        const fetchSpy = vi.spyOn(global, "fetch");
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        // Verify incremental sync (with ?since= parameter, single call)
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const firstFetch = fetchSpy.mock.calls[0][0];
+        expect(firstFetch).toContain("?since=2020-01-01T00%3A00%3A00Z");
+
+        expect(result.output).toEqual([]);
+        await assertDirMatchesFixture(outputDir);
+        await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file", async () => {
         await createFile(outputDir, "scratchpad.txt");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -127,20 +159,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, local edited, directory", async () => {
         await untrackAndRemoveFile(outputDir, initialState, "Bestiary.md");
         await createFile(outputDir, "Bestiary.md/notes.txt");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -167,20 +193,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, local edited", async () => {
         untrackFile(initialState, "Home.md");
         await modifyFile(outputDir, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -205,6 +225,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, remote renamed", async () => {
@@ -216,14 +237,7 @@ describe("subsequent sync push", () => {
         );
         await createFile(outputDir, "characters/NPCs.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -252,6 +266,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, local edited, remote renamed", async () => {
@@ -259,14 +274,7 @@ describe("subsequent sync push", () => {
         await setOlderContent(outputDir, initialState, "Welcome.md");
         await createFile(outputDir, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -293,38 +301,26 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote edited", async () => {
         await setOlderContent(outputDir, initialState, "Bestiary.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
         expect(result.output).toEqual(['pull: "Bestiary.md" (v2)']);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed", async () => {
         await setOlderFilename(outputDir, initialState, "The Old Café.md", "café.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -332,6 +328,7 @@ describe("subsequent sync push", () => {
         expect(result.output).toEqual(expected);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, local edited, directory", async () => {
@@ -343,14 +340,7 @@ describe("subsequent sync push", () => {
         );
         await createFile(outputDir, "characters/NPCs.md/notes.txt");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -378,20 +368,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote edited, remote renamed", async () => {
         await setOlderFilename(outputDir, initialState, "Home.md", "Welcome.md");
         await setOlderContent(outputDir, initialState, "Welcome.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -401,6 +385,7 @@ describe("subsequent sync push", () => {
         ]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, swapped", async () => {
@@ -423,14 +408,7 @@ describe("subsequent sync push", () => {
             "sessions/session-01.md",
         );
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -440,6 +418,7 @@ describe("subsequent sync push", () => {
         ]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, chain", async () => {
@@ -456,14 +435,7 @@ describe("subsequent sync push", () => {
             "sessions/session-01.md",
         );
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -473,6 +445,7 @@ describe("subsequent sync push", () => {
         ]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, chain reversed", async () => {
@@ -484,14 +457,7 @@ describe("subsequent sync push", () => {
             "characters/NPCs.md",
         );
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -501,6 +467,7 @@ describe("subsequent sync push", () => {
         ]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, cycle", async () => {
@@ -509,14 +476,7 @@ describe("subsequent sync push", () => {
         await setOlderFilename(outputDir, initialState, "index.md", "Home.md");
         await setOlderFilename(outputDir, initialState, "temp.md", "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -527,6 +487,7 @@ describe("subsequent sync push", () => {
         ]);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, cycle, local edited", async () => {
@@ -536,14 +497,7 @@ describe("subsequent sync push", () => {
         await setOlderFilename(outputDir, initialState, "temp.md", "index.md");
         await modifyFile(outputDir, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -573,6 +527,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, cycle, untracked file", async () => {
@@ -582,14 +537,7 @@ describe("subsequent sync push", () => {
         await setOlderFilename(outputDir, initialState, "temp.md", "index.md");
         untrackFile(initialState, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -628,19 +576,13 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited", async () => {
         await modifyFile(outputDir, "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -668,6 +610,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited, CRLF line endings", async () => {
@@ -677,14 +620,7 @@ describe("subsequent sync push", () => {
             "First line\r\nSecond line\r\nThird line",
         );
 
-        const sync1 = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync1 = createSync();
 
         // first run, sends the modification, server will normalise line endings
         const result1 = await sync1.run();
@@ -703,6 +639,8 @@ describe("subsequent sync push", () => {
             outputDir,
             fileSystem: new NodeFileSystem(),
             initialState: result1.state,
+            lastUpdate: "2020-01-01T00:00:00Z",
+            lastFullSync: recentTimestamp,
         });
 
         // second run, no changes as the on-server modified Home.md has been pulled
@@ -725,20 +663,14 @@ describe("subsequent sync push", () => {
             result2.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result2.lastUpdate, result2.lastFullSync);
     });
 
     test("local edited, remote edited", async () => {
         await setOlderContent(outputDir, initialState, "Bestiary.md");
         await modifyFile(outputDir, "Bestiary.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -768,6 +700,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited, remote renamed", async () => {
@@ -779,14 +712,7 @@ describe("subsequent sync push", () => {
         );
         await modifyFile(outputDir, "NPCs.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -816,6 +742,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited, remote edited, remote renamed", async () => {
@@ -823,14 +750,7 @@ describe("subsequent sync push", () => {
         await setOlderContent(outputDir, initialState, "Welcome.md");
         await modifyFile(outputDir, "Welcome.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -860,6 +780,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote deleted", async () => {
@@ -870,14 +791,7 @@ describe("subsequent sync push", () => {
             token,
         );
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -900,20 +814,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote deleted, local edited", async () => {
         await fileTracksDeletedRemote(outputDir, initialState, "Old Notes.md", token);
         await modifyFile(outputDir, "Old Notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -942,19 +850,13 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file", async () => {
         await addStaleFile(outputDir, initialState, "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
 
         const result = await sync.run();
 
@@ -976,19 +878,13 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file, remote edited", async () => {
         markFileStale(initialState, "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -996,20 +892,14 @@ describe("subsequent sync push", () => {
         assertNotInState(result.state, "stale-uuid");
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file, local edited", async () => {
         markFileStale(initialState, "index.md");
         await modifyFile(outputDir, "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1034,20 +924,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file, local deleted", async () => {
         await addStaleFile(outputDir, initialState, "my-notes.md");
         await deleteTrackedFile(outputDir, "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
 
         const result = await sync.run();
 
@@ -1055,20 +939,14 @@ describe("subsequent sync push", () => {
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file, local deleted, remote edited", async () => {
         markFileStale(initialState, "index.md");
         await deleteTrackedFile(outputDir, "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1076,19 +954,13 @@ describe("subsequent sync push", () => {
         assertNotInState(result.state, "stale-uuid");
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted", async () => {
         await deleteTrackedFile(outputDir, "index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1109,20 +981,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote edited", async () => {
         await setOlderContent(outputDir, initialState, "Bestiary.md");
         await deleteTrackedFile(outputDir, "Bestiary.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1145,6 +1011,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote renamed", async () => {
@@ -1156,14 +1023,7 @@ describe("subsequent sync push", () => {
         );
         await deleteTrackedFile(outputDir, "NPCs.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1187,6 +1047,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote edited, remote renamed", async () => {
@@ -1194,14 +1055,7 @@ describe("subsequent sync push", () => {
         await setOlderContent(outputDir, initialState, "Welcome.md");
         await deleteTrackedFile(outputDir, "Welcome.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1225,6 +1079,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, local edited, remote edited, remote renamed", async () => {
@@ -1233,14 +1088,7 @@ describe("subsequent sync push", () => {
         await deleteTrackedFile(outputDir, "Welcome.md");
         await createFile(outputDir, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1272,20 +1120,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote deleted", async () => {
         await fileTracksDeletedRemote(outputDir, initialState, "Old Notes.md", token);
         await deleteTrackedFile(outputDir, "Old Notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1307,19 +1149,13 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed", async () => {
         await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1344,20 +1180,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited", async () => {
         await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1389,6 +1219,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, remote edited", async () => {
@@ -1400,14 +1231,7 @@ describe("subsequent sync push", () => {
         );
         await setOlderContent(outputDir, initialState, "renamed-bestiary.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1433,6 +1257,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited, remote edited", async () => {
@@ -1445,14 +1270,7 @@ describe("subsequent sync push", () => {
         await setOlderContent(outputDir, initialState, "renamed-bestiary.md");
         await modifyFile(outputDir, "renamed-bestiary.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1484,20 +1302,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, remote renamed", async () => {
         await setOlderFilename(outputDir, initialState, "index.md", "original.md");
         await renameLocalFile(outputDir, initialState, "original.md", "my-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1521,6 +1333,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited, remote renamed", async () => {
@@ -1528,14 +1341,7 @@ describe("subsequent sync push", () => {
         await renameLocalFile(outputDir, initialState, "original.md", "my-index.md");
         await modifyFile(outputDir, "my-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1568,6 +1374,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, remote edited, remote renamed", async () => {
@@ -1575,14 +1382,7 @@ describe("subsequent sync push", () => {
         await setOlderContent(outputDir, initialState, "original.md");
         await renameLocalFile(outputDir, initialState, "original.md", "my-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1609,6 +1409,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited, remote edited, remote renamed", async () => {
@@ -1617,14 +1418,7 @@ describe("subsequent sync push", () => {
         await renameLocalFile(outputDir, initialState, "original.md", "my-index.md");
         await modifyFile(outputDir, "my-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1657,20 +1451,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, remote deleted", async () => {
         await fileTracksDeletedRemote(outputDir, initialState, "Old Notes.md", token);
         await renameLocalFile(outputDir, initialState, "Old Notes.md", "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1702,6 +1490,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited, remote deleted", async () => {
@@ -1709,14 +1498,7 @@ describe("subsequent sync push", () => {
         await renameLocalFile(outputDir, initialState, "Old Notes.md", "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1749,20 +1531,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, stale file", async () => {
         await addStaleFile(outputDir, initialState, "original.md");
         await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
 
         const result = await sync.run();
 
@@ -1784,6 +1560,7 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed, local edited, stale file", async () => {
@@ -1791,14 +1568,7 @@ describe("subsequent sync push", () => {
         await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
 
         const result = await sync.run();
 
@@ -1827,19 +1597,13 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed untracked, hash match", async () => {
         await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1865,20 +1629,14 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local renamed untracked, hash mismatch", async () => {
         await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -1912,5 +1670,6 @@ describe("subsequent sync push", () => {
             result.state,
             "World Regions/Northern Kingdoms/Frosthold.md",
         );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 });

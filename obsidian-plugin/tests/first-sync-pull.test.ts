@@ -7,7 +7,7 @@
  * Ported from tests/first_sync_pull.bats
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import {
@@ -19,6 +19,8 @@ import {
     assertFileNotDownloaded,
     assertFileNotInState,
     assertFileUnchanged,
+    assertLastUpdateIsEpoch,
+    assertLastUpdateMatchesExpected,
     assertOutputDirExists,
     assertStateIsEmpty,
     assertStateMatchesFixture,
@@ -42,21 +44,39 @@ describe("first sync pull", () => {
     beforeEach(async () => {
         restoreDatabase();
         ({ testDir, outputDir } = await createTestDir());
+
+        const originalFetch = global.fetch;
+        vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+            const url = typeof input === "string" ? input : input.url;
+            if (url.includes("since=")) {
+                throw new Error("TEST GUARD: since parameter forbidden but was passed");
+            }
+            return originalFetch(input, init);
+        });
     });
 
     afterEach(async () => {
         await cleanupTestDir(testDir);
+        vi.restoreAllMocks();
     });
 
-    test("empty directory", async () => {
-        const sync = new SyncEngine({
+    function createSync(
+        overrides: {
+            notebook?: string;
+        } = {},
+    ): SyncEngine {
+        return new SyncEngine({
             baseUrl: API_BASE,
             token,
-            notebook: "norm/campaign-notes",
+            notebook: overrides.notebook ?? "norm/campaign-notes",
             outputDir,
             fileSystem: new NodeFileSystem(),
             pullOnly: true,
         });
+    }
+
+    test("empty directory", async () => {
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -75,23 +95,18 @@ describe("first sync pull", () => {
         await assertFileNotDownloaded(outputDir, "Old Notes.md", result.state);
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("empty notebook", async () => {
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/empty-notebook",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync({ notebook: "norm/empty-notebook" });
 
         const result = await sync.run();
 
         expect(result.output).toEqual([]);
         await assertOutputDirExists(outputDir);
         assertStateIsEmpty(result.state);
+        assertLastUpdateIsEpoch(result.lastUpdate);
     });
 
     test("local files", async () => {
@@ -100,14 +115,7 @@ describe("first sync pull", () => {
         await createFile(outputDir, "notes.txt");
         await createFile(outputDir, "sessions/notes.txt");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -137,19 +145,13 @@ describe("first sync pull", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("local matches remote", async () => {
         await copyFixture(outputDir, "Home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -167,19 +169,13 @@ describe("first sync pull", () => {
 
         await assertDirMatchesFixture(outputDir);
         await assertStateMatchesFixture(result.state);
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("local file clashes", async () => {
         await createFile(outputDir, "sessions");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -212,19 +208,13 @@ describe("first sync pull", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("local dir clashes", async () => {
         await createFile(outputDir, "Bestiary.md/notes.txt");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -253,20 +243,14 @@ describe("first sync pull", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("hidden files ignored", async () => {
         await createFile(outputDir, ".hidden.md");
         await createFile(outputDir, ".obsidian/app.json");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -285,19 +269,13 @@ describe("first sync pull", () => {
         await assertFileUnchanged(outputDir, ".hidden.md");
         await assertFileUnchanged(outputDir, ".obsidian/app.json");
         await assertStateMatchesFixture(result.state);
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("case collision", async () => {
         await createFile(outputDir, "home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -327,19 +305,13 @@ describe("first sync pull", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
     test("case collision, matches", async () => {
         await copyFixture(outputDir, "Home.md", "home.md");
 
-        const sync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            pullOnly: true,
-        });
+        const sync = createSync();
 
         const result = await sync.run();
 
@@ -369,5 +341,6 @@ describe("first sync pull", () => {
             "World Regions/Northern Kingdoms/Frosthold.md",
             result.state,
         );
+        await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 });

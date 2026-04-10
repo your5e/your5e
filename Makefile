@@ -56,6 +56,10 @@ server-tests:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db-test psql -U your5e postgres \
 		-c "DROP DATABASE IF EXISTS your5e_seed" \
 		-c "CREATE DATABASE your5e_seed WITH TEMPLATE your5e_test"
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db-test \
+		psql -U your5e -d your5e_seed -tA -c \
+		"SELECT to_char(GREATEST(COALESCE(MAX(v.created_at), '-infinity'), COALESCE(MAX(p.deleted_at), '-infinity')), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM wikis_page p LEFT JOIN wikis_version v ON v.page_id = p.id WHERE p.wiki_id = 2" \
+		| tr -d '\n' > tests/last_update
 
 server-tests-down:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
@@ -69,6 +73,7 @@ test-sync-integration:
 	bats tests/*.bats
 
 test-obsidian-plugin:
+	tests/check-page-size-sync.sh
 	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
 	cd obsidian-plugin && npm run lint && npm test
 

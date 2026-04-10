@@ -20,6 +20,7 @@ setup_file() {
 }
 
 setup() {
+    fail_on_since_parameter
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
 }
@@ -57,5 +58,6 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_exists
     [ $status -eq 0 ]
 }

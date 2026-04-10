@@ -1,12 +1,17 @@
 import hashlib
 import re
+from datetime import timedelta
 from http import HTTPStatus
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
+from api.notebooks.views import PAGE_SIZE
 from api.tests import ApiMixin
 from notebooks.models import Notebook
-from notebooks.tests import NotebookMixin
+from notebooks.tests import PNG_BYTES, NotebookMixin
+from wikis.models import Page
 
 TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
@@ -19,6 +24,16 @@ class NotebookApiMixin(ApiMixin, NotebookMixin):
     def get_page_hash(self, path):
         page = self.wendys_notebook.get_page(path=path)
         return page.latest_version.content.hash
+
+    def assert_notebook_pages_response_structure(self, response):
+        assert set(response.json().keys()) == {
+            "next",
+            "previous",
+            "editable",
+            "results",
+            "total_results",
+            "last_update",
+        }
 
 
 @pytest.mark.django_db
@@ -111,7 +126,6 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_cursor_pagination(self, api_client):
-        from api.notebooks.views import PAGE_SIZE
         for i in range(PAGE_SIZE + 2):
             Notebook.objects.create(
                 name=f"Notebook {i:02d}",
@@ -394,13 +408,12 @@ class TestNotebookPages(NotebookApiMixin):
     def test_response_structure(self, api_client):
         response = api_client.get("/api/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.OK
-        assert set(response.json().keys()) == {
-            "next",
-            "previous",
-            "editable",
-            "results",
-            "total_results",
-        }
+        self.assert_notebook_pages_response_structure(response)
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
@@ -452,9 +465,7 @@ class TestNotebookPages(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter(self, api_client):
-        from django.utils import timezone
-
-        cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (timezone.now() - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         updated = self.wendys_notebook.get_page(path="notes")
         updated.update(
@@ -466,6 +477,7 @@ class TestNotebookPages(NotebookApiMixin):
 
         deleted = self.wendys_notebook.get_page(path="links")
         deleted.soft_delete()
+        deleted.refresh_from_db()
 
         response = api_client.get(
             "/api/notebooks/wendy/heros-legendes/",
@@ -477,11 +489,13 @@ class TestNotebookPages(NotebookApiMixin):
                 for p in response.json()["results"]
         }
         assert filenames == {"notes.md", "links.md"}
+        expected_last_update = deleted.deleted_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_no_updates(self, api_client):
-        from django.utils import timezone
-
         cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         response = api_client.get(
@@ -490,12 +504,17 @@ class TestNotebookPages(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.OK
         assert response.json()["results"] == []
+        assert "last_update" in response.json()
+        assert TIMESTAMP_PATTERN.match(response.json()["last_update"])
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_unix_timestamp(self, api_client):
-        from django.utils import timezone
-
-        cutoff = int(timezone.now().timestamp())
+        cutoff = int(timezone.now().timestamp()) - 1
 
         page = self.wendys_notebook.get_page(path="notes")
         page.update(
@@ -533,10 +552,56 @@ class TestNotebookPages(NotebookApiMixin):
         assert response.json() == {"error": "Invalid timestamp format."}
 
     @ApiMixin.as_api_user("wendy")
-    def test_cursor_pagination(self, api_client):
-        from api.notebooks.views import PAGE_SIZE
-        from wikis.models import Page
+    def test_since_using_last_update_no_changes(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
+        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        last_update = response.json()["last_update"]
+        assert last_update == expected_last_update
+
+        response = api_client.get(
+            "/api/notebooks/wendy/heros-legendes/",
+            {"since": last_update},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()["results"]) == 0
+        assert "last_update" in response.json()
+        assert TIMESTAMP_PATTERN.match(response.json()["last_update"])
+        assert response.json()["last_update"] == expected_last_update
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_using_last_update_one_change(self, api_client):
+        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        last_update = response.json()["last_update"]
+
+        page = self.wendys_notebook.get_page(path="notes")
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes\n\nUpdated after last_update.",
+            created_by=self.wendy,
+        )
+        page.refresh_from_db()
+
+        response = api_client.get(
+            "/api/notebooks/wendy/heros-legendes/",
+            {"since": last_update},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()["results"]) == 1
+        assert response.json()["results"][0]["filename"] == "notes.md"
+        expected_last_update = page.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
+
+    @ApiMixin.as_api_user("wendy")
+    def test_cursor_pagination(self, api_client):
         for i in range(PAGE_SIZE + 2):
             page = Page.objects.create(wiki=self.wendys_notebook)
             page.update(
@@ -557,13 +622,28 @@ class TestNotebookPages(NotebookApiMixin):
         assert second_page.json()["previous"] is not None
 
     @ApiMixin.as_api_user("wendy")
+    def test_empty_notebook(self, api_client):
+        response = api_client.get("/api/notebooks/wendy/wendy-s-secret/")
+        assert response.status_code == HTTPStatus.OK
+        self.assert_notebook_pages_response_structure(response)
+        assert response.json()["results"] == []
+        assert response.json()["total_results"] == 0
+        assert response.json()["editable"] is True
+        assert response.json()["next"] is None
+        assert response.json()["previous"] is None
+        assert response.json()["last_update"] == "0001-01-01T00:00:00Z"
+
+        # this epoch timestamp is still valid for '?since=...'
+        response = api_client.get(
+            "/api/notebooks/wendy/wendy-s-secret/",
+            {"since": response.json()["last_update"]},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["results"] == []
+
+    @ApiMixin.as_api_user("wendy")
     def test_since_filter_with_pagination(self, api_client):
-        from django.utils import timezone
-
-        from api.notebooks.views import PAGE_SIZE
-        from wikis.models import Page
-
-        cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (timezone.now() - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for i in range(PAGE_SIZE + 2):
             page = Page.objects.create(wiki=self.wendys_notebook)
@@ -606,7 +686,6 @@ class TestPageContent(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        from notebooks.tests import PNG_BYTES
         uuid = self.get_page_uuid("heroes/shield.png")
         response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
@@ -683,7 +762,6 @@ class TestPageContent(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -814,7 +892,6 @@ class TestPageContentPut(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_with_conflict_returns_conflict(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -865,7 +942,6 @@ class TestPageContentPut(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -1082,7 +1158,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -1138,7 +1213,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_conflict(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -1158,7 +1232,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_conflict_resolved_by_filename(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -1178,7 +1251,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_filename_also_conflicts(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="existing.md",
             mime_type="text/markdown",
@@ -1403,7 +1475,6 @@ class TestPageContentPatchRevert(NotebookApiMixin):
 @pytest.mark.django_db
 class TestPageCreate(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("test.md", b"# New Page")},
@@ -1414,7 +1485,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("new-page.md", b"# New Page")},
@@ -1424,7 +1494,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("editor-page.md", b"# Editor Page")},
@@ -1434,7 +1503,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("viewer-page.md", b"# Viewer Page")},
@@ -1445,7 +1513,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("user-page.md", b"# User Page")},
@@ -1456,7 +1523,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         content = b"# Response Test\n\nContent here.\n"
         content_hash = hashlib.sha256(content).hexdigest()
         response = api_client.post(
@@ -1481,7 +1547,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_content_retrievable(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         content = b"# Retrievable\n\nThis content should be retrievable.\n"
         create_response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
@@ -1496,7 +1561,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_override(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1512,7 +1576,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_with_directory(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1528,9 +1591,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_image_upload(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        from notebooks.tests import PNG_BYTES
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("test-image.png", PNG_BYTES)},
@@ -1543,7 +1603,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_no_file_extension_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("noextension", b"# No Extension")},
@@ -1554,7 +1613,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_override_no_extension_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1568,7 +1626,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_page_already_exists_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("index.md", b"# Duplicate")},
@@ -1579,7 +1636,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_path_conflict_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("Index.md", b"# Path Conflict")},
@@ -1600,7 +1656,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/no-such-notebook/",
             data={"file": SimpleUploadedFile("test.md", b"# Test")},
@@ -1611,7 +1666,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/nobody/some-notebook/",
             data={"file": SimpleUploadedFile("test.md", b"# Test")},
@@ -1622,7 +1676,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile(".hidden.md", b"# Hidden")},
@@ -1633,7 +1686,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_in_directory_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("folder/.hidden.md", b"# Hidden")},
@@ -1644,7 +1696,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_directory_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1658,7 +1709,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_parent_path_is_file_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1672,7 +1722,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_grandparent_path_is_file_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1686,7 +1735,6 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_creating_sanitises_crlf_line_endings(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
             "/api/notebooks/wendy/heros-legendes/",
             data={
@@ -1781,7 +1829,6 @@ class TestPageContentDelete(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
