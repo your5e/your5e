@@ -7,21 +7,25 @@ export interface FolderMapping {
     token?: string;
 }
 
-export interface SyncStateData {
-    [uuid: string]: {
-        uuid: string;
-        serverFilename: string;
-        localFilename: string;
-        serverHash: string;
-        localHash: string;
-    };
+export interface SyncStateEntry {
+    uuid: string;
+    serverFilename: string;
+    localFilename: string;
+    serverHash: string;
+    localHash: string;
+}
+
+export interface FolderSyncState {
+    entries: { [uuid: string]: SyncStateEntry };
+    lastUpdate?: string;
+    lastFullSync?: string;
 }
 
 export interface PluginSettings {
     baseUrl: string;
     token: string;
     folders: FolderMapping[];
-    syncStates: { [folder: string]: SyncStateData };
+    syncStates: { [folder: string]: FolderSyncState };
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {

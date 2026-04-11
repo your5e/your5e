@@ -4,7 +4,7 @@ import { Your5eSyncSettingTab } from "./settings-tab.js";
 import { DEFAULT_BASE_URL, DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
 import { NodeFileSystem } from "./sync/node-fs.js";
 import { SyncEngine } from "./sync/sync-engine.js";
-import type { SyncConfig, SyncStateEntry } from "./sync/types.js";
+import type { SyncConfig, SyncResult, SyncStateEntry } from "./sync/types.js";
 
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
@@ -34,7 +34,8 @@ export default class Your5eSyncPlugin extends Plugin {
         }
 
         for (const folderMapping of this.settings.folders) {
-            const baseUrl = folderMapping.baseUrl || this.settings.baseUrl || DEFAULT_BASE_URL;
+            const baseUrl =
+                folderMapping.baseUrl || this.settings.baseUrl || DEFAULT_BASE_URL;
             const token = folderMapping.token || this.settings.token;
 
             if (!baseUrl || !token) {
@@ -45,7 +46,7 @@ export default class Your5eSyncPlugin extends Plugin {
             const vaultPath = (this.app.vault.adapter as any).basePath as string;
             const outputDir = path.join(vaultPath, folderMapping.folder);
 
-            const initialState = this.loadFolderState(folderMapping.folder);
+            const folderState = this.loadFolderState(folderMapping.folder);
 
             const config: SyncConfig = {
                 baseUrl,
@@ -53,7 +54,9 @@ export default class Your5eSyncPlugin extends Plugin {
                 notebook: folderMapping.notebook,
                 outputDir,
                 fileSystem: new NodeFileSystem(),
-                initialState,
+                initialState: folderState.state,
+                lastUpdate: folderState.lastUpdate,
+                lastFullSync: folderState.lastFullSync,
             };
 
             try {
@@ -64,7 +67,7 @@ export default class Your5eSyncPlugin extends Plugin {
                     console.log(`[${folderMapping.folder}] ${line}`);
                 }
 
-                this.saveFolderState(folderMapping.folder, result.state);
+                this.saveFolderState(folderMapping.folder, result);
                 await this.saveSettings();
             } catch (error) {
                 console.error(
@@ -78,32 +81,44 @@ export default class Your5eSyncPlugin extends Plugin {
         }
     }
 
-    private loadFolderState(folder: string): Map<string, SyncStateEntry> {
+    private loadFolderState(folder: string): {
+        state: Map<string, SyncStateEntry>;
+        lastUpdate?: string;
+        lastFullSync?: string;
+    } {
         if (!this.settings.syncStates) {
             this.settings.syncStates = {};
         }
 
-        const stateData = this.settings.syncStates[folder];
-        if (!stateData) {
-            return new Map();
+        const folderState = this.settings.syncStates[folder];
+        if (!folderState) {
+            return { state: new Map() };
         }
 
         const state = new Map<string, SyncStateEntry>();
-        for (const [uuid, entry] of Object.entries(stateData)) {
+        for (const [uuid, entry] of Object.entries(folderState.entries)) {
             state.set(uuid, entry);
         }
-        return state;
+        return {
+            state,
+            lastUpdate: folderState.lastUpdate,
+            lastFullSync: folderState.lastFullSync,
+        };
     }
 
-    private saveFolderState(folder: string, state: Map<string, SyncStateEntry>): void {
+    private saveFolderState(folder: string, result: SyncResult): void {
         if (!this.settings.syncStates) {
             this.settings.syncStates = {};
         }
 
-        const stateData: { [uuid: string]: SyncStateEntry } = {};
-        for (const [uuid, entry] of state) {
-            stateData[uuid] = entry;
+        const entries: { [uuid: string]: SyncStateEntry } = {};
+        for (const [uuid, entry] of result.state) {
+            entries[uuid] = entry;
         }
-        this.settings.syncStates[folder] = stateData;
+        this.settings.syncStates[folder] = {
+            entries,
+            lastUpdate: result.lastUpdate,
+            lastFullSync: result.lastFullSync,
+        };
     }
 }

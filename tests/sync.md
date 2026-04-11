@@ -163,3 +163,7 @@ notebook.
 ### `sync_pagination.bats`
 
 Ensure the script correctly fetches when there are more than `PAGE_SIZE` pages.
+
+| Test |
+|------|
+| sync fetches all pages across pagination boundaries |
