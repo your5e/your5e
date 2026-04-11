@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { Notice, Plugin } from "obsidian";
 import { Your5eSyncSettingTab } from "./settings-tab.js";
-import { DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
+import { DEFAULT_BASE_URL, DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
 import { NodeFileSystem } from "./sync/node-fs.js";
 import { SyncEngine } from "./sync/sync-engine.js";
 import type { SyncConfig, SyncStateEntry } from "./sync/types.js";
@@ -34,7 +34,7 @@ export default class Your5eSyncPlugin extends Plugin {
         }
 
         for (const folderMapping of this.settings.folders) {
-            const baseUrl = folderMapping.baseUrl || this.settings.baseUrl;
+            const baseUrl = folderMapping.baseUrl || this.settings.baseUrl || DEFAULT_BASE_URL;
             const token = folderMapping.token || this.settings.token;
 
             if (!baseUrl || !token) {

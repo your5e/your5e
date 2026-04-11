@@ -1,9 +1,9 @@
 {
-    "id": "your5e-sync",
-    "name": "Your5e Sync",
+    "id": "your5e-folder-sync",
+    "name": "Your5e Folder Sync",
     "version": "0.0.1",
     "minAppVersion": "1.0.0",
-    "description": "Synchronise vault folders with Your5e notebooks",
+    "description": "Synchronise Your5e notebooks with folders in your vault",
     "author": "Your5e",
     "isDesktopOnly": true
 }

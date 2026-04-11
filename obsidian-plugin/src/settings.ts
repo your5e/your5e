@@ -1,3 +1,5 @@
+export const DEFAULT_BASE_URL = "https://your5e.com";
+
 export interface FolderMapping {
     folder: string;
     notebook: string;

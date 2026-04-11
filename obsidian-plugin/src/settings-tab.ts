@@ -1,6 +1,6 @@
 import { type App, PluginSettingTab, Setting } from "obsidian";
 import type Your5eSyncPlugin from "./main.js";
-import type { FolderMapping } from "./settings.js";
+import { DEFAULT_BASE_URL, type FolderMapping } from "./settings.js";
 
 export class Your5eSyncSettingTab extends PluginSettingTab {
     plugin: Your5eSyncPlugin;
@@ -16,24 +16,22 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl("h2", { text: "Your5e Sync Settings" });
-
         new Setting(containerEl)
-            .setName("Base URL")
-            .setDesc("Default API endpoint for Your5e")
+            .setName("API Base URL")
+            .setDesc("Optional")
             .addText((text) =>
                 text
-                    .setPlaceholder("https://your5e.example.com")
+                    .setPlaceholder(DEFAULT_BASE_URL)
                     .setValue(this.plugin.settings.baseUrl)
                     .onChange(async (value) => {
-                        this.plugin.settings.baseUrl = value.trim();
+                        this.plugin.settings.baseUrl = value.trim().replace(/\/+$/, "");
                         await this.plugin.saveSettings();
                     }),
             );
 
         new Setting(containerEl)
             .setName("API Token")
-            .setDesc("Default API token for authentication")
+            .setDesc("Required")
             .addText((text) =>
                 text
                     .setPlaceholder("your-api-token")
@@ -63,7 +61,11 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         );
     }
 
-    hide(): void {
+    async hide(): Promise<void> {
+        this.plugin.settings.folders = this.plugin.settings.folders.filter(
+            (m) => m.folder || m.notebook,
+        );
+        await this.plugin.saveSettings();
         this.plugin.settingsOpen = false;
     }
 
@@ -72,22 +74,23 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         mapping: FolderMapping,
         index: number,
     ): void {
-        const settingContainer = containerEl.createDiv("setting-item-container");
+        const isComplete = mapping.folder && mapping.notebook;
+        const wrapper = containerEl.createDiv("setting-item");
+        const details = wrapper.createEl("details");
+        if (!isComplete) {
+            details.setAttribute("open", "");
+        }
 
-        new Setting(settingContainer)
-            .setName(`Folder ${index + 1}`)
-            .addButton((button) =>
-                button
-                    .setButtonText("Remove")
-                    .setWarning()
-                    .onClick(async () => {
-                        this.plugin.settings.folders.splice(index, 1);
-                        await this.plugin.saveSettings();
-                        this.display();
-                    }),
-            );
+        details.createEl("summary", {
+            text: isComplete
+                ? `${mapping.folder}: ${mapping.notebook}`
+                : "New mapping",
+        });
 
-        new Setting(settingContainer)
+        const content = details.createDiv();
+        content.createDiv("setting-item");
+
+        new Setting(content)
             .setName("Vault folder")
             .setDesc("Path to folder in vault (relative to vault root)")
             .addText((text) =>
@@ -100,7 +103,7 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                     }),
             );
 
-        new Setting(settingContainer)
+        new Setting(content)
             .setName("Notebook ID")
             .setDesc("Your5e notebook identifier")
             .addText((text) =>
@@ -113,20 +116,20 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                     }),
             );
 
-        new Setting(settingContainer)
-            .setName("Override Base URL")
+        new Setting(content)
+            .setName("Override API URL")
             .setDesc("Optional: use a different API endpoint for this folder")
             .addText((text) =>
                 text
-                    .setPlaceholder("Leave empty to use default")
+                    .setPlaceholder(this.plugin.settings.baseUrl || DEFAULT_BASE_URL)
                     .setValue(mapping.baseUrl || "")
                     .onChange(async (value) => {
-                        mapping.baseUrl = value.trim() || undefined;
+                        mapping.baseUrl = value.trim().replace(/\/+$/, "") || undefined;
                         await this.plugin.saveSettings();
                     }),
             );
 
-        new Setting(settingContainer)
+        new Setting(content)
             .setName("Override API Token")
             .setDesc("Optional: use a different API token for this folder")
             .addText((text) =>
@@ -138,5 +141,16 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     }),
             );
+
+        new Setting(content).addButton((button) =>
+            button
+                .setButtonText("Remove")
+                .setWarning()
+                .onClick(async () => {
+                    this.plugin.settings.folders.splice(index, 1);
+                    await this.plugin.saveSettings();
+                    this.display();
+                }),
+        );
     }
 }
