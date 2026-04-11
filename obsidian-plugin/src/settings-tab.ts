@@ -32,14 +32,28 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("API Token")
             .setDesc("Required")
-            .addText((text) =>
-                text
-                    .setPlaceholder("your-api-token")
+            .addText((text) => {
+                text.inputEl.type = "password";
+                text.setPlaceholder("your-api-token")
                     .setValue(this.plugin.settings.token)
                     .onChange(async (value) => {
                         this.plugin.settings.token = value.trim();
                         await this.plugin.saveSettings();
-                    }),
+                    });
+            })
+            .addExtraButton((button) =>
+                button.setIcon("eye").onClick(() => {
+                    const input = button.extraSettingsEl.parentElement?.querySelector(
+                        "input",
+                    ) as HTMLInputElement;
+                    if (input.type === "password") {
+                        input.type = "text";
+                        button.setIcon("eye-off");
+                    } else {
+                        input.type = "password";
+                        button.setIcon("eye");
+                    }
+                }),
             );
 
         containerEl.createEl("h3", { text: "Folder Mappings" });
@@ -82,9 +96,7 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         }
 
         details.createEl("summary", {
-            text: isComplete
-                ? `${mapping.folder}: ${mapping.notebook}`
-                : "New mapping",
+            text: isComplete ? `${mapping.folder}: ${mapping.notebook}` : "New mapping",
         });
 
         const content = details.createDiv();
@@ -132,14 +144,28 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         new Setting(content)
             .setName("Override API Token")
             .setDesc("Optional: use a different API token for this folder")
-            .addText((text) =>
-                text
-                    .setPlaceholder("Leave empty to use default")
+            .addText((text) => {
+                text.inputEl.type = "password";
+                text.setPlaceholder("Leave empty to use default")
                     .setValue(mapping.token || "")
                     .onChange(async (value) => {
                         mapping.token = value.trim() || undefined;
                         await this.plugin.saveSettings();
-                    }),
+                    });
+            })
+            .addExtraButton((button) =>
+                button.setIcon("eye").onClick(() => {
+                    const input = button.extraSettingsEl.parentElement?.querySelector(
+                        "input",
+                    ) as HTMLInputElement;
+                    if (input.type === "password") {
+                        input.type = "text";
+                        button.setIcon("eye-off");
+                    } else {
+                        input.type = "password";
+                        button.setIcon("eye");
+                    }
+                }),
             );
 
         new Setting(content).addButton((button) =>
