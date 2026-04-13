@@ -168,7 +168,7 @@ function find_untracked_file_by_hash {
 function fetch_remote_state {
     local notebook="$1"
     local incremental_sync="$2"
-    local next_page="${base_url}/api/notebooks/${notebook}/"
+    local next_page="${base_url}/v1/notebooks/${notebook}/"
     local body first_page=1 http_code response
 
     if [[ -f "$state_file" && $incremental_sync -eq 1 ]]; then
@@ -841,7 +841,7 @@ function rename_remote_file {
             --request PATCH \
             --header "Content-Type: application/json" \
             --data "$payload" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
 
     local http_code body
@@ -893,7 +893,7 @@ function delete_remote_file {
     response=$(
         do_curl \
             --request DELETE \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
     http_code=$(echo "$response" | tail -1)
 
@@ -937,7 +937,7 @@ function create_remote_file {
             --request POST \
             --form "file=@$filepath" \
             --form "filename=$file" \
-            "${base_url}/api/notebooks/${notebook}/"
+            "${base_url}/v1/notebooks/${notebook}/"
     )
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
@@ -992,7 +992,7 @@ function update_remote_file {
             --request PUT \
             --header "Content-Type: $mime_type" \
             --data-binary "@$filepath" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
@@ -1053,7 +1053,7 @@ function fetch_remote_file {
     response=$(
         do_curl \
             --output "$tmp" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
     http_code=$(echo "$response" | tail -1)
 

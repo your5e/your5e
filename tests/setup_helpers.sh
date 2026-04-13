@@ -4,8 +4,8 @@
 declare fixtures output_dir BATS_FILE_TMPDIR
 
 function restore_database {
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e postgres >/dev/null 2>&1 <<-SQL
         SELECT pg_terminate_backend(pid)
             FROM pg_stat_activity WHERE datname = 'your5e_test';
@@ -16,7 +16,7 @@ function restore_database {
 
 function setup_pages_file {
     curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/" \
         | jq -r '
             .results[]
             | [.filename, .uuid, .content_hash, (.deleted_at // "")]
@@ -329,8 +329,8 @@ function fail_on_missing_since_parameter {
     # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
     curl() {
         if [[ "$*" == *"-X GET"* ]] || [[ "$*" != *"-X "* ]]; then
-            if [[ "$*" == *"/api/notebooks/"*"/" ]] \
-                    && [[ "$*" != *"/api/notebooks/"*"/"*"/" ]] \
+            if [[ "$*" == *"/v1/notebooks/"*"/" ]] \
+                    && [[ "$*" != *"/v1/notebooks/"*"/"*"/" ]] \
                     && [[ "$*" != *"since="* ]]; then
                 echo "TEST GUARD: since parameter required but not passed" >&2
                 return 1
@@ -448,7 +448,7 @@ function assert_file_pushed {
 
     response=$(curl -s -i \
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/$uuid")
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid")
     headers=$(echo "$response" | sed '/^\r$/q' | tr -d '\r')
     body=$(echo "$response" | sed '1,/^\r$/d')
 
@@ -471,7 +471,7 @@ function assert_server_file_deleted {
     local response
     response=$(curl -s \
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/" \
         | jq -r ".results[] | select(.filename == \"$filename\") | .deleted_at")
     [[ -n "$response" && "$response" != "null" ]]
 }
@@ -489,8 +489,8 @@ function assert_file_deleted_on_server {
 function invalidate_token {
     local token="$1"
     local token_key="${token:0:15}"
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e your5e_test \
         -c "DELETE FROM users_authtoken WHERE token_key = '$token_key'" \
         >/dev/null 2>&1
@@ -498,8 +498,8 @@ function invalidate_token {
 
 function downgrade_to_viewer {
     local username="$1" notebook_owner="$2" notebook_slug="$3"
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e your5e_test \
         -c "UPDATE notebooks_notebookpermission SET role = 'viewer'
             FROM users_user u, notebooks_notebook n
@@ -514,8 +514,8 @@ function downgrade_to_viewer {
 
 function delete_page_by_uuid {
     local page_uuid="$1"
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e your5e_test \
         -c "UPDATE wikis_page SET deleted_at = NOW()
             WHERE uuid = '$page_uuid'" \

@@ -150,7 +150,7 @@ export class SyncEngine {
     }
 
     private async fetchRemoteState(): Promise<boolean> {
-        let baseUrl = `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/`;
+        let baseUrl = `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/`;
 
         // Add ?since= parameter for incremental sync
         if (this.isIncrementalSync && this.lastUpdate) {
@@ -306,7 +306,7 @@ export class SyncEngine {
         // rename it back before deleting as local change takes precedence
         if (remote.filename !== entry.localFilename) {
             const renameResponse = await fetch(
-                `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+                `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
                 {
                     method: "PATCH",
                     headers: {
@@ -334,7 +334,7 @@ export class SyncEngine {
 
         const remoteEdited = remote.content_hash !== entry.serverHash;
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "DELETE",
                 headers: { Authorization: `Token ${this.config.token}` },
@@ -393,7 +393,7 @@ export class SyncEngine {
         }
 
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "PATCH",
                 headers: {
@@ -456,7 +456,7 @@ export class SyncEngine {
         }
 
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "PUT",
                 headers: {
@@ -870,7 +870,7 @@ export class SyncEngine {
         hash: string,
     ): Promise<boolean> {
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
@@ -909,7 +909,7 @@ export class SyncEngine {
         hash: string,
     ): Promise<boolean> {
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/${uuid}`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
@@ -1036,7 +1036,7 @@ export class SyncEngine {
         formData.append("filename", file);
 
         const response = await fetch(
-            `${this.config.baseUrl}/api/notebooks/${this.config.notebook}/`,
+            `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/`,
             {
                 method: "POST",
                 headers: { Authorization: `Token ${this.config.token}` },

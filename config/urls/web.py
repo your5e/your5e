@@ -3,18 +3,6 @@ from django.contrib.auth.views import LogoutView
 from django.urls import path, re_path, reverse_lazy
 from django.views.generic import RedirectView
 
-from api.notebooks.views import (
-    NotebookInternalView,
-    NotebookPagesView,
-    NotebookPrivateView,
-    NotebookPublicView,
-    NotebookUserView,
-    PageContentView,
-)
-from api.notebooks.views import (
-    NotebookListView as ApiNotebookListView,
-)
-from api.views import PingView
 from campaigns.views import (
     CampaignCreateView,
     CampaignDeleteView,
@@ -69,47 +57,6 @@ urlpatterns = [
         route="logout",
         name="logout",
         view=LogoutView.as_view(next_page="/"),
-    ),
-
-    path(
-        route="api/ping",
-        name="api_ping",
-        view=PingView.as_view(),
-    ),
-    path(
-        route="api/notebooks/",
-        name="api_notebooks",
-        view=ApiNotebookListView.as_view(),
-    ),
-    path(
-        route="api/notebooks/public",
-        name="api_notebooks_public",
-        view=NotebookPublicView.as_view(),
-    ),
-    path(
-        route="api/notebooks/internal",
-        name="api_notebooks_internal",
-        view=NotebookInternalView.as_view(),
-    ),
-    path(
-        route="api/notebooks/private",
-        name="api_notebooks_private",
-        view=NotebookPrivateView.as_view(),
-    ),
-    path(
-        route="api/notebooks/<str:username>/",
-        name="api_notebooks_user",
-        view=NotebookUserView.as_view(),
-    ),
-    path(
-        route="api/notebooks/<str:username>/<str:slug>/",
-        name="api_notebook_pages",
-        view=NotebookPagesView.as_view(),
-    ),
-    path(
-        route="api/notebooks/<str:username>/<str:slug>/<str:uuid>",
-        name="api_page_content",
-        view=PageContentView.as_view(),
     ),
 
     re_path(

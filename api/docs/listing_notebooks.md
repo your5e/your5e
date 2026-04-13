@@ -9,7 +9,7 @@ The response structure is:
 
 ```json
 {
-  "next": "/api/notebooks/?cursor=...",
+  "next": "/v1/notebooks/?cursor=...",
   "previous": null,
   "results": [
     {
@@ -17,7 +17,7 @@ The response structure is:
       "slug": "campaign-notes",
       "owner": "norm",
       "visibility": "public",
-      "url": "/api/notebooks/norm/campaign-notes/",
+      "url": "/v1/notebooks/norm/campaign-notes/",
       "html_url": "https://your5e.com/notebooks/norm/campaign-notes/",
       "last_updated": "2024-01-15T10:30:00Z",
       "copied_from": null,
@@ -37,7 +37,7 @@ Arguments:
   included in the response)
 
 
-## GET `/api/notebooks`
+## GET `/v1/notebooks`
 
 Lists all notebooks you have access to:
 
@@ -47,23 +47,23 @@ Lists all notebooks you have access to:
 - public notebooks
 
 
-## GET `/api/notebooks/public`
+## GET `/v1/notebooks/public`
 
 Lists all public notebooks.
 
 
-## GET `/api/notebooks/internal`
+## GET `/v1/notebooks/internal`
 
 Lists all notebooks shared to all users but not public.
 
 
-## GET `/api/notebooks/private`
+## GET `/v1/notebooks/private`
 
 Lists all private notebooks, either that you own or are directly shared with
 you.
 
 
-## GET `/api/notebooks/{username}/`
+## GET `/v1/notebooks/{username}/`
 
 Lists notebooks owned by that user that you have access to.
 

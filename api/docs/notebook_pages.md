@@ -3,7 +3,7 @@
 Operations on individual pages within a notebook.
 
 
-## POST `/api/notebooks/{username}/{notebook-slug}/`
+## POST `/v1/notebooks/{username}/{notebook-slug}/`
 
 Create a new page in the notebook. Accepts a multipart form with:
 
@@ -20,7 +20,7 @@ allowed.
 ```json
 {
   "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "url": "/api/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "/v1/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "html_url": "https://your5e.com/notebooks/norm/campaign-notes/new-page",
   "filename": "New Page.md",
   "mime_type": "text/markdown",
@@ -47,7 +47,7 @@ Returns _409 Conflict_ if a page with the same path already exists, or the
 path would be nested under an existing file.
 
 
-## GET `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+## GET `/v1/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Returns the current content of a page, with the appropriate `Content-Type`
 header.
@@ -60,7 +60,7 @@ Returns _404 Not Found_ if the notebook or page does not exist, you don't have
 access, the page has been deleted, or the specified version does not exist.
 
 
-## PATCH `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+## PATCH `/v1/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Update a page's metadata. Rename a page, revert it to an older version, or
 restore a deleted page. A new version is created with the change.
@@ -120,7 +120,7 @@ have access.
 ```json
 {
   "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "url": "/api/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "/v1/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "html_url": "https://your5e.com/notebooks/norm/campaign-notes/new-name",
   "filename": "New Name.md",
   "mime_type": "text/markdown",
@@ -144,7 +144,7 @@ Returns _409 Conflict_ if the target path is occupied by another page, or the
 path would be nested under an existing file.
 
 
-## PUT `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+## PUT `/v1/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Update the content of a page, creating a new version. The request body
 should be the raw content, with the appropriate `Content-Type` header.
@@ -164,7 +164,7 @@ by another page. Use PATCH with a new filename to restore with a different
 name.
 
 
-## DELETE `/api/notebooks/{username}/{notebook-slug}/{uuid}`
+## DELETE `/v1/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Soft-delete a page. The page can be restored using PATCH with `restore`, or
 by updating its content with PUT.

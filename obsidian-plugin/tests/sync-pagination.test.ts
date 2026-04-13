@@ -42,7 +42,7 @@ describe("sync pagination", () => {
                 `curl -s -X POST \\
           -H "Authorization: Token ${token}" \\
           -F "file=@-;filename=page-${i}.md" \\
-          "${API_BASE}/api/notebooks/norm/campaign-notes/" \\
+          "${API_BASE}/v1/notebooks/norm/campaign-notes/" \\
           <<< "# Page ${i}"`,
                 { cwd: PROJECT_ROOT, stdio: "pipe", shell: "/bin/bash" },
             );

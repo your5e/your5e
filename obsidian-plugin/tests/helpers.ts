@@ -9,7 +9,7 @@ import type { SyncStateEntry } from "../src/sync/types.js";
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURES_DIR = path.join(PROJECT_ROOT, "tests/fixtures");
 
-export const API_BASE = "http://localhost:5844";
+export const API_BASE = "http://localhost:5854";
 
 export async function getToken(user = "norm"): Promise<string> {
     const tokenFile = path.join(PROJECT_ROOT, `tests/${user}.token`);
@@ -19,8 +19,8 @@ export async function getToken(user = "norm"): Promise<string> {
 export function restoreDatabase(): void {
     execSync(
         `
-    COMPOSE_FILE=docker-compose.test.yml \\
-    docker compose -p your5e-test exec -T db-test \\
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
       psql -U your5e postgres <<-SQL
         SELECT pg_terminate_backend(pid)
           FROM pg_stat_activity WHERE datname = 'your5e_test';
@@ -240,7 +240,7 @@ export async function assertFilePushed(
     expect(actualHash).toBe(entry.serverHash);
 
     const response = await fetch(
-        `${API_BASE}/api/notebooks/norm/campaign-notes/${entry.uuid}`,
+        `${API_BASE}/v1/notebooks/norm/campaign-notes/${entry.uuid}`,
         { headers: { Authorization: `Token ${token}` } },
     );
 
@@ -301,7 +301,7 @@ async function fetchPagesData(token: string): Promise<PageData[]> {
         return cachedPages;
     }
 
-    const response = await fetch(`${API_BASE}/api/notebooks/norm/campaign-notes/`, {
+    const response = await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/`, {
         headers: { Authorization: `Token ${token}` },
     });
     const data = await response.json();
@@ -633,7 +633,7 @@ export async function assertServerFileDeleted(
     filename: string,
     token: string,
 ): Promise<void> {
-    const response = await fetch(`${API_BASE}/api/notebooks/norm/campaign-notes/`, {
+    const response = await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/`, {
         headers: { Authorization: `Token ${token}` },
     });
     const data = await response.json();
@@ -667,8 +667,8 @@ export function invalidateToken(token: string): void {
     const tokenKey = token.slice(0, 15);
     execSync(
         `
-    COMPOSE_FILE=docker-compose.test.yml \\
-    docker compose -p your5e-test exec -T db-test \\
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
       psql -U your5e your5e_test \\
       -c "DELETE FROM users_authtoken WHERE token_key = '${tokenKey}'"
   `,
@@ -683,8 +683,8 @@ export function downgradeToViewer(
 ): void {
     execSync(
         `
-    COMPOSE_FILE=docker-compose.test.yml \\
-    docker compose -p your5e-test exec -T db-test \\
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
       psql -U your5e your5e_test \\
       -c "UPDATE notebooks_notebookpermission SET role = 'viewer'
           FROM users_user u, notebooks_notebook n
@@ -702,8 +702,8 @@ export function downgradeToViewer(
 export function deletePageByUuid(uuid: string): void {
     execSync(
         `
-    COMPOSE_FILE=docker-compose.test.yml \\
-    docker compose -p your5e-test exec -T db-test \\
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
       psql -U your5e your5e_test \\
       -c "UPDATE wikis_page SET deleted_at = NOW() WHERE uuid = '${uuid}'"
   `,
