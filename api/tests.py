@@ -26,6 +26,14 @@ class ApiMixin(UserMixin):
 
 
 @pytest.mark.django_db
+class TestHealth:
+    def test_health_returns_ok(self):
+        response = APIClient().get("/v1/health")
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.django_db
 class TestPing(ApiMixin):
     def test_ping_without_token_returns_unauthorized(self, api_client):
         response = api_client.get("/v1/ping")

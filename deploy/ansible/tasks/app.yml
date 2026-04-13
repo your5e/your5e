@@ -47,5 +47,8 @@
       - /opt/stacks/app-stack.yml
     state: present
 
-- name: Update app service
+- name: Update web service
   command: docker service update --force --image ghcr.io/your5e/your5e:latest your5e_web
+
+- name: Update api service
+  command: docker service update --force --image ghcr.io/your5e/your5e:latest your5e_api

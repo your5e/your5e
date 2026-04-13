@@ -6,7 +6,7 @@
 # scenarios that any sync client implementation should consider.
 
 api_token="${YOUR5E_API_TOKEN:-}"
-base_url="${YOUR5E_API_BASE:-http://localhost:5843}"
+base_url="${YOUR5E_API_BASE:-https://api.your5e.com}"
 debounce_seconds=300
 poll_seconds=900
 pull_only=0
@@ -1335,7 +1335,7 @@ function usage {
     sed -e 's/^        //' >&2 <<-EOF
         Usage: $0 [options] <notebook> <dir>
 
-            -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5843)
+            -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5844)
             -d SECS  Debounce seconds (default: 300)
             -i SECS  Poll interval seconds (default: 900)
             -p       Pull only (do not push local changes)

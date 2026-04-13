@@ -3,7 +3,7 @@
 All API requests must include an authentication token.
 
 ```
-curl -H "Authorization: Token [token]" https://your5e.com/v1/ping
+curl -H "Authorization: Token [token]" https://api.your5e.com/v1/ping
 ```
 
 Token are generated and revoked via your profile. You can name them to help

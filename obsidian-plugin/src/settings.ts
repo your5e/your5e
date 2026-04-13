@@ -1,4 +1,4 @@
-export const DEFAULT_BASE_URL = "https://your5e.com";
+export const DEFAULT_BASE_URL = "https://api.your5e.com";
 
 export interface FolderMapping {
     folder: string;

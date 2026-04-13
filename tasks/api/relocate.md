@@ -18,5 +18,5 @@ Create `settings/` package with `base.py`, `web.py`, `api.py` and corresponding
 
 Add `api` service to Swarm stack, using the same image as web.
 
-- [ ] update terraform, `app-stack.yml`, and collectstatic
-- [ ] update API docs
+- [X] update terraform, `app-stack.yml`, and collectstatic
+- [X] update API docs
