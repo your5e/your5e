@@ -7,8 +7,8 @@
 
 api_token="${YOUR5E_API_TOKEN:-}"
 base_url="${YOUR5E_API_BASE:-https://api.your5e.com}"
-debounce_seconds=300
-poll_seconds=900
+debounce_seconds=180
+poll_seconds=600
 pull_only=0
 verbose=0
 watch=0
@@ -578,14 +578,22 @@ function check_for_stale_files {
     done < "$state_file"
 }
 
+function calculate_next_poll_time {
+    local now flutter flutter_max
+    now=$(date +%s)
+    flutter_max=$(( poll_seconds / 10 ))
+    flutter=$(( (RANDOM % (flutter_max * 2 + 1)) - flutter_max ))
+    echo $(( now + poll_seconds + flutter ))
+}
+
 function watch_for_changes {
     local notebook="$1"
     local output_dir="$2"
     local -a pending_events=()
-    local last_event_time=0 last_sync_time now real_output_dir
+    local last_event_time=0 next_poll_time now real_output_dir
 
     real_output_dir=$(cd "$output_dir" && pwd -P)
-    last_sync_time=$(date +%s)
+    next_poll_time=$(calculate_next_poll_time)
 
     log_watch_event "watching '${real_output_dir}' for changes"
 
@@ -601,7 +609,6 @@ function watch_for_changes {
                 "${filepath#"$real_output_dir"/}" \
                 "${event#*:}"
         else
-            local now
             now=$(date +%s)
             if [[ ${#pending_events[@]} -gt 0 \
                     && $((now - last_event_time)) -ge $debounce_seconds ]]; then
@@ -609,11 +616,11 @@ function watch_for_changes {
                 sync_notebook "$notebook" "$output_dir"
                 log_watch_event "----"
                 pending_events=()
-                last_sync_time=$now
-            elif [[ $((now - last_sync_time)) -ge $poll_seconds ]]; then
+                next_poll_time=$(calculate_next_poll_time)
+            elif [[ $now -ge $next_poll_time ]]; then
                 log_watch_event "polling remote"
                 sync_notebook "$notebook" "$output_dir"
-                last_sync_time=$now
+                next_poll_time=$(calculate_next_poll_time)
             fi
         fi
     done < <(fswatch --format='%p:%f' --exclude '.sync-state' "$output_dir")
@@ -1336,8 +1343,8 @@ function usage {
         Usage: $0 [options] <notebook> <dir>
 
             -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5844)
-            -d SECS  Debounce seconds (default: 300)
-            -i SECS  Poll interval seconds (default: 900)
+            -d SECS  Debounce seconds (default: 180)
+            -i SECS  Poll interval seconds (default: 600)
             -p       Pull only (do not push local changes)
             -t TOKEN API token (default: \$YOUR5E_API_TOKEN)
             -v       Verbose (show debug output in watch mode)
