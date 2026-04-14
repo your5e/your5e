@@ -54,6 +54,7 @@ export default class Your5eSyncPlugin extends Plugin {
                 notebook: folderMapping.notebook,
                 outputDir,
                 fileSystem: new NodeFileSystem(),
+                pullOnly: folderMapping.pullOnly,
                 initialState: folderState.state,
                 lastUpdate: folderState.lastUpdate,
                 lastFullSync: folderState.lastFullSync,

@@ -11,7 +11,8 @@ can read and use elsewhere.
 
 ## Getting Started
 
-- [[using-notebooks|Using notebooks]] — creating and organising your personal wiki
+- [[Using notebooks]] — creating and organising your personal wiki
+- [[Sync plugin]] — sync notebooks with your Obsidian vault
 
 ## For Developers
 

@@ -371,18 +371,21 @@ class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView
         )
 
 
-class NotebookSettingsView(NotebookSettingsMixin, NotebookFromURLMixin, View):
-    @NotebookPermissions.owner_required
-    def get(self, request, username, slug):
-        breadcrumbs = [
+class NotebookSettingsView(NotebookSettingsMixin, NotebookFromURLMixin, TemplateView):
+    template_name = "notebooks/settings.html"
+
+    @NotebookPermissions.view_required
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
             {"name": self.object.name, "url": self.object.get_absolute_url()},
             {"name": "Settings"},
         ]
-        return render(
-            request,
-            "notebooks/settings.html",
-            self.get_context_data(breadcrumbs=breadcrumbs),
-        )
+        context["is_owner"] = self.object.owner == self.request.user
+        return context
 
 
 class NotebookDeletedPagesView(NotebookContextMixin, NotebookFromURLMixin, View):
@@ -641,24 +644,25 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookFromPOSTMixin, Vi
 
         return redirect(self.object)
 
+    def render_settings_with_error(self, request, error):
+        return render(
+            request,
+            "notebooks/settings.html",
+            self.get_context_data(error=error, is_owner=True),
+        )
+
     def handle_add(self, request, confirm):
         username = request.POST.get("username")
         role = request.POST.get("role")
 
         if not username:
-            return render(
-                request,
-                "notebooks/settings.html",
-                self.get_context_data(error="No username provided"),
-            )
+            return self.render_settings_with_error(request, "No username provided")
 
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
-            return render(
-                request,
-                "notebooks/settings.html",
-                self.get_context_data(error=f"User '{username}' not found"),
+            return self.render_settings_with_error(
+                request, f"User '{username}' not found"
             )
 
         if not confirm:

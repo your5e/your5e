@@ -20,104 +20,116 @@
 {% endblock %}
 
 {% block page_content %}
-  <h2>Visibility</h2>
-  <p>
-    <strong>Private</strong> notebooks are only shown to you and named collaborators (below).<br>
-    <strong>Internal</strong> notebooks are only readable by any logged-in user who has the URL.<br>
-    <strong>Public</strong> notebooks are readable by anyone on the internet who as the URL.
-  </p>
-  <form method="post" action="{% url 'notebook_visibility' %}">
-    {% csrf_token %}
-    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-    <label>
-      Visibility:
-      <select name="visibility">
-        {% for value, label in visibility_choices %}
-          <option value="{{ value }}"{% if notebook.visibility == value %} selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="submit">Change</button>
-  </form>
-
-  <h2>Collaborators</h2>
-  <p>
-    <strong>Editors</strong> can add, edit, and delete pages (deleted pages
-    are kept for at least two weeks and are restorable).<br>
-    <strong>Viewers</strong> can only read pages.
-  </p>
-  {% for cn in notebook.campaign_notebooks.all %}
-    {% if cn.is_wiki %}
-      <p>
-        Campaign players are automatically editors of the wiki and cannot be
-        removed or downgraded here. Manage campaign membership from the
-        <a href="{% url 'campaign_settings' username=cn.campaign.owner.username slug=cn.campaign.slug %}"
-           class="permanent"
-             >campaign settings</a>.
-      </p>
-    {% endif %}
-  {% endfor %}
-  {% if collaborators %}
-    <ul>
-      {% for permission in collaborators %}
-        <li>
-          {% if notebook|is_wiki_and_player_in_that_campaign:permission.user %}
-            <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
-            Editor (campaign player)
-          {% else %}
-            <form method="post" action="{% url 'notebook_collaborators' %}">
-              {% csrf_token %}
-              <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-              <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
-              <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
-              <select name="role">
-                <option value="editor" {% if permission.role == "editor" %}selected{% endif %}>Editor</option>
-                <option value="viewer" {% if permission.role == "viewer" %}selected{% endif %}>Viewer</option>
-              </select>
-              <button type="submit">Change</button>
-              <button type="submit" name="remove" value="{{ permission.user.pk }}">Remove</button>
-            </form>
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-
-  <p>Add a <strong>new</strong> collaborator:</p>
-  <form method="post" action="{% url 'notebook_collaborators' %}">
-    {% csrf_token %}
-    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-    {% if error %}
-      <p class="error">{{ error }}</p>
-    {% endif %}
-    <input type="text" name="username" placeholder="Username">
-    <select name="role">
-      <option value="editor">Editor</option>
-      <option value="viewer">Viewer</option>
-    </select>
-    <button type="submit">Add</button>
-  </form>
-
-  <hr>
-
-  <h2>Rename the notebook</h2>
-  <p>This will change the URL.</p>
-  <form method="post" action="{% url 'notebook_rename' %}">
-    {% csrf_token %}
-    <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-    <input type="text" name="name" value="{{ notebook.name }}">
-    <button type="submit">Rename</button>
-  </form>
-
-  <h2>Delete Notebook</h2>
-  {% if notebook.is_campaign_wiki %}
-    <p>This notebook is a campaign wiki and cannot be deleted while the campaign still exists.</p>
-  {% else %}
-    <p>This will remove the contents with no window for recovery.</p>
-    <form method="post" action="{% url 'notebook_delete' %}">
+  {% if is_owner %}
+    <h2>Visibility</h2>
+    <p>
+      <strong>Private</strong> notebooks are only shown to you and named collaborators (below).<br>
+      <strong>Internal</strong> notebooks are only readable by any logged-in user who has the URL.<br>
+      <strong>Public</strong> notebooks are readable by anyone on the internet who as the URL.
+    </p>
+    <form method="post" action="{% url 'notebook_visibility' %}">
       {% csrf_token %}
       <input type="hidden" name="notebook" value="{{ notebook.pk }}">
-      <button type="submit" class="danger">Delete notebook</button>
+      <label>
+        Visibility:
+        <select name="visibility">
+          {% for value, label in visibility_choices %}
+            <option value="{{ value }}"{% if notebook.visibility == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Change</button>
     </form>
+
+    <h2>Collaborators</h2>
+    <p>
+      <strong>Editors</strong> can add, edit, and delete pages (deleted pages
+      are kept for at least two weeks and are restorable).<br>
+      <strong>Viewers</strong> can only read pages.
+    </p>
+    {% for cn in notebook.campaign_notebooks.all %}
+      {% if cn.is_wiki %}
+        <p>
+          Campaign players are automatically editors of the wiki and cannot be
+          removed or downgraded here. Manage campaign membership from the
+          <a href="{% url 'campaign_settings' username=cn.campaign.owner.username slug=cn.campaign.slug %}"
+             class="permanent"
+               >campaign settings</a>.
+        </p>
+      {% endif %}
+    {% endfor %}
+    {% if collaborators %}
+      <ul>
+        {% for permission in collaborators %}
+          <li>
+            {% if notebook|is_wiki_and_player_in_that_campaign:permission.user %}
+              <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
+              Editor (campaign player)
+            {% else %}
+              <form method="post" action="{% url 'notebook_collaborators' %}">
+                {% csrf_token %}
+                <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+                <input type="hidden" name="change_role" value="{{ permission.user.pk }}">
+                <a href="{% url 'profile' username=permission.user.username %}">{{ permission.user.username }}</a>
+                <select name="role">
+                  <option value="editor" {% if permission.role == "editor" %}selected{% endif %}>Editor</option>
+                  <option value="viewer" {% if permission.role == "viewer" %}selected{% endif %}>Viewer</option>
+                </select>
+                <button type="submit">Change</button>
+                <button type="submit" name="remove" value="{{ permission.user.pk }}">Remove</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <p>Add a <strong>new</strong> collaborator:</p>
+    <form method="post" action="{% url 'notebook_collaborators' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      {% if error %}
+        <p class="error">{{ error }}</p>
+      {% endif %}
+      <input type="text" name="username" placeholder="Username">
+      <select name="role">
+        <option value="editor">Editor</option>
+        <option value="viewer">Viewer</option>
+      </select>
+      <button type="submit">Add</button>
+    </form>
+
+    <hr>
+
+    <h2>Rename the notebook</h2>
+    <p>This will change the URL.</p>
+    <form method="post" action="{% url 'notebook_rename' %}">
+      {% csrf_token %}
+      <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+      <input type="text" name="name" value="{{ notebook.name }}">
+      <button type="submit">Rename</button>
+    </form>
+  {% endif %}
+
+  <h2>Syncing</h2>
+  <p>
+    To sync this notebook with <a href="{% url 'help' path='sync-plugin' %}">Obsidian</a>,
+    use this ID: <code>{{ notebook.owner.username }}/{{ notebook.slug }}</code>
+  </p>
+
+  {% if is_owner %}
+    <hr>
+
+    <h2>Delete Notebook</h2>
+    {% if notebook.is_campaign_wiki %}
+      <p>This notebook is a campaign wiki and cannot be deleted while the campaign still exists.</p>
+    {% else %}
+      <p>This will remove the contents with no window for recovery.</p>
+      <form method="post" action="{% url 'notebook_delete' %}">
+        {% csrf_token %}
+        <input type="hidden" name="notebook" value="{{ notebook.pk }}">
+        <button type="submit" class="danger">Delete notebook</button>
+      </form>
+    {% endif %}
   {% endif %}
 {% endblock %}

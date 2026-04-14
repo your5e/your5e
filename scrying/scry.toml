@@ -33,6 +33,9 @@ path = "/help/"
 [pages.help-api]
 path = "/help/api/listing-notebooks"
 
+[pages.help-obsidian-plugin]
+path = "/help/obsidian-plugin"
+
 [pages.user-profile-anon]
 path = "/profile/norm"
 

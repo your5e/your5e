@@ -22,5 +22,12 @@ per folder. Per-folder config is vault folder, notebook ID (and overrides).
 - [ ] add 'show sync log' for the ribbon, but not on by default
 - [ ] add sync status to statusbar, context menu includes opening the log
 
+Community plugin submission requires a standalone GitHub repository.
+Use `git subtree` to publish the plugin directory to a separate repo:
+
+```bash
+git subtree push --prefix=obsidian-plugin plugin-origin main
+```
+
 - [ ] submit to Obsidian community plugins repository for automatic
       distribution

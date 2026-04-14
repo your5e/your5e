@@ -100,7 +100,7 @@ ansible-os:
 ansible-app:
 	cd deploy/ansible && ansible-playbook app.yml
 
-build:
+build: build-obsidian-plugin
 	docker build --platform linux/amd64 --target prod --build-arg GIT_SHA=$$(git rev-parse --short HEAD) -t ghcr.io/your5e/your5e:latest .
 	docker push ghcr.io/your5e/your5e:latest
 

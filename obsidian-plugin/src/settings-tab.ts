@@ -17,19 +17,6 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         containerEl.empty();
 
         new Setting(containerEl)
-            .setName("API Base URL")
-            .setDesc("Optional")
-            .addText((text) =>
-                text
-                    .setPlaceholder(DEFAULT_BASE_URL)
-                    .setValue(this.plugin.settings.baseUrl)
-                    .onChange(async (value) => {
-                        this.plugin.settings.baseUrl = value.trim().replace(/\/+$/, "");
-                        await this.plugin.saveSettings();
-                    }),
-            );
-
-        new Setting(containerEl)
             .setName("API Token")
             .setDesc("Required")
             .addText((text) => {
@@ -56,7 +43,20 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                 }),
             );
 
-        containerEl.createEl("h3", { text: "Folder Mappings" });
+        new Setting(containerEl)
+            .setName("API Base URL")
+            .setDesc("Optional")
+            .addText((text) =>
+                text
+                    .setPlaceholder(DEFAULT_BASE_URL)
+                    .setValue(this.plugin.settings.baseUrl)
+                    .onChange(async (value) => {
+                        this.plugin.settings.baseUrl = value.trim().replace(/\/+$/, "");
+                        await this.plugin.saveSettings();
+                    }),
+            );
+
+        containerEl.createEl("h3", { text: "Synchronised Folders" });
 
         for (let i = 0; i < this.plugin.settings.folders.length; i++) {
             const mapping = this.plugin.settings.folders[i];
@@ -64,7 +64,7 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         }
 
         new Setting(containerEl).addButton((button) =>
-            button.setButtonText("Add folder mapping").onClick(async () => {
+            button.setButtonText("Add new folder").onClick(async () => {
                 this.plugin.settings.folders.push({
                     folder: "",
                     notebook: "",
@@ -103,8 +103,8 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         content.createDiv("setting-item");
 
         new Setting(content)
-            .setName("Vault folder")
-            .setDesc("Path to folder in vault (relative to vault root)")
+            .setName("Folder")
+            .setDesc("Location of the folder in the vault")
             .addText((text) =>
                 text
                     .setPlaceholder("MyNotes")
@@ -124,19 +124,6 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                     .setValue(mapping.notebook)
                     .onChange(async (value) => {
                         mapping.notebook = value.trim();
-                        await this.plugin.saveSettings();
-                    }),
-            );
-
-        new Setting(content)
-            .setName("Override API URL")
-            .setDesc("Optional: use a different API endpoint for this folder")
-            .addText((text) =>
-                text
-                    .setPlaceholder(this.plugin.settings.baseUrl || DEFAULT_BASE_URL)
-                    .setValue(mapping.baseUrl || "")
-                    .onChange(async (value) => {
-                        mapping.baseUrl = value.trim().replace(/\/+$/, "") || undefined;
                         await this.plugin.saveSettings();
                     }),
             );
@@ -165,6 +152,29 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                         input.type = "password";
                         button.setIcon("eye");
                     }
+                }),
+            );
+
+        new Setting(content)
+            .setName("Override API URL")
+            .setDesc("Optional: use a different API endpoint for this folder")
+            .addText((text) =>
+                text
+                    .setPlaceholder(this.plugin.settings.baseUrl || DEFAULT_BASE_URL)
+                    .setValue(mapping.baseUrl || "")
+                    .onChange(async (value) => {
+                        mapping.baseUrl = value.trim().replace(/\/+$/, "") || undefined;
+                        await this.plugin.saveSettings();
+                    }),
+            );
+
+        new Setting(content)
+            .setName("Pull only")
+            .setDesc("Only download changes from the server, never push")
+            .addToggle((toggle) =>
+                toggle.setValue(mapping.pullOnly ?? false).onChange(async (value) => {
+                    mapping.pullOnly = value || undefined;
+                    await this.plugin.saveSettings();
                 }),
             );
 

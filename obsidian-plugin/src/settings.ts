@@ -1,3 +1,5 @@
+import type { SyncStateEntry } from "./sync/types.js";
+
 export const DEFAULT_BASE_URL = "https://api.your5e.com";
 
 export interface FolderMapping {
@@ -5,14 +7,7 @@ export interface FolderMapping {
     notebook: string;
     baseUrl?: string;
     token?: string;
-}
-
-export interface SyncStateEntry {
-    uuid: string;
-    serverFilename: string;
-    localFilename: string;
-    serverHash: string;
-    localHash: string;
+    pullOnly?: boolean;
 }
 
 export interface FolderSyncState {

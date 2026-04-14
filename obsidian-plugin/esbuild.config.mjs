@@ -1,4 +1,5 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import process from "node:process";
 import esbuild from "esbuild";
 
@@ -52,3 +53,13 @@ if (watch) {
 
 mkdirSync("dist", { recursive: true });
 copyFileSync("manifest.json", "dist/manifest.json");
+
+if (!watch) {
+    const manifest = JSON.parse(readFileSync("manifest.json", "utf-8"));
+    const zipName = `${manifest.id}-${manifest.version}.zip`;
+    const staticDir = "../static/downloads";
+
+    mkdirSync(staticDir, { recursive: true });
+    execSync(`zip -j ${staticDir}/${zipName} dist/main.js dist/manifest.json`);
+    console.log(`Created ${staticDir}/${zipName}`);
+}

@@ -86,44 +86,47 @@ class TestSyncApiDocs:
 
 @pytest.mark.django_db
 class TestHelpPageView:
-    @pytest.fixture
-    def help_index(self):
+    def create_help_page(self, filename, data):
         wiki = HelpWiki.objects.get()
         user = User.objects.get(username="help")
         page = Page.objects.create(wiki=wiki)
         page.update(
-            filename="Index.md",
+            filename=filename,
             mime_type="text/markdown",
-            data=b"# Help\n\nWelcome to the help section.",
+            data=data,
             created_by=user,
         )
         return page
+
+    @pytest.fixture
+    def help_index(self):
+        return self.create_help_page(
+            "Index.md",
+            b"# Help\n\nWelcome to the help section.",
+        )
 
     @pytest.fixture
     def help_page(self):
-        wiki = HelpWiki.objects.get()
-        user = User.objects.get(username="help")
-        page = Page.objects.create(wiki=wiki)
-        page.update(
-            filename="api/Overview.md",
-            mime_type="text/markdown",
-            data=b"# API Overview\n\nWelcome to the API.",
-            created_by=user,
+        return self.create_help_page(
+            "api/Overview.md",
+            b"# API Overview\n\nWelcome to the API.",
         )
-        return page
 
     @pytest.fixture
     def api_index(self):
-        wiki = HelpWiki.objects.get()
-        user = User.objects.get(username="help")
-        page = Page.objects.create(wiki=wiki)
-        page.update(
-            filename="api/Index.md",
-            mime_type="text/markdown",
-            data=b"# API\n\nAPI documentation.",
-            created_by=user,
+        return self.create_help_page(
+            "api/Index.md",
+            b"# API\n\nAPI documentation.",
         )
-        return page
+
+    @pytest.fixture
+    def obsidian_plugin_page(self):
+        return self.create_help_page(
+            "obsidian-plugin.md",
+            b"# Obsidian Plugin\n\n"
+            b"Sync your notebooks.\n\n"
+            b"Create an API token from [your profile](/profile/).",
+        )
 
     def test_index_serves_root_page(self, client, help_index):
         response = client.get("/help/")
@@ -157,3 +160,13 @@ class TestHelpPageView:
     def test_returns_404_for_nonexistent_page(self, client):
         response = client.get("/help/api/nonexistent")
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_obsidian_plugin_page_links_to_token_management(
+        self, client, obsidian_plugin_page
+    ):
+        response = client.get("/help/obsidian-plugin")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "Obsidian Plugin" in content
+        assert "/profile/" in content
+        assert "token" in content.lower()
