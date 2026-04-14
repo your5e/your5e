@@ -62,3 +62,72 @@ function loadFolderState(saved: unknown): Partial<SyncConfig> {
         lastFullSync: data.lastFullSync,
     };
 }
+
+describe("folder state isolation", () => {
+    it("each folder has independent state", () => {
+        const syncStates: { [folder: string]: unknown } = {};
+
+        const resultA: SyncResult = {
+            output: [],
+            state: new Map([
+                [
+                    "uuid-a1",
+                    {
+                        uuid: "uuid-a1",
+                        serverFilename: "notes/session-1.md",
+                        localFilename: "notes/session-1.md",
+                        serverHash: "hash-a1",
+                        localHash: "hash-a1",
+                    },
+                ],
+            ]),
+            lastUpdate: "2025-01-15T10:00:00Z",
+            lastFullSync: "2025-01-15T10:00:00Z",
+        };
+
+        const resultB: SyncResult = {
+            output: [],
+            state: new Map([
+                [
+                    "uuid-b1",
+                    {
+                        uuid: "uuid-b1",
+                        serverFilename: "characters/hero.md",
+                        localFilename: "characters/hero.md",
+                        serverHash: "hash-b1",
+                        localHash: "hash-b1",
+                    },
+                ],
+                [
+                    "uuid-b2",
+                    {
+                        uuid: "uuid-b2",
+                        serverFilename: "characters/villain.md",
+                        localFilename: "characters/villain.md",
+                        serverHash: "hash-b2",
+                        localHash: "hash-b2",
+                    },
+                ],
+            ]),
+            lastUpdate: "2025-01-16T12:00:00Z",
+            lastFullSync: "2025-01-16T12:00:00Z",
+        };
+
+        syncStates["Campaign/Notes"] = saveFolderState(resultA);
+        syncStates["Campaign/Characters"] = saveFolderState(resultB);
+
+        const loadedA = loadFolderState(syncStates["Campaign/Notes"]);
+        const loadedB = loadFolderState(syncStates["Campaign/Characters"]);
+
+        expect(loadedA.initialState?.size).toBe(1);
+        expect(loadedA.initialState?.has("uuid-a1")).toBe(true);
+        expect(loadedA.initialState?.has("uuid-b1")).toBe(false);
+        expect(loadedA.lastUpdate).toBe("2025-01-15T10:00:00Z");
+
+        expect(loadedB.initialState?.size).toBe(2);
+        expect(loadedB.initialState?.has("uuid-b1")).toBe(true);
+        expect(loadedB.initialState?.has("uuid-b2")).toBe(true);
+        expect(loadedB.initialState?.has("uuid-a1")).toBe(false);
+        expect(loadedB.lastUpdate).toBe("2025-01-16T12:00:00Z");
+    });
+});

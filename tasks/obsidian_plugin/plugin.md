@@ -10,12 +10,19 @@ per folder. Per-folder config is vault folder, notebook ID (and overrides).
         - syncs once per minute for testing
 
 - [X] do not sync when editing config
-- [ ] prove each folder has its own state
+- [X] prove each folder has its own state
 - [X] sync each folder on a different irregular interval around 10 minutes,
       to avoid swamping the server with multiple notebooks configured
-- [ ] prove updates to files outside of the target folder do not trigger
-      sync unnecessarily
 - [X] initial sync on launch should also not swamp the server
+
+Push updates more readily than waiting for sync.
+
+- [ ] watch for changes, debounce, push after 3 minutes of inactivity
+        - prove updates trigger sync outside of the normal window, and reset
+          the sync timer
+        - prove updates to files outside of the target folder do not trigger
+
+Add more control and observability to sync.
 
 - [ ] add 'sync now' to command palette
 - [ ] add 'show sync log' to command palette
