@@ -59,9 +59,9 @@ RUN SECRET_KEY=build DB_NAME=x DB_USER=x DB_PASSWORD=x DB_HOST=x DB_PORT=5432 \
         DJANGO_SETTINGS_MODULE=config.settings.web \
         python manage.py collectstatic --no-input
 
-CMD sh -c '\
-    WSGI=${DJANGO_SETTINGS_MODULE/settings/wsgi}; \
-    gunicorn ${WSGI}.application \
-        --bind 0.0.0.0:8000 \
-        --workers 2 \
-        --preload'
+CMD [ \
+    "gunicorn", "config.wsgi.web:application", \
+    "--bind", "0.0.0.0:8000", \
+    "--workers", "2", \
+    "--preload" \
+]

@@ -34,6 +34,12 @@ services:
 
   api:
     image: ghcr.io/your5e/your5e:latest
+    command:
+      - gunicorn
+      - config.wsgi.api:application
+      - --bind=0.0.0.0:8000
+      - --workers=2
+      - --preload
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
       interval: 30s
