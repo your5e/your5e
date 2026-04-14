@@ -2,7 +2,7 @@
 .PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration test-obsidian-plugin
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
-.PHONY: build deploy update-notebooks
+.PHONY: build deploy update-notebooks update-help-docs
 .PHONY: setup-obsidian-plugin build-obsidian-plugin
 
 TEST_COMPOSE_FILE := docker-compose.yml:docker-compose.test.yml
@@ -109,3 +109,6 @@ deploy:
 
 update-notebooks:
 	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py import_notebook --all'
+
+update-help-docs:
+	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py sync_api_docs'
