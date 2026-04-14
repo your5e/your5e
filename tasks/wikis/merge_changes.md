@@ -1,0 +1,20 @@
+Improve that page content updates are always last-write-wins, with no attempt
+to merge. If we know the previous version the update was made from, we can
+use three-way merge with diff-match-patch to do a better job. Compute the
+diff of the update from its previous veresion, and apply that patch
+to the current server content.
+
+- [ ] add a merge update method for applying the diff from the previous hash
+      to the current state
+
+If the base hash cannot be found, attempt fuzzy patch or difflib merging,
+then just continue with last-write-wins if it cannot be successfully merged.
+
+- [ ] fallback merge strategies when the the hash is purged
+
+Then use what has been provided.
+
+- [ ] update the notebook update view to pass the previous hash
+- [ ] update the API PATCH to accept a header with the previous hash
+- [ ] update sync-notebook.sh to provide the previous hash
+- [ ] update sync-engine.ts to provide the previous hash

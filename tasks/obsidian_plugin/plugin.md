@@ -14,6 +14,11 @@ per folder. Per-folder config is vault folder, notebook ID (and overrides).
 - [X] sync each folder on a different irregular interval around 10 minutes,
       to avoid swamping the server with multiple notebooks configured
 - [X] initial sync on launch should also not swamp the server
+- [ ] save button for new folder, folds section and triggers sync
+- [ ] {re,}start the scheduler on settings change, not only on plugin load
+- [ ] removing a folder mapping should remove its state
+- [ ] build to a permanent artifact zip file, not an emphemeral zip on the
+      docker image
 
 Push updates more readily than waiting for sync.
 
@@ -28,13 +33,4 @@ Add more control and observability to sync.
 - [ ] add 'show sync log' to command palette
 - [ ] add 'show sync log' for the ribbon, but not on by default
 - [ ] add sync status to statusbar, context menu includes opening the log
-
-Community plugin submission requires a standalone GitHub repository.
-Use `git subtree` to publish the plugin directory to a separate repo:
-
-```bash
-git subtree push --prefix=obsidian-plugin plugin-origin main
-```
-
-- [ ] submit to Obsidian community plugins repository for automatic
-      distribution
+- [ ] add debug mode setting
