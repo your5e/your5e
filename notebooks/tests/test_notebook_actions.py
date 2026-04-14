@@ -41,7 +41,7 @@ class TestNotebookSettingsView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "wendy/heros-legendes" in content
-        assert 'href="/help/obsidian-plugin"' in content
+        assert 'href="/help/sync-plugin"' in content
 
     @UserMixin.as_user("susan")
     def test_editor_sees_only_sync_options(self, client):
@@ -49,7 +49,7 @@ class TestNotebookSettingsView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "wendy/heros-legendes" in content
-        assert 'href="/help/obsidian-plugin"' in content
+        assert 'href="/help/sync-plugin"' in content
         assert 'action="/notebooks/rename"' not in content
         assert 'action="/notebooks/visibility"' not in content
         assert 'action="/notebooks/collaborators"' not in content
@@ -61,7 +61,7 @@ class TestNotebookSettingsView(NotebookMixin):
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "wendy/heros-legendes" in content
-        assert 'href="/help/obsidian-plugin"' in content
+        assert 'href="/help/sync-plugin"' in content
         assert 'action="/notebooks/rename"' not in content
         assert 'action="/notebooks/visibility"' not in content
         assert 'action="/notebooks/collaborators"' not in content

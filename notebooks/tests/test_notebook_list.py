@@ -42,6 +42,20 @@ class TestNotebookListView(NotebookMixin):
 
 
 @pytest.mark.django_db
+class TestNotebookMineRedirect(NotebookMixin):
+    @NotebookMixin.as_user("wendy")
+    def test_logged_in_user_redirects_to_own_list(self, client):
+        response = client.get("/notebooks/mine")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/notebooks/wendy/"
+
+    def test_anonymous_user_redirects_to_login(self, client):
+        response = client.get("/notebooks/mine")
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == "/login?next=/notebooks/mine"
+
+
+@pytest.mark.django_db
 class TestNotebookUserListView(NotebookMixin):
     @NotebookMixin.as_user("wendy")
     def test_owner_viewing_own_list(self, client):
@@ -88,3 +102,32 @@ class TestNotebookUserListView(NotebookMixin):
         content = response.content.decode()
         assert html.escape("Campaign Notes") in content
         assert response.status_code == HTTPStatus.OK
+
+    @NotebookMixin.as_user("wendy")
+    def test_owner_sees_create_form(self, client):
+        response = client.get("/notebooks/wendy/")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' in content
+
+    @NotebookMixin.as_user("susan")
+    def test_editor_does_not_see_create_form(self, client):
+        response = client.get("/notebooks/wendy/")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' not in content
+
+    @NotebookMixin.as_user("mary")
+    def test_viewer_does_not_see_create_form(self, client):
+        response = client.get("/notebooks/wendy/")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' not in content
+
+    @NotebookMixin.as_user("hugh")
+    def test_user_does_not_see_create_form(self, client):
+        response = client.get("/notebooks/wendy/")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' not in content
+
+    def test_anonymous_does_not_see_create_form(self, client):
+        response = client.get("/notebooks/susan/")
+        content = response.content.decode()
+        assert 'action="/notebooks/create"' not in content

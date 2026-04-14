@@ -24,6 +24,7 @@ from notebooks.views import (
     NotebookDeleteView,
     NotebookIndexView,
     NotebookListView,
+    NotebookMineRedirectView,
     NotebookPageCreateView,
     NotebookPageDeleteView,
     NotebookPageRestoreView,
@@ -165,6 +166,11 @@ urlpatterns = [
         route="notebooks/",
         name="notebook_list",
         view=NotebookListView.as_view(),
+    ),
+    path(
+        route="notebooks/mine",
+        name="notebook_mine",
+        view=NotebookMineRedirectView.as_view(),
     ),
     path(
         route="notebooks/<str:username>/",

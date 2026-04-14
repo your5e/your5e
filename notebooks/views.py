@@ -1,5 +1,6 @@
 from http import HTTPStatus
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import OuterRef, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
@@ -20,6 +21,11 @@ from users.models import User
 from wikis.models import Page, Version
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
+
+
+class NotebookMineRedirectView(LoginRequiredMixin, View):
+    def get(self, request):
+        return redirect("notebook_user_list", username=request.user.username)
 
 
 class NotebookFromURLMixin:
@@ -1062,6 +1068,7 @@ class NotebookUserListView(NotebookDescriptionMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["owner"] = self.owner
+        context["is_own_list"] = self.request.user == self.owner
 
         if self.request.user.is_authenticated:
             viewer = self.request.user

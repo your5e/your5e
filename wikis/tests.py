@@ -462,6 +462,39 @@ class TestVersion(WikiMixin):
     def test_frontmatter_returns_empty_dict_when_none(self):
         assert self.markdown_pages[0].latest_version.frontmatter() == {}
 
+    def test_render_wikilink_in_inline_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Code Example.md",
+            mime_type="text/markdown",
+            data=b"Use `[[Combat]]` to link.",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>Use <code>[[Combat]]</code> to link.</p>"
+
+    def test_render_wikilink_in_fenced_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Fenced Example.md",
+            mime_type="text/markdown",
+            data=b"```\n[[Combat]]\n```",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<pre><code>[[Combat]]\n</code></pre>"
+
+    def test_render_image_embed_in_inline_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Image Code.md",
+            mime_type="text/markdown",
+            data=b"Use `![[World.png]]` to embed.",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>Use <code>![[World.png]]</code> to embed.</p>"
+
     def test_split_content_with_windows_line_endings(self):
         page = Page.objects.create(wiki=self.wiki)
         page.update(

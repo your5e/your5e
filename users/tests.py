@@ -131,6 +131,17 @@ class TestUser(UserMixin):
                 password="testpass",
             )
 
+    def test_mine_is_reserved_username(self):
+        from users.forms import UserRegistrationForm
+        form = UserRegistrationForm(data={
+            "username": "mine",
+            "email": "mine@example.com",
+            "password1": "testpass123!",
+            "password2": "testpass123!",
+        })
+        assert not form.is_valid()
+        assert "username" in form.errors
+
 
 @pytest.mark.django_db
 class TestEmailOrUserBackend(UserMixin):
