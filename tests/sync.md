@@ -26,12 +26,19 @@ The algorithm to sync the local directory is:
     has changed (remote updates).
 9.  _rm_ any files deleted remotely (any local editeds will have already
     un-deleted them in step 3).
-10. Cache the new state, either as a separate step or after each individual
-    operation.
+10. Check for stale files (UUIDs in cache but not on remote).
+11. Cache the new state (either as a separate step at the end, or update
+    the state after each successful individual operation).
 
 Some API errors (400, 401, 404, 409) should be expected and handled, they are
 for the user to resolve. Other errors (network failures, 5xx server errors,
 authentication problems) should abort the sync for a later retry.
+
+## Incremental vs Full Sync
+
+The API supports incremental changes using the `?since=` parameter, which
+should be used to speed up repeated short-term syncs. The implemented sync
+engines do this, but also then a full sync every hour to ensure data fidelity.
 
 
 ## Sync Test Matrix
@@ -48,6 +55,7 @@ Test the initial sync completes correctly.
 | Test | Local | Remote | Content | Filename |
 |------|-------|--------|---------|----------|
 | empty directory | — | file | | |
+| empty notebook | — | — | | |
 | local files | file | file | ❌ | ✔️ |
 | local matches remote | file | file | ✔️ | ✔️ |
 | local file clashes | file | dir | | |
@@ -71,7 +79,8 @@ Test updating the state from an existing synced directory works.
 
 | Test | Tracked | Local Edited | Local Renamed | Local Deleted | Remote Edited | Remote Renamed | Remote Deleted | Stale |
 |------|---------|--------------|---------------|---------------|---------------|----------------|----------------|--------|
-| no change | ✔️ | | | | | | | |
+| no change, outdated timestamp | ✔️ | | | | | | | |
+| no change, recent timestamp | ✔️ | | | | | | | |
 | untracked file | | | | | | | | |
 | untracked file, local edited, directory | | ✔️ | | | | | | |
 | untracked file, local edited | | ✔️ | | | | | | |
@@ -88,6 +97,7 @@ Test updating the state from an existing synced directory works.
 | remote renamed, cycle, local edited | ✔️ | ✔️ | | | | ✔️ | | |
 | remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | |
 | local edited | ✔️ | ✔️ | | | | | | |
+| local edited, CRLF line endings | ✔️ | ✔️ | | | | | | |
 | local edited, remote edited | ✔️ | ✔️ | | | ✔️ | | | |
 | local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
 | local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
@@ -147,7 +157,13 @@ notebook.
 | mid-sync, revoked, local delete | editor | ✔️ |
 | mid-sync, downgraded, local delete | editor | ✔️ |
 | mid-sync, revoked, content update | editor | ✔️ |
+| mid-sync, page deleted, content update | editor | ✔️ |
+| mid-sync, page deleted, new file | editor | ✔️ |
 
 ### `sync_pagination.bats`
 
 Ensure the script correctly fetches when there are more than `PAGE_SIZE` pages.
+
+| Test |
+|------|
+| sync fetches all pages across pagination boundaries |

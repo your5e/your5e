@@ -1,12 +1,17 @@
 import hashlib
 import re
+from datetime import timedelta
 from http import HTTPStatus
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
+from api.notebooks.views import PAGE_SIZE
 from api.tests import ApiMixin
 from notebooks.models import Notebook
-from notebooks.tests import NotebookMixin
+from notebooks.tests import PNG_BYTES, NotebookMixin
+from wikis.models import Page
 
 TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
@@ -20,17 +25,27 @@ class NotebookApiMixin(ApiMixin, NotebookMixin):
         page = self.wendys_notebook.get_page(path=path)
         return page.latest_version.content.hash
 
+    def assert_notebook_pages_response_structure(self, response):
+        assert set(response.json().keys()) == {
+            "next",
+            "previous",
+            "editable",
+            "results",
+            "total_results",
+            "last_update",
+        }
+
 
 @pytest.mark.django_db
 class TestNotebooksList(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -44,7 +59,7 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -57,7 +72,7 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -70,7 +85,7 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -82,7 +97,7 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         notebook = response.json()["results"][2]
         assert TIMESTAMP_PATTERN.match(notebook["last_updated"])
@@ -91,8 +106,8 @@ class TestNotebooksList(NotebookApiMixin):
             "slug": "heros-legendes",
             "owner": "wendy",
             "visibility": "private",
-            "url": "/api/notebooks/wendy/heros-legendes/",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/",
+            "url": "/v1/notebooks/wendy/heros-legendes/",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/",
             "last_updated": notebook["last_updated"],
             "copied_from": None,
             "editable": True,
@@ -100,7 +115,7 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_response_structure(self, api_client):
-        response = api_client.get("/api/notebooks/")
+        response = api_client.get("/v1/notebooks/")
         assert response.status_code == HTTPStatus.OK
         assert set(response.json().keys()) == {
             "next",
@@ -111,14 +126,13 @@ class TestNotebooksList(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_cursor_pagination(self, api_client):
-        from api.notebooks.views import PAGE_SIZE
         for i in range(PAGE_SIZE + 2):
             Notebook.objects.create(
                 name=f"Notebook {i:02d}",
                 owner=self.wendy,
             )
 
-        first_page = api_client.get("/api/notebooks/")
+        first_page = api_client.get("/v1/notebooks/")
         assert first_page.status_code == HTTPStatus.OK
         assert len(first_page.json()["results"]) == PAGE_SIZE
         assert first_page.json()["next"] is not None
@@ -133,13 +147,13 @@ class TestNotebooksList(NotebookApiMixin):
 @pytest.mark.django_db
 class TestNotebooksPublic(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/public")
+        response = api_client.get("/v1/notebooks/public")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("susan")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/public")
+        response = api_client.get("/v1/notebooks/public")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -150,7 +164,7 @@ class TestNotebooksPublic(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/public")
+        response = api_client.get("/v1/notebooks/public")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -161,7 +175,7 @@ class TestNotebooksPublic(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/public")
+        response = api_client.get("/v1/notebooks/public")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -172,7 +186,7 @@ class TestNotebooksPublic(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/public")
+        response = api_client.get("/v1/notebooks/public")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -185,13 +199,13 @@ class TestNotebooksPublic(NotebookApiMixin):
 @pytest.mark.django_db
 class TestNotebooksInternal(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/internal")
+        response = api_client.get("/v1/notebooks/internal")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("mary")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/internal")
+        response = api_client.get("/v1/notebooks/internal")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -202,7 +216,7 @@ class TestNotebooksInternal(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/internal")
+        response = api_client.get("/v1/notebooks/internal")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -213,7 +227,7 @@ class TestNotebooksInternal(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/internal")
+        response = api_client.get("/v1/notebooks/internal")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -224,7 +238,7 @@ class TestNotebooksInternal(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/internal")
+        response = api_client.get("/v1/notebooks/internal")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -237,13 +251,13 @@ class TestNotebooksInternal(NotebookApiMixin):
 @pytest.mark.django_db
 class TestNotebooksPrivate(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/private")
+        response = api_client.get("/v1/notebooks/private")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/private")
+        response = api_client.get("/v1/notebooks/private")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -255,7 +269,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/private")
+        response = api_client.get("/v1/notebooks/private")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -266,7 +280,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/private")
+        response = api_client.get("/v1/notebooks/private")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -277,7 +291,7 @@ class TestNotebooksPrivate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/private")
+        response = api_client.get("/v1/notebooks/private")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -288,13 +302,13 @@ class TestNotebooksPrivate(NotebookApiMixin):
 @pytest.mark.django_db
 class TestNotebooksUser(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/")
+        response = api_client.get("/v1/notebooks/wendy/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/")
+        response = api_client.get("/v1/notebooks/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -306,7 +320,7 @@ class TestNotebooksUser(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/")
+        response = api_client.get("/v1/notebooks/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -317,7 +331,7 @@ class TestNotebooksUser(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/")
+        response = api_client.get("/v1/notebooks/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -328,7 +342,7 @@ class TestNotebooksUser(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/")
+        response = api_client.get("/v1/notebooks/wendy/")
         assert response.status_code == HTTPStatus.OK
         assert [
             n["name"]
@@ -337,7 +351,7 @@ class TestNotebooksUser(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
-        response = api_client.get("/api/notebooks/nobody/")
+        response = api_client.get("/v1/notebooks/nobody/")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
@@ -364,47 +378,46 @@ class TestNotebookPages(NotebookApiMixin):
         ]
 
     def test_unauthenticated(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         self.assert_wendys_notebook_pages(response)
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         self.assert_wendys_notebook_pages(response)
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         self.assert_wendys_notebook_pages(response)
         assert response.json()["editable"] is False
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_response_structure(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.OK
-        assert set(response.json().keys()) == {
-            "next",
-            "previous",
-            "editable",
-            "results",
-            "total_results",
-        }
+        self.assert_notebook_pages_response_structure(response)
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         assert response.status_code == HTTPStatus.OK
         results = response.json()["results"]
 
@@ -412,8 +425,8 @@ class TestNotebookPages(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(page["updated_at"])
         assert page == {
             "uuid": page["uuid"],
-            "url": f"/api/notebooks/wendy/heros-legendes/{page['uuid']}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{page['uuid']}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -427,8 +440,8 @@ class TestNotebookPages(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(deleted["deleted_at"])
         assert deleted == {
             "uuid": deleted["uuid"],
-            "url": f"/api/notebooks/wendy/heros-legendes/{deleted['uuid']}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/old-draft",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{deleted['uuid']}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/old-draft",
             "filename": "old-draft.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -440,21 +453,19 @@ class TestNotebookPages(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/no-such-notebook/")
+        response = api_client.get("/v1/notebooks/wendy/no-such-notebook/")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
-        response = api_client.get("/api/notebooks/nobody/some-notebook/")
+        response = api_client.get("/v1/notebooks/nobody/some-notebook/")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter(self, api_client):
-        from django.utils import timezone
-
-        cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (timezone.now() - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         updated = self.wendys_notebook.get_page(path="notes")
         updated.update(
@@ -466,9 +477,10 @@ class TestNotebookPages(NotebookApiMixin):
 
         deleted = self.wendys_notebook.get_page(path="links")
         deleted.soft_delete()
+        deleted.refresh_from_db()
 
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": cutoff},
         )
         assert response.status_code == HTTPStatus.OK
@@ -477,25 +489,32 @@ class TestNotebookPages(NotebookApiMixin):
                 for p in response.json()["results"]
         }
         assert filenames == {"notes.md", "links.md"}
+        expected_last_update = deleted.deleted_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_no_updates(self, api_client):
-        from django.utils import timezone
-
         cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": cutoff},
         )
         assert response.status_code == HTTPStatus.OK
         assert response.json()["results"] == []
+        assert "last_update" in response.json()
+        assert TIMESTAMP_PATTERN.match(response.json()["last_update"])
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_unix_timestamp(self, api_client):
-        from django.utils import timezone
-
-        cutoff = int(timezone.now().timestamp())
+        cutoff = int(timezone.now().timestamp()) - 1
 
         page = self.wendys_notebook.get_page(path="notes")
         page.update(
@@ -506,7 +525,7 @@ class TestNotebookPages(NotebookApiMixin):
         )
 
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": str(cutoff)},
         )
         assert response.status_code == HTTPStatus.OK
@@ -519,24 +538,70 @@ class TestNotebookPages(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_invalid(self, api_client):
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": "banana"},
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json() == {"error": "Invalid timestamp format."}
 
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": "index.md"},
         )
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json() == {"error": "Invalid timestamp format."}
 
     @ApiMixin.as_api_user("wendy")
-    def test_cursor_pagination(self, api_client):
-        from api.notebooks.views import PAGE_SIZE
-        from wikis.models import Page
+    def test_since_using_last_update_no_changes(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        last_update = response.json()["last_update"]
+        assert last_update == expected_last_update
+
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": last_update},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()["results"]) == 0
+        assert "last_update" in response.json()
+        assert TIMESTAMP_PATTERN.match(response.json()["last_update"])
+        assert response.json()["last_update"] == expected_last_update
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_using_last_update_one_change(self, api_client):
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        last_update = response.json()["last_update"]
+
+        page = self.wendys_notebook.get_page(path="notes")
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes\n\nUpdated after last_update.",
+            created_by=self.wendy,
+        )
+        page.refresh_from_db()
+
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": last_update},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()["results"]) == 1
+        assert response.json()["results"][0]["filename"] == "notes.md"
+        expected_last_update = page.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        assert response.json()["last_update"] == expected_last_update
+
+    @ApiMixin.as_api_user("wendy")
+    def test_cursor_pagination(self, api_client):
         for i in range(PAGE_SIZE + 2):
             page = Page.objects.create(wiki=self.wendys_notebook)
             page.update(
@@ -546,7 +611,7 @@ class TestNotebookPages(NotebookApiMixin):
                 created_by=self.wendy,
             )
 
-        first_page = api_client.get("/api/notebooks/wendy/heros-legendes/")
+        first_page = api_client.get("/v1/notebooks/wendy/heros-legendes/")
         assert first_page.status_code == HTTPStatus.OK
         assert len(first_page.json()["results"]) == PAGE_SIZE
         assert first_page.json()["next"] is not None
@@ -557,13 +622,28 @@ class TestNotebookPages(NotebookApiMixin):
         assert second_page.json()["previous"] is not None
 
     @ApiMixin.as_api_user("wendy")
+    def test_empty_notebook(self, api_client):
+        response = api_client.get("/v1/notebooks/wendy/wendy-s-secret/")
+        assert response.status_code == HTTPStatus.OK
+        self.assert_notebook_pages_response_structure(response)
+        assert response.json()["results"] == []
+        assert response.json()["total_results"] == 0
+        assert response.json()["editable"] is True
+        assert response.json()["next"] is None
+        assert response.json()["previous"] is None
+        assert response.json()["last_update"] == "0001-01-01T00:00:00Z"
+
+        # this epoch timestamp is still valid for '?since=...'
+        response = api_client.get(
+            "/v1/notebooks/wendy/wendy-s-secret/",
+            {"since": response.json()["last_update"]},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["results"] == []
+
+    @ApiMixin.as_api_user("wendy")
     def test_since_filter_with_pagination(self, api_client):
-        from django.utils import timezone
-
-        from api.notebooks.views import PAGE_SIZE
-        from wikis.models import Page
-
-        cutoff = timezone.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (timezone.now() - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for i in range(PAGE_SIZE + 2):
             page = Page.objects.create(wiki=self.wendys_notebook)
@@ -575,7 +655,7 @@ class TestNotebookPages(NotebookApiMixin):
             )
 
         first_page = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             {"since": cutoff},
         )
         assert first_page.status_code == HTTPStatus.OK
@@ -592,23 +672,22 @@ class TestNotebookPages(NotebookApiMixin):
 class TestPageContent(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response["Content-Type"] == "text/markdown"
         assert response.content == b"# Welcome\n\nThis is the index page.\n"
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        from notebooks.tests import PNG_BYTES
         uuid = self.get_page_uuid("heroes/shield.png")
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response["Content-Type"] == "image/png"
         assert response.content == PNG_BYTES
@@ -616,34 +695,34 @@ class TestPageContent(NotebookApiMixin):
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_returns_not_found(self, api_client):
         uuid = str(self.deleted_page.uuid)
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
         response = api_client.get(
-            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
+            "/v1/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
-        response = api_client.get("/api/notebooks/wendy/heros-legendes/not-a-uuid")
+        response = api_client.get("/v1/notebooks/wendy/heros-legendes/not-a-uuid")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
@@ -651,7 +730,7 @@ class TestPageContent(NotebookApiMixin):
     def test_version_parameter(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.get(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             {"version": "1"},
         )
         assert response.status_code == HTTPStatus.OK
@@ -661,7 +740,7 @@ class TestPageContent(NotebookApiMixin):
     def test_version_parameter_invalid(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.get(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             {"version": "999"},
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -670,20 +749,19 @@ class TestPageContent(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/no-such-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.get(f"/api/notebooks/nobody/some-notebook/{uuid}")
+        response = api_client.get(f"/v1/notebooks/nobody/some-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -692,7 +770,7 @@ class TestPageContent(NotebookApiMixin):
             created_by=self.susan,
         )
         response = api_client.get(
-            f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
+            f"/v1/notebooks/wendy/heros-legendes/{page.uuid}"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
@@ -704,7 +782,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Updated Welcome\n\nNew content.",
             content_type="text/markdown",
         )
@@ -714,7 +792,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_editor(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Editor Update\n\nEdited by susan.",
             content_type="text/markdown",
         )
@@ -724,7 +802,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_viewer(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Viewer Update",
             content_type="text/markdown",
         )
@@ -735,7 +813,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_user(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# User Update",
             content_type="text/markdown",
         )
@@ -745,7 +823,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Unauthenticated Update",
             content_type="text/markdown",
         )
@@ -759,7 +837,7 @@ class TestPageContentPut(NotebookApiMixin):
         new_content = b"# Response Test\n"
         new_hash = hashlib.sha256(new_content).hexdigest()
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=new_content,
             content_type="text/markdown",
         )
@@ -768,8 +846,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 2,
@@ -778,7 +856,7 @@ class TestPageContentPut(NotebookApiMixin):
             "content_hash": new_hash,
             "previous_hash": previous_hash,
         }
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response.content == new_content
 
@@ -789,7 +867,7 @@ class TestPageContentPut(NotebookApiMixin):
         new_content = b"# Revived\n"
         new_hash = hashlib.sha256(new_content).hexdigest()
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=new_content,
             content_type="text/markdown",
         )
@@ -798,8 +876,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/old-draft",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/old-draft",
             "filename": "old-draft.md",
             "mime_type": "text/markdown",
             "version": 2,
@@ -808,13 +886,12 @@ class TestPageContentPut(NotebookApiMixin):
             "content_hash": new_hash,
             "previous_hash": previous_hash,
         }
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response.content == new_content
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_with_conflict_returns_conflict(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -823,7 +900,7 @@ class TestPageContentPut(NotebookApiMixin):
         )
         uuid = str(self.deleted_page.uuid)
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Revived",
             content_type="text/markdown",
         )
@@ -835,7 +912,7 @@ class TestPageContentPut(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
         response = api_client.put(
-            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
+            "/v1/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
             data=b"# Nonexistent",
             content_type="text/markdown",
         )
@@ -845,7 +922,7 @@ class TestPageContentPut(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
         response = api_client.put(
-            "/api/notebooks/wendy/heros-legendes/not-a-uuid",
+            "/v1/notebooks/wendy/heros-legendes/not-a-uuid",
             data=b"# Invalid UUID",
             content_type="text/markdown",
         )
@@ -856,7 +933,7 @@ class TestPageContentPut(NotebookApiMixin):
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/no-such-notebook/{uuid}",
+            f"/v1/notebooks/wendy/no-such-notebook/{uuid}",
             data=b"# Nonexistent Notebook",
             content_type="text/markdown",
         )
@@ -865,7 +942,6 @@ class TestPageContentPut(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -874,7 +950,7 @@ class TestPageContentPut(NotebookApiMixin):
             created_by=self.susan,
         )
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{page.uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{page.uuid}",
             data=b"# Wrong Notebook",
             content_type="text/markdown",
         )
@@ -886,7 +962,7 @@ class TestPageContentPut(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         original_hash = self.get_page_hash("index")
         response = api_client.put(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data=b"# Welcome\n\nThis is the index page.",
             content_type="text/markdown",
         )
@@ -895,8 +971,8 @@ class TestPageContentPut(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -906,6 +982,21 @@ class TestPageContentPut(NotebookApiMixin):
             "previous_hash": original_hash,
         }
 
+    @ApiMixin.as_api_user("wendy")
+    def test_updating_sanitises_crlf_line_endings(self, api_client):
+        uuid = self.get_page_uuid("index")
+        response = api_client.put(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            data=b"First line\r\nSecond line\r\nThird line\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+        page = self.wendys_notebook.get_page(path="index")
+        assert (
+            page.latest_version.content.data
+            == b"First line\nSecond line\nThird line\n"
+        )
+
 
 @pytest.mark.django_db
 class TestPageContentPatch(NotebookApiMixin):
@@ -913,7 +1004,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -923,7 +1014,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_editor(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -933,7 +1024,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_viewer(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -944,7 +1035,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_user(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -954,7 +1045,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -966,7 +1057,7 @@ class TestPageContentPatch(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         original_hash = self.get_page_hash("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -975,8 +1066,8 @@ class TestPageContentPatch(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/welcome",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/welcome",
             "filename": "welcome.md",
             "mime_type": "text/markdown",
             "version": 2,
@@ -989,12 +1080,12 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_content_preserved(self, api_client):
         uuid = self.get_page_uuid("index")
         patch_response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
         assert patch_response.status_code == HTTPStatus.OK
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response.content == b"# Welcome\n\nThis is the index page.\n"
 
@@ -1002,13 +1093,13 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_html_url_with_directory(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "pages/welcome.md"},
             format="json",
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/pages/welcome"
+        assert data["html_url"] == "http://localhost:5843/notebooks/wendy/heros-legendes/pages/welcome"
         assert data["filename"] == "pages/welcome.md"
 
     @ApiMixin.as_api_user("wendy")
@@ -1016,7 +1107,7 @@ class TestPageContentPatch(NotebookApiMixin):
         uuid = self.get_page_uuid("index")
         original_hash = self.get_page_hash("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "index.md"},
             format="json",
         )
@@ -1024,8 +1115,8 @@ class TestPageContentPatch(NotebookApiMixin):
         data = response.json()
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/index",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
             "filename": "index.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -1037,7 +1128,7 @@ class TestPageContentPatch(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
         response = api_client.patch(
-            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
+            "/v1/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -1047,7 +1138,7 @@ class TestPageContentPatch(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
         response = api_client.patch(
-            "/api/notebooks/wendy/heros-legendes/not-a-uuid",
+            "/v1/notebooks/wendy/heros-legendes/not-a-uuid",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -1058,7 +1149,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/no-such-notebook/{uuid}",
+            f"/v1/notebooks/wendy/no-such-notebook/{uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -1067,7 +1158,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -1076,7 +1166,7 @@ class TestPageContentPatch(NotebookApiMixin):
             created_by=self.susan,
         )
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{page.uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{page.uuid}",
             data={"filename": "welcome.md"},
             format="json",
         )
@@ -1087,7 +1177,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_deleted_page_restore(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"restore": True},
             format="json",
         )
@@ -1099,7 +1189,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_deleted_page_restore_with_filename(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"restore": True, "filename": "revived.md"},
             format="json",
         )
@@ -1112,7 +1202,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_deleted_page_filename_without_restore_rejected(self, api_client):
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "revived.md"},
             format="json",
         )
@@ -1123,7 +1213,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_conflict(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -1132,7 +1221,7 @@ class TestPageContentPatch(NotebookApiMixin):
         )
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"restore": True},
             format="json",
         )
@@ -1143,7 +1232,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_conflict_resolved_by_filename(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="old-draft.md",
             mime_type="text/markdown",
@@ -1152,7 +1240,7 @@ class TestPageContentPatch(NotebookApiMixin):
         )
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"restore": True, "filename": "revived.md"},
             format="json",
         )
@@ -1163,7 +1251,6 @@ class TestPageContentPatch(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_restore_filename_also_conflicts(self, api_client):
-        from wikis.models import Page
         Page.objects.create(wiki=self.wendys_notebook).update(
             filename="existing.md",
             mime_type="text/markdown",
@@ -1172,7 +1259,7 @@ class TestPageContentPatch(NotebookApiMixin):
         )
         uuid = str(self.deleted_page.uuid)
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"restore": True, "filename": "existing.md"},
             format="json",
         )
@@ -1185,7 +1272,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_invalid_filename(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "invalid[name].md"},
             format="json",
         )
@@ -1196,7 +1283,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_path_conflict(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "notes.md"},
             format="json",
         )
@@ -1207,7 +1294,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_missing_filename(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={},
             format="json",
         )
@@ -1218,7 +1305,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_dotfile_rejected(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": ".hidden.md"},
             format="json",
         )
@@ -1229,7 +1316,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_dotfile_in_directory_rejected(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "folder/.hidden.md"},
             format="json",
         )
@@ -1240,7 +1327,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_dotfile_directory_rejected(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": ".hidden/file.md"},
             format="json",
         )
@@ -1251,7 +1338,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_parent_path_is_file_rejected(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "NOTES/subpage.md"},
             format="json",
         )
@@ -1262,7 +1349,7 @@ class TestPageContentPatch(NotebookApiMixin):
     def test_grandparent_path_is_file_rejected(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"filename": "Notes/sub/page.md"},
             format="json",
         )
@@ -1276,7 +1363,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1286,7 +1373,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_editor(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1296,7 +1383,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_viewer(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1307,7 +1394,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_user(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1317,7 +1404,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1328,7 +1415,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_response_fields(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1},
             format="json",
         )
@@ -1338,8 +1425,8 @@ class TestPageContentPatchRevert(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
-            "url": f"/api/notebooks/wendy/heros-legendes/{uuid}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/session-one",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/session-one",
             "filename": "Session One.md",
             "mime_type": "text/markdown",
             "version": 4,
@@ -1352,7 +1439,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_invalid_version(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 999},
             format="json",
         )
@@ -1363,7 +1450,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_revert_to_and_filename_mutually_exclusive(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 1, "filename": "new-name.md"},
             format="json",
         )
@@ -1376,7 +1463,7 @@ class TestPageContentPatchRevert(NotebookApiMixin):
     def test_revert_to_current_version_no_new_version(self, api_client):
         uuid = self.get_page_uuid("session-one")
         response = api_client.patch(
-            f"/api/notebooks/wendy/heros-legendes/{uuid}",
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
             data={"revert_to": 3},
             format="json",
         )
@@ -1388,9 +1475,8 @@ class TestPageContentPatchRevert(NotebookApiMixin):
 @pytest.mark.django_db
 class TestPageCreate(NotebookApiMixin):
     def test_unauthenticated(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("test.md", b"# New Page")},
             format="multipart",
         )
@@ -1399,9 +1485,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("new-page.md", b"# New Page")},
             format="multipart",
         )
@@ -1409,9 +1494,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("editor-page.md", b"# Editor Page")},
             format="multipart",
         )
@@ -1419,9 +1503,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("viewer-page.md", b"# Viewer Page")},
             format="multipart",
         )
@@ -1430,9 +1513,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("user-page.md", b"# User Page")},
             format="multipart",
         )
@@ -1441,11 +1523,10 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_response_fields(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         content = b"# Response Test\n\nContent here.\n"
         content_hash = hashlib.sha256(content).hexdigest()
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("response-test.md", content)},
             format="multipart",
         )
@@ -1454,8 +1535,8 @@ class TestPageCreate(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": data["uuid"],
-            "url": f"/api/notebooks/wendy/heros-legendes/{data['uuid']}",
-            "html_url": "http://testserver/notebooks/wendy/heros-legendes/response-test",
+            "url": f"/v1/notebooks/wendy/heros-legendes/{data['uuid']}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/response-test",
             "filename": "response-test.md",
             "mime_type": "text/markdown",
             "version": 1,
@@ -1466,24 +1547,22 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_content_retrievable(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         content = b"# Retrievable\n\nThis content should be retrievable.\n"
         create_response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("retrievable.md", content)},
             format="multipart",
         )
         assert create_response.status_code == HTTPStatus.CREATED
         uuid = create_response.json()["uuid"]
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
         assert response.content == content
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_override(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("original.md", b"# Override Test"),
                 "filename": "custom-name.md",
@@ -1493,13 +1572,12 @@ class TestPageCreate(NotebookApiMixin):
         assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert data["filename"] == "custom-name.md"
-        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/custom-name"
+        assert data["html_url"] == "http://localhost:5843/notebooks/wendy/heros-legendes/custom-name"
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_with_directory(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("nested.md", b"# Nested"),
                 "filename": "subdir/nested.md",
@@ -1509,15 +1587,12 @@ class TestPageCreate(NotebookApiMixin):
         assert response.status_code == HTTPStatus.CREATED
         data = response.json()
         assert data["filename"] == "subdir/nested.md"
-        assert data["html_url"] == "http://testserver/notebooks/wendy/heros-legendes/subdir/nested"
+        assert data["html_url"] == "http://localhost:5843/notebooks/wendy/heros-legendes/subdir/nested"
 
     @ApiMixin.as_api_user("wendy")
     def test_image_upload(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        from notebooks.tests import PNG_BYTES
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("test-image.png", PNG_BYTES)},
             format="multipart",
         )
@@ -1528,9 +1603,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_no_file_extension_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("noextension", b"# No Extension")},
             format="multipart",
         )
@@ -1539,9 +1613,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_filename_override_no_extension_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("valid.md", b"# Valid"),
                 "filename": "noextension",
@@ -1553,9 +1626,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_page_already_exists_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("index.md", b"# Duplicate")},
             format="multipart",
         )
@@ -1564,9 +1636,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_path_conflict_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("Index.md", b"# Path Conflict")},
             format="multipart",
         )
@@ -1576,7 +1647,7 @@ class TestPageCreate(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_no_file_rejected(self, api_client):
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={},
             format="multipart",
         )
@@ -1585,9 +1656,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/no-such-notebook/",
+            "/v1/notebooks/wendy/no-such-notebook/",
             data={"file": SimpleUploadedFile("test.md", b"# Test")},
             format="multipart",
         )
@@ -1596,9 +1666,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_user(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/nobody/some-notebook/",
+            "/v1/notebooks/nobody/some-notebook/",
             data={"file": SimpleUploadedFile("test.md", b"# Test")},
             format="multipart",
         )
@@ -1607,9 +1676,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile(".hidden.md", b"# Hidden")},
             format="multipart",
         )
@@ -1618,9 +1686,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_in_directory_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={"file": SimpleUploadedFile("folder/.hidden.md", b"# Hidden")},
             format="multipart",
         )
@@ -1629,9 +1696,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_dotfile_directory_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("file.md", b"# Hidden"),
                 "filename": ".hidden/file.md",
@@ -1643,9 +1709,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_parent_path_is_file_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("subpage.md", b"# Subpage"),
                 "filename": "NOTES/subpage.md",
@@ -1657,9 +1722,8 @@ class TestPageCreate(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_grandparent_path_is_file_rejected(self, api_client):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         response = api_client.post(
-            "/api/notebooks/wendy/heros-legendes/",
+            "/v1/notebooks/wendy/heros-legendes/",
             data={
                 "file": SimpleUploadedFile("page.md", b"# Subpage"),
                 "filename": "Notes/sub/page.md",
@@ -1669,62 +1733,81 @@ class TestPageCreate(NotebookApiMixin):
         assert response.status_code == HTTPStatus.CONFLICT
         assert response.json() == {"error": "Path 'notes' already exists."}
 
+    @ApiMixin.as_api_user("wendy")
+    def test_creating_sanitises_crlf_line_endings(self, api_client):
+        response = api_client.post(
+            "/v1/notebooks/wendy/heros-legendes/",
+            data={
+                "file": SimpleUploadedFile(
+                    "crlf-test.md",
+                    b"First line\r\nSecond line\r\nThird line\n",
+                )
+            },
+            format="multipart",
+        )
+        assert response.status_code == HTTPStatus.CREATED
+        page = self.wendys_notebook.get_page(path="crlf-test")
+        assert (
+            page.latest_version.content.data
+            == b"First line\nSecond line\nThird line\n"
+        )
+
 
 @pytest.mark.django_db
 class TestPageContentDelete(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NO_CONTENT
 
     @ApiMixin.as_api_user("susan")
     def test_editor(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NO_CONTENT
 
     @ApiMixin.as_api_user("mary")
     def test_viewer(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert response.json() == {"error": "Permission denied."}
 
     @ApiMixin.as_api_user("hugh")
     def test_user(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     def test_unauthenticated(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     @ApiMixin.as_api_user("wendy")
     def test_page_is_soft_deleted(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NO_CONTENT
 
-        response = api_client.get(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_deleted_page_returns_not_found(self, api_client):
         uuid = str(self.deleted_page.uuid)
-        response = api_client.delete(f"/api/notebooks/wendy/heros-legendes/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_uuid_returns_not_found(self, api_client):
         response = api_client.delete(
-            "/api/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
+            "/v1/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
@@ -1732,7 +1815,7 @@ class TestPageContentDelete(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_invalid_uuid_returns_not_found(self, api_client):
         response = api_client.delete(
-            "/api/notebooks/wendy/heros-legendes/not-a-uuid"
+            "/v1/notebooks/wendy/heros-legendes/not-a-uuid"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
@@ -1740,13 +1823,12 @@ class TestPageContentDelete(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
-        response = api_client.delete(f"/api/notebooks/wendy/no-such-notebook/{uuid}")
+        response = api_client.delete(f"/v1/notebooks/wendy/no-such-notebook/{uuid}")
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
     def test_uuid_from_different_notebook(self, api_client):
-        from wikis.models import Page
         page = Page.objects.create(wiki=self.susans_notebook)
         page.update(
             filename="test.md",
@@ -1755,7 +1837,7 @@ class TestPageContentDelete(NotebookApiMixin):
             created_by=self.susan,
         )
         response = api_client.delete(
-            f"/api/notebooks/wendy/heros-legendes/{page.uuid}"
+            f"/v1/notebooks/wendy/heros-legendes/{page.uuid}"
         )
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"error": "Not found."}

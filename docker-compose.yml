@@ -1,6 +1,16 @@
 services:
   db:
     image: postgres:17
+    command:
+      - "postgres"
+      - "-c"
+      - "fsync=off"
+      - "-c"
+      - "full_page_writes=off"
+      - "-c"
+      - "log_checkpoints=off"
+      - "-c"
+      - "synchronous_commit=off"
     environment:
       POSTGRES_DB: your5e
       POSTGRES_USER: your5e
@@ -20,6 +30,51 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      - "5843:8000"
+    volumes:
+      - .:/app
+    environment:
+      DEBUG: "1"
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: "dev"
+      DB_NAME: "your5e"
+      DB_USER: "your5e"
+      DB_PASSWORD: "your5e"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: "config.settings.web"
+
+  api:
+    build:
+      context: .
+      target: dev
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5844:8000"
+    volumes:
+      - .:/app
+    environment:
+      DEBUG: "1"
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: "dev"
+      DB_NAME: "your5e"
+      DB_USER: "your5e"
+      DB_PASSWORD: "your5e"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: "config.settings.api"
+      WEB_BASE_URL: "http://localhost:5843"
+
+  sass:
+    build:
+      context: .
+      target: base
+    volumes:
+      - .:/app
+    command: sass --watch static/css/source/screen.scss:static/css/screen.css
 
 volumes:
   postgres_data:

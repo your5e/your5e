@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from users.models import get_sentinel_user
 from users.tests import UserMixin
-from wikis.models import Content, Page, Wiki
+from wikis.models import Content, Page, Version, Wiki
 
 
 class WikiMixin(UserMixin):
@@ -117,6 +117,10 @@ class WikiMixin(UserMixin):
             created_by=self.wendy,
         )
 
+        # backdate fixture data for "since..." tests
+        past = timezone.now() - timedelta(seconds=1)
+        Version.objects.filter(page__wiki=self.wiki).update(created_at=past)
+
         self.wiki.refresh_from_db()
         self.last_updated_after_setup = self.wiki.last_updated
 
@@ -126,7 +130,7 @@ class TestContent(WikiMixin):
     def test_content_primary_key_is_hash_of_data(self):
         assert self.version.content.pk == self.version.content.hash
         assert self.version.content.hash == (
-            "d5ef9984be135ec74cbc5dee24825199ca433e1ffd7a2fb22db12a3c5324ea1d"
+            "9d9595c5d94fb65b824f56e9999527dba9542481580d69feb89056aabaa0aa87"
         )
 
     def test_content_is_shared_between_wikis(self):
@@ -274,7 +278,7 @@ class TestVersion(WikiMixin):
         assert exc.value.messages == ["Path 'document.txt' already exists."]
 
     def test_render_non_markdown_returns_bytes(self):
-        assert self.version.render() == b"Test content\n"
+        assert self.version.render() == b"Test content"
 
     def test_display_name_markdown(self):
         page = Page.objects.create(wiki=self.wiki)
@@ -446,7 +450,7 @@ class TestVersion(WikiMixin):
     def test_split_content_for_non_markdown(self):
         frontmatter, content = self.version.split_content()
         assert frontmatter == ""
-        assert content == "Test content\n"
+        assert content == "Test content"
 
     def test_frontmatter_parses_yaml(self):
         fm = self.page_with_wikilinks.latest_version.frontmatter()
@@ -457,6 +461,39 @@ class TestVersion(WikiMixin):
 
     def test_frontmatter_returns_empty_dict_when_none(self):
         assert self.markdown_pages[0].latest_version.frontmatter() == {}
+
+    def test_render_wikilink_in_inline_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Code Example.md",
+            mime_type="text/markdown",
+            data=b"Use `[[Combat]]` to link.",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>Use <code>[[Combat]]</code> to link.</p>"
+
+    def test_render_wikilink_in_fenced_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Fenced Example.md",
+            mime_type="text/markdown",
+            data=b"```\n[[Combat]]\n```",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<pre><code>[[Combat]]\n</code></pre>"
+
+    def test_render_image_embed_in_inline_code_not_converted(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="Image Code.md",
+            mime_type="text/markdown",
+            data=b"Use `![[World.png]]` to embed.",
+            created_by=self.wendy,
+        )
+        html = page.latest_version.render(base_url="/wiki")
+        assert html == "<p>Use <code>![[World.png]]</code> to embed.</p>"
 
     def test_split_content_with_windows_line_endings(self):
         page = Page.objects.create(wiki=self.wiki)
@@ -635,7 +672,7 @@ class TestPage(WikiMixin):
         )
         assert reverted.number == 4
         assert reverted.filename == "history.txt"
-        assert reverted.content.data == b"First revision\n"
+        assert reverted.content.data == b"First revision"
 
     def test_revert_to_current_version_does_not_create_version(self):
         reverted = self.page_with_history.revert(
@@ -704,7 +741,7 @@ class TestPage(WikiMixin):
     def test_get_version_returns_specific_version(self):
         version = self.page_with_history.get_version(number=2)
         assert version.number == 2
-        assert version.content.data == b"Second revision\n"
+        assert version.content.data == b"Second revision"
 
     def test_get_version_raises_for_nonexistent_version(self):
         with pytest.raises(Page.DoesNotExist):
@@ -732,7 +769,7 @@ class TestPage(WikiMixin):
             data=b"hello",
             created_by=self.wendy,
         )
-        assert version_b.content.data == b"hello\n"
+        assert version_b.content.data == b"hello"
         assert version_b.mime_type == "text/plain"
 
     def test_update_text_preserves_existing_trailing_newline(self):
@@ -812,7 +849,7 @@ class TestWiki(WikiMixin):
         ]
 
     def test_changes_since(self):
-        before = timezone.now()
+        before = timezone.now() - timedelta(seconds=1)
         self.page.update(
             filename="document.txt",
             mime_type="text/plain",
@@ -831,7 +868,7 @@ class TestWiki(WikiMixin):
         ]
 
     def test_changes_since_includes_deleted_pages(self):
-        before = timezone.now()
+        before = timezone.now() - timedelta(seconds=1)
         self.page.update(
             filename="document.txt",
             mime_type="text/plain",

@@ -11,7 +11,7 @@ bats_require_minimum_version 1.7.0
 load 'setup_helpers.sh'
 
 setup_file() {
-    export YOUR5E_API_BASE="http://localhost:5844"
+    export YOUR5E_API_BASE="http://localhost:5854"
 }
 
 setup() {
@@ -20,6 +20,7 @@ setup() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
     export -f invalidate_token
     export -f downgrade_to_viewer
+    export -f delete_page_by_uuid
 
     restore_database
     setup_pages_file
@@ -29,11 +30,15 @@ setup() {
             export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/wendy.token")"
         fi
         init_synced_dir
+        setup_recent_sync_metadata
+        fail_on_missing_since_parameter
+    else
+        fail_on_since_parameter
     fi
 }
 
 
-@test "full sync switches to pull when user is viewer" {
+@test "full sync switches to pull" {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/susan.token")"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -55,6 +60,7 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -80,6 +86,7 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -96,6 +103,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -112,6 +120,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -128,6 +137,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -144,6 +154,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -159,6 +170,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -174,6 +186,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -189,6 +202,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_no_output_dir
+    assert_last_updated_not_set
     assert_failure
 }
 
@@ -214,6 +228,7 @@ setup() {
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
     assert_state_matches_fixture
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -239,6 +254,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -262,6 +278,7 @@ setup() {
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
     assert_state_matches_fixture
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -286,6 +303,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -309,6 +327,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -334,6 +353,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -356,6 +376,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
 }
 
@@ -381,6 +402,7 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -403,5 +425,61 @@ setup() {
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_last_updated_unchanged
     assert_failure
+}
+
+@test "mid-sync, page deleted, content update" {
+    set_older_content "Bestiary.md"
+    set_older_content "Home.md"
+    bestiary_uuid=$(uuid_for "Bestiary.md")
+    export AFTER_FETCH_HOOK="delete_page_by_uuid '$bestiary_uuid'"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: "Home.md" (v2)
+        pull: SKIPPING "Bestiary.md", deleted remotely during sync
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_matches_fixture "index.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "mid-sync, page deleted, new file" {
+    frosthold_uuid=$(uuid_for "World Regions/Northern Kingdoms/Frosthold.md")
+    untrack_file "World Regions/Northern Kingdoms/Frosthold.md"
+    remove_file "World Regions/Northern Kingdoms/Frosthold.md"
+    set_older_content "Home.md"
+    export AFTER_FETCH_HOOK="delete_page_by_uuid '$frosthold_uuid'"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: "Home.md" (v2)
+        pull: SKIPPING "World Regions/Northern Kingdoms/Frosthold.md", deleted remotely during sync
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_not_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_not_in_state "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_tracked_file_matches_fixture "index.md"
+    assert_tracked_file_matches_fixture "Home.md"
+    assert_tracked_file_matches_fixture "characters/NPCs.md"
+    assert_tracked_file_matches_fixture "sessions/session-01.md"
+    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_tracked_file_matches_fixture "The Old Café.md"
+    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_sync_metadata_updated
+    assert_success
 }

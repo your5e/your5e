@@ -17,9 +17,16 @@ ALLOWED_ATTRIBUTES = {
 }
 
 
+CODE_AND_WIKILINK_PATTERN = re.compile(
+    r"(```[\s\S]*?```)"    # fenced code block
+    r"|(`[^`]+`)"          # inline code
+    r"|!\[\[([^\]]+)\]\]"  # image embed (content in group 3)
+    r"|\[\[([^\]]+)\]\]"   # wikilink (content in group 4)
+)
+
+
 def render_wiki_content(text, resolve_wikilink, base_url):
-    def replace_image_embed(match):
-        content = match.group(1)
+    def make_image_embed(content):
         if "|" in content:
             target, dimensions = content.split("|", 1)
         else:
@@ -38,8 +45,7 @@ def render_wiki_content(text, resolve_wikilink, base_url):
 
         return f'<img src="{base_url}/{path}"{dims}>'
 
-    def replace_wikilink(match):
-        content = match.group(1)
+    def make_wikilink(content):
         if "|" in content:
             target, display = content.split("|", 1)
         else:
@@ -50,10 +56,18 @@ def render_wiki_content(text, resolve_wikilink, base_url):
 
         return f"[{display}]({base_url}/{path})"
 
+    def replace_wikilinks(match):
+        if match.group(1) or match.group(2):
+            return match.group(0)
+        if match.group(3):
+            return make_image_embed(match.group(3))
+        if match.group(4):
+            return make_wikilink(match.group(4))
+        return match.group(0)
+
     base_url = base_url.rstrip("/")
 
-    text = re.sub(r"!\[\[([^\]]+)\]\]", replace_image_embed, text)
-    text = re.sub(r"\[\[([^\]]+)\]\]", replace_wikilink, text)
+    text = CODE_AND_WIKILINK_PATTERN.sub(replace_wikilinks, text)
     html = markdown.markdown(text, extensions=["fenced_code", "tables"])
     html = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
 

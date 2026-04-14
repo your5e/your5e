@@ -433,4 +433,10 @@ class Command(BaseCommand):
             linked_by=norm,
         )
 
+        Notebook.objects.create(
+            name="Empty Notebook",
+            owner=norm,
+            visibility=Notebook.Visibility.PUBLIC,
+        )
+
         call_command("sync_api_docs")

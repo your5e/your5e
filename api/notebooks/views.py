@@ -4,6 +4,7 @@ from http import HTTPStatus
 from urllib.parse import urlparse
 from uuid import UUID
 
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Max, Q
 from django.db.models.functions import Coalesce, Greatest
@@ -89,8 +90,11 @@ class NotebookSerializer(serializers.ModelSerializer):
         })
 
     def get_html_url(self, obj):
-        request = self.context["request"]
-        return request.build_absolute_uri(obj.get_absolute_url())
+        path = reverse("notebook", kwargs={
+            "username": obj.owner.username,
+            "slug": obj.slug,
+        }, urlconf="config.urls.web")
+        return settings.WEB_BASE_URL + path
 
     def get_copied_from(self, obj):
         if obj.copied_from:
@@ -190,13 +194,12 @@ class PageSerializer(serializers.Serializer):
 
     def get_html_url(self, obj):
         notebook = self.context["notebook"]
-        request = self.context["request"]
         path = reverse("notebook_page", kwargs={
             "username": notebook.owner.username,
             "slug": notebook.slug,
             "path": obj.latest_version.path,
-        })
-        return request.build_absolute_uri(path)
+        }, urlconf="config.urls.web")
+        return settings.WEB_BASE_URL + path
 
     def get_filename(self, obj):
         return obj.latest_version.filename
@@ -317,11 +320,11 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             "username": notebook.owner.username,
             "slug": notebook.slug,
             "path": version.path,
-        })
+        }, urlconf="config.urls.web")
         return Response({
             "uuid": str(page.uuid),
             "url": api_url,
-            "html_url": request.build_absolute_uri(html_path),
+            "html_url": settings.WEB_BASE_URL + html_path,
             "filename": version.filename,
             "mime_type": version.mime_type,
             "version": version.number,
@@ -336,6 +339,13 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
         response.data["editable"] = NotebookPermissions.can_edit(
             self.notebook, request.user
         )
+        response.data["last_update"] = self.notebook.page_set.aggregate(
+            last_update=Greatest(
+                Coalesce(Max("version__created_at"), datetime.min.replace(tzinfo=UTC)),
+                Coalesce(Max("deleted_at"), datetime.min.replace(tzinfo=UTC)),
+            )
+        )["last_update"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
         return response
 
     def get_serializer_context(self):
@@ -522,11 +532,11 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             "username": notebook.owner.username,
             "slug": notebook.slug,
             "path": version.path,
-        })
+        }, urlconf="config.urls.web")
         data = {
             "uuid": str(page.uuid),
             "url": api_url,
-            "html_url": request.build_absolute_uri(html_path),
+            "html_url": settings.WEB_BASE_URL + html_path,
             "filename": version.filename,
             "mime_type": version.mime_type,
             "version": version.number,

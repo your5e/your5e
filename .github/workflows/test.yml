@@ -3,6 +3,7 @@ name: Test
 on:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
   test:
@@ -30,6 +31,17 @@ jobs:
 
       - name: Run integration tests
         run: make test-sync-integration
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install npm dependencies
+        run: cd obsidian-plugin && npm ci
+
+      - name: Run TypeScript tests
+        run: make test-obsidian-plugin
 
       - name: Stop test server
         run: make server-tests-down

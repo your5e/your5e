@@ -859,6 +859,17 @@ class TestCampaignNotebook(CampaignMixin):
         assert link.order == 1
         assert link.slug == self.wendys_notebook.slug
 
+    def test_linking_notebook_does_not_grant_player_permissions(self):
+        CampaignNotebook.objects.create(
+            campaign=self.owned_campaign,
+            notebook=self.wendys_notebook,
+            linked_by=self.wendy,
+        )
+        assert not NotebookPermission.objects.filter(
+            notebook=self.wendys_notebook,
+            user=self.susan,
+        ).exists()
+
     def test_get_base_slug_returns_notebook_slug(self):
         link = CampaignNotebook.objects.create(
             campaign=self.owned_campaign,

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def get_secret(name):
@@ -64,8 +64,6 @@ CORS_ALLOW_HEADERS = [
     "content-type",
 ]
 
-WSGI_APPLICATION = "config.wsgi.application"
-ROOT_URLCONF = "config.urls"
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]

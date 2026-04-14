@@ -18,6 +18,7 @@ Common errors:
 
 ## Auth / Debugging
 
+- [[Health]] - check if the API is healthy
 - [[Ping]] - test your authentication works
 
 ## Notebooks

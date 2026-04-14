@@ -35,15 +35,37 @@ class TestNotebookSettingsView(NotebookMixin):
             ' <option value="viewer" selected>' in normalised
         )
 
-    @UserMixin.as_user("susan")
-    def test_editor_cannot_access_settings(self, client):
+    @UserMixin.as_user("wendy")
+    def test_owner_sees_sync_id_and_plugin_link(self, client):
         response = client.get("/notebooks/settings/wendy/heros-legendes/")
-        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "wendy/heros-legendes" in content
+        assert 'href="/help/sync-plugin"' in content
+
+    @UserMixin.as_user("susan")
+    def test_editor_sees_only_sync_options(self, client):
+        response = client.get("/notebooks/settings/wendy/heros-legendes/")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "wendy/heros-legendes" in content
+        assert 'href="/help/sync-plugin"' in content
+        assert 'action="/notebooks/rename"' not in content
+        assert 'action="/notebooks/visibility"' not in content
+        assert 'action="/notebooks/collaborators"' not in content
+        assert 'action="/notebooks/delete"' not in content
 
     @UserMixin.as_user("mary")
-    def test_viewer_cannot_access_settings(self, client):
+    def test_viewer_sees_only_sync_options(self, client):
         response = client.get("/notebooks/settings/wendy/heros-legendes/")
-        assert response.status_code == HTTPStatus.FORBIDDEN
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert "wendy/heros-legendes" in content
+        assert 'href="/help/sync-plugin"' in content
+        assert 'action="/notebooks/rename"' not in content
+        assert 'action="/notebooks/visibility"' not in content
+        assert 'action="/notebooks/collaborators"' not in content
+        assert 'action="/notebooks/delete"' not in content
 
     @UserMixin.as_user("hugh")
     def test_non_collaborator_cannot_access_settings(self, client):

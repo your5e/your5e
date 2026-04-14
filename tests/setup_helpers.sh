@@ -4,8 +4,8 @@
 declare fixtures output_dir BATS_FILE_TMPDIR
 
 function restore_database {
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e postgres >/dev/null 2>&1 <<-SQL
         SELECT pg_terminate_backend(pid)
             FROM pg_stat_activity WHERE datname = 'your5e_test';
@@ -16,7 +16,7 @@ function restore_database {
 
 function setup_pages_file {
     curl -s -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/" \
         | jq -r '
             .results[]
             | [.filename, .uuid, .content_hash, (.deleted_at // "")]
@@ -267,11 +267,19 @@ function assert_state_matches_fixture {
                 printf "%s\t%s\n" "$relative" "$hash"
             done | sort
     )
-    diff -u <(echo "$expected") <(cut -f3,4 "$output_dir/.sync-state" | sort)
+    diff -u <(echo "$expected") <(
+        awk -F'\t' '
+            $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC" {
+                print $3 "\t" $4
+            }
+        ' "$output_dir/.sync-state" | sort
+    )
 }
 
 function assert_dir_matches_fixture {
-    diff -ru --exclude=".sync-state" "$output_dir" "$fixtures/campaign-notes"
+    diff -ru \
+        --exclude=".sync-state" \
+        "$output_dir" "$fixtures/campaign-notes"
 }
 
 function assert_success {
@@ -288,6 +296,21 @@ function assert_no_output_dir {
     [[ ! -d "$output_dir" ]]
 }
 
+function assert_output_dir_exists {
+    [[ -d "$output_dir" ]]
+}
+
+function assert_state_has_no_files {
+    [[ -f "$output_dir/.sync-state" ]]
+    local file_count
+    file_count=$(
+        awk -F'\t' '
+            $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC" {print}
+        ' "$output_dir/.sync-state" | wc -l
+    )
+    [[ $file_count -eq 0 ]]
+}
+
 function fail_on_multiple_curl_calls {
     # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
     curl() {
@@ -300,6 +323,114 @@ function fail_on_multiple_curl_calls {
         command curl "$@"
     }
     export -f curl
+}
+
+function fail_on_missing_since_parameter {
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        if [[ "$*" == *"-X GET"* ]] || [[ "$*" != *"-X "* ]]; then
+            if [[ "$*" == *"/v1/notebooks/"*"/" ]] \
+                    && [[ "$*" != *"/v1/notebooks/"*"/"*"/" ]] \
+                    && [[ "$*" != *"since="* ]]; then
+                echo "TEST GUARD: since parameter required but not passed" >&2
+                return 1
+            fi
+        fi
+        command curl "$@"
+    }
+    export -f curl
+}
+
+function fail_on_since_parameter {
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        if [[ "$*" == *"since="* ]]; then
+            echo "TEST GUARD: since parameter forbidden but was passed" >&2
+            return 1
+        fi
+        command curl "$@"
+    }
+    export -f curl
+}
+
+function setup_recent_sync_metadata {
+    awk -F'\t' -v OFS='\t' '
+        $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC"
+    ' "$output_dir/.sync-state" > "$output_dir/.sync-state.tmp" || true
+    printf "LAST_UPDATED\t2020-01-01T00:00:00Z\t\t\t\n" >> "$output_dir/.sync-state.tmp"
+    local now_iso
+    now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    printf "LAST_FULL_SYNC\t%s\t\t\t\n" "$now_iso" >> "$output_dir/.sync-state.tmp"
+    mv "$output_dir/.sync-state.tmp" "$output_dir/.sync-state"
+}
+
+function setup_old_sync_metadata {
+    local state="$output_dir/.sync-state"
+    awk -F'\t' -v OFS='\t' '
+        $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC"
+    ' "$state" > "$state.tmp" || true
+    printf "LAST_UPDATED\t2020-01-01T00:00:00Z\t\t\t\n" >> "$state.tmp"
+    printf "LAST_FULL_SYNC\t2020-01-01T00:00:00Z\t\t\t\n" >> "$state.tmp"
+    mv "$state.tmp" "$state"
+}
+
+function assert_last_updated_matches_expected {
+    local timestamp expected state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    expected=$(cat "$BATS_TEST_DIRNAME/last_update")
+    diff -u <(echo "$expected") <(echo "$timestamp")
+}
+
+function assert_last_updated_exists {
+    local timestamp state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+}
+
+function assert_last_updated_not_set {
+    local timestamp state="$output_dir/.sync-state"
+    [[ ! -f "$state" ]] && return 0
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -z "$timestamp" ]]
+}
+
+function assert_last_updated_is_epoch {
+    local timestamp expected state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ -n "$timestamp" ]]
+    expected="0001-01-01T00:00:00Z"
+    diff -u <(echo "$expected") <(echo "$timestamp")
+}
+
+function assert_sync_metadata_updated {
+    local last_updated last_full_sync state="$output_dir/.sync-state"
+    last_updated=$(
+        awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state"
+    )
+    [[ -n "$last_updated" ]]
+    [[ "$last_updated" != "2020-01-01T00:00:00Z" ]]
+
+    last_full_sync=$(
+        awk -F'\t' '$1 == "LAST_FULL_SYNC" {print $2; exit}' "$state"
+    )
+    [[ -n "$last_full_sync" ]]
+
+    local now last_full_sync_epoch age_seconds
+    now=$(date +%s)
+    last_full_sync_epoch=$(
+        TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last_full_sync" +%s 2>/dev/null \
+            || date -d "$last_full_sync" +%s 2>/dev/null
+    )
+    age_seconds=$((now - last_full_sync_epoch))
+    [[ $age_seconds -lt 60 ]]
+}
+
+function assert_last_updated_unchanged {
+    local timestamp state="$output_dir/.sync-state"
+    timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
+    [[ "$timestamp" == "2020-01-01T00:00:00Z" ]]
 }
 
 function assert_file_pushed {
@@ -317,7 +448,7 @@ function assert_file_pushed {
 
     response=$(curl -s -i \
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/$uuid")
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid")
     headers=$(echo "$response" | sed '/^\r$/q' | tr -d '\r')
     body=$(echo "$response" | sed '1,/^\r$/d')
 
@@ -340,7 +471,7 @@ function assert_server_file_deleted {
     local response
     response=$(curl -s \
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
-        "$YOUR5E_API_BASE/api/notebooks/norm/campaign-notes/" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/" \
         | jq -r ".results[] | select(.filename == \"$filename\") | .deleted_at")
     [[ -n "$response" && "$response" != "null" ]]
 }
@@ -358,8 +489,8 @@ function assert_file_deleted_on_server {
 function invalidate_token {
     local token="$1"
     local token_key="${token:0:15}"
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e your5e_test \
         -c "DELETE FROM users_authtoken WHERE token_key = '$token_key'" \
         >/dev/null 2>&1
@@ -367,8 +498,8 @@ function invalidate_token {
 
 function downgrade_to_viewer {
     local username="$1" notebook_owner="$2" notebook_slug="$3"
-    COMPOSE_FILE=docker-compose.test.yml \
-    docker compose -p your5e-test exec -T db-test \
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
         psql -U your5e your5e_test \
         -c "UPDATE notebooks_notebookpermission SET role = 'viewer'
             FROM users_user u, notebooks_notebook n
@@ -378,6 +509,16 @@ function downgrade_to_viewer {
             AND n.owner_id = (
                 SELECT id FROM users_user WHERE username = '$notebook_owner')
             AND n.slug = '$notebook_slug'" \
+        >/dev/null 2>&1
+}
+
+function delete_page_by_uuid {
+    local page_uuid="$1"
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
+        psql -U your5e your5e_test \
+        -c "UPDATE wikis_page SET deleted_at = NOW()
+            WHERE uuid = '$page_uuid'" \
         >/dev/null 2>&1
 }
 

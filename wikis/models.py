@@ -5,7 +5,7 @@ from collections import namedtuple
 import yaml
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models.functions import Coalesce, Greatest, Trunc
 from django.utils import timezone
 from slugify import slugify
 
@@ -67,17 +67,15 @@ class Wiki(models.Model):
     def changes_since(self, timestamp):
         return (
             self.page_set
-                .filter(
-                    models.Q(version__created_at__gte=timestamp)
-                    | models.Q(deleted_at__gte=timestamp)
-                )
                 .annotate(
                     latest_version_created=models.Max("version__created_at"),
                     last_modified=Greatest(
                         Coalesce("deleted_at", "latest_version_created"),
                         "latest_version_created",
                     ),
+                    last_modified_seconds=Trunc("last_modified", "second"),
                 )
+                .filter(last_modified_seconds__gt=timestamp)
                 .distinct()
                 .order_by("-last_modified", "-pk")
         )
@@ -186,8 +184,10 @@ class Page(models.Model):
         return self.version_set.order_by("-number").first()
 
     def update(self, *, filename, mime_type, data, created_by):
-        if mime_type.startswith("text/") and not data.endswith(b"\n"):
-            data = data + b"\n"
+        if mime_type == "text/markdown":
+            data = data.replace(b"\r\n", b"\n")
+            if not data.endswith(b"\n"):
+                data = data + b"\n"
         content_hash = hashlib.sha256(data).hexdigest()
         content, _ = Content.objects.get_or_create(
             hash=content_hash,

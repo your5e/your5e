@@ -16,4 +16,4 @@ Reserve some common terms so they cannot be registered, such as `srd`, `dnd`,
 `wotc`, `rules`, `rules*lawyer`, `player`, `dm`, `dungeon*master`, `gm`,
 `game*master` (and any others you can think of).
 
-- [ ] Reserved names cannot be registered
+- [X] Reserved names cannot be registered

@@ -13,6 +13,7 @@ services:
       DB_USER: your5e
       DB_HOST: postgres_db
       DB_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: config.settings.web
     secrets:
       - db_password
       - secret_key
@@ -30,6 +31,40 @@ services:
         - traefik.http.routers.your5e.entrypoints=websecure
         - traefik.http.routers.your5e.tls.certresolver=letsencrypt
         - traefik.http.services.your5e.loadbalancer.server.port=8000
+
+  api:
+    image: ghcr.io/your5e/your5e:latest
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      ALLOWED_HOSTS: api.your5e.com,localhost
+      DB_NAME: your5e
+      DB_USER: your5e
+      DB_HOST: postgres_db
+      DB_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: config.settings.api
+      WEB_BASE_URL: https://your5e.com
+    secrets:
+      - db_password
+      - secret_key
+    networks:
+      - traefik-public
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.http.routers.your5e-api.rule=Host(`api.your5e.com`)
+        - traefik.http.routers.your5e-api.entrypoints=websecure
+        - traefik.http.routers.your5e-api.tls.certresolver=letsencrypt
+        - traefik.http.services.your5e-api.loadbalancer.server.port=8000
 
 secrets:
   db_password:

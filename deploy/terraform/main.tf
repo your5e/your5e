@@ -49,3 +49,11 @@ resource "hcloud_zone_rrset" "www" {
   ttl     = 300
   records = [{ value = hcloud_server.app.ipv4_address }]
 }
+
+resource "hcloud_zone_rrset" "api" {
+  zone    = hcloud_zone.main.name
+  name    = "api"
+  type    = "A"
+  ttl     = 300
+  records = [{ value = hcloud_server.app.ipv4_address }]
+}

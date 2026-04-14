@@ -6,6 +6,7 @@ dependencies = [
     "bleach>=6.0",
     "django>=5.1",
     "django-cors-headers>=4.6",
+    "django-registration>=3.4",
     "django-rest-knox>=5.0",
     "djangorestframework>=3.15",
     "gunicorn>=23.0",
@@ -24,7 +25,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
+DJANGO_SETTINGS_MODULE = "config.settings.web"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 
 [tool.ruff]

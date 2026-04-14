@@ -6,15 +6,26 @@
 # scenarios that any sync client implementation should consider.
 
 api_token="${YOUR5E_API_TOKEN:-}"
-base_url="${YOUR5E_API_BASE:-http://localhost:5843}"
-debounce_seconds=300
-poll_seconds=900
+base_url="${YOUR5E_API_BASE:-https://api.your5e.com}"
+debounce_seconds=180
+poll_seconds=600
 pull_only=0
 verbose=0
 watch=0
 state_file=""
+last_update=""
 remote_state_file="$(mktemp)"
 trap 'rm -f "$remote_state_file"' EXIT
+
+function do_curl {
+    curl \
+        --connect-timeout 30 \
+        --max-time 120 \
+        --silent \
+        --header "Authorization: Token $api_token" \
+        --write-out "\n%{http_code}" \
+        "$@"
+}
 
 function main {
     while getopts "b:d:hi:pt:vw" opt; do
@@ -56,10 +67,31 @@ function main {
 function sync_notebook {
     local notebook="$1"
     local output_dir="$2"
+    local incremental_sync=0
 
     : > "$remote_state_file"
 
-    fetch_remote_state "$notebook"
+    if [[ -f "$state_file" ]]; then
+        local last_full_sync
+        last_full_sync=$(get_sync_state "LAST_FULL_SYNC" server_filename)
+
+        if [[ -n "$last_full_sync" ]]; then
+            local now last_full_sync_epoch age_seconds
+            now=$(date +%s)
+            last_full_sync_epoch=$(
+                TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last_full_sync" +%s 2>/dev/null \
+                    || date -d "$last_full_sync" +%s 2>/dev/null
+            )
+            age_seconds=$((now - last_full_sync_epoch))
+
+            # incremental sync when less than one hour has passed since the last sync
+            if [[ $age_seconds -lt 3600 ]]; then
+                incremental_sync=1
+            fi
+        fi
+    fi
+
+    fetch_remote_state "$notebook" "$incremental_sync"
 
     [[ -n "${AFTER_FETCH_HOOK:-}" ]] \
         && eval "$AFTER_FETCH_HOOK"
@@ -76,7 +108,21 @@ function sync_notebook {
     apply_remote_updates "$notebook" "$output_dir" "" \
         $(get_remote_state "" active_uuids)
 
-    check_for_stale_files "$output_dir"
+    [[ $incremental_sync -eq 0 ]] \
+        && check_for_stale_files "$output_dir"
+
+    mkdir -p "$output_dir"
+    touch "$state_file"
+
+    if [[ -n "$last_update" ]]; then
+        update_sync_state "LAST_UPDATED" "$last_update" "" "" ""
+    fi
+
+    if [[ $incremental_sync -eq 0 ]]; then
+        local now_iso
+        now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        update_sync_state "LAST_FULL_SYNC" "$now_iso" "" "" ""
+    fi
 }
 
 function detect_untracked_renames {
@@ -121,13 +167,22 @@ function find_untracked_file_by_hash {
 
 function fetch_remote_state {
     local notebook="$1"
-    local next_page="${base_url}/api/notebooks/${notebook}/"
+    local incremental_sync="$2"
+    local next_page="${base_url}/v1/notebooks/${notebook}/"
     local body first_page=1 http_code response
+
+    if [[ -f "$state_file" && $incremental_sync -eq 1 ]]; then
+        local since
+        since=$(get_sync_state "LAST_UPDATED" server_filename)
+        if [[ -n "$since" ]]; then
+            next_page="${next_page}?since=${since}"
+        fi
+    fi
 
     while [[ -n "$next_page" ]]; do
         response=$(
-            curl -s -w "\n%{http_code}" \
-                -H "Authorization: Token $api_token" "$next_page"
+            do_curl \
+                "$next_page"
         )
         http_code=$(echo "$response" | tail -1)
         body=$(echo "$response" | sed '$d')
@@ -155,6 +210,8 @@ function fetch_remote_state {
                 echo "sync: NOTE read-only access, switching to pull-only mode"
                 pull_only=1
             fi
+
+            last_update=$(echo "$body" | jq -r '.last_update // ""')
         fi
 
         next_page=$(echo "$body" | jq -r '.next // ""')
@@ -182,6 +239,9 @@ function apply_local_updates {
 
     if has_local_state; then
         while IFS=$'\t' read -r uuid _ local_fn hash _; do
+            [[ "$uuid" == "LAST_UPDATED" || "$uuid" == "LAST_FULL_SYNC" ]] \
+                && continue
+
             [[ $pull_only -eq 1 ]] \
                 && break
 
@@ -245,7 +305,11 @@ function apply_local_updates {
 
         create_remote_file "$notebook" "$file" "$filepath" \
             || true
-    done < <(find "$output_dir" -type f ! -name ".sync-state" -print0 | sort -z)
+    done < <(
+        find "$output_dir" -type f \
+            ! -name ".sync-state" \
+            -print0 | sort -z
+    )
 
     # stale UUIDs must stay in cache until after the new files loop,
     # otherwise the file would be picked up as "new" and tried again
@@ -295,7 +359,7 @@ function apply_remote_updates {
     shift 3
 
     # In order to handle rename cycles (file a renamed to b, b renamed c, c renamed a),
-    # apply_remote_updates_impl is a recursive function that can call itself with the
+    # apply_remote_updates is a recursive function that can call itself with the
     # current argument removed. So two things are unintuitive about this function, that
     # it will process its arguments in reverse order (see below), and that it will
     # return success early when there are no arguments to signal a cycle can be broken:
@@ -380,9 +444,14 @@ function apply_remote_updates {
                 printf 'pull: SKIPPING pull "%s" to "%s", ' "$dest_file" "$src_file"
                 printf 'local changes would be lost\n'
             elif has_remote_changes "$uuid"; then
-                fetch_remote_to_local_path \
-                    "$notebook" "$output_dir" "$uuid" "$src_file" "$hash"
-                printf 'pull: "%s" to "%s" (v%s)\n' "$dest_file" "$src_file" "$version"
+                fetch_remote_file \
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version" \
+                    "$src_file"
             fi
 
         elif has_local_changes "$uuid" "$src_path"; then
@@ -401,9 +470,8 @@ function apply_remote_updates {
                 if file_matches_hash "$dest_path" "$hash"; then
                     update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
                 else
-                    fetch_remote_file \
-                        "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
-                    printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
+                    fetch_remote_file "$notebook" "$output_dir" "$uuid" \
+                        "$dest_file" "$hash" "$version"
                 fi
 
             else
@@ -420,8 +488,7 @@ function apply_remote_updates {
         elif local_file_was_removed "$src_path"; then
             if has_remote_changes "$uuid"; then
                 fetch_remote_file \
-                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
-                printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
+                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
             else
                 printf 'pull: SKIPPING rename "%s" to "%s", ' "$src_file" "$dest_file"
                 printf '"%s" deleted locally\n' "$src_file"
@@ -434,8 +501,8 @@ function apply_remote_updates {
             if file_matches_hash "$dest_path" "$hash"; then
                 update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
             else
-                fetch_remote_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
-                printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
+                fetch_remote_file \
+                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
             fi
         fi
 
@@ -460,16 +527,21 @@ function apply_remote_updates {
             "$dest_file" "$src_file"
 
     elif is_locally_renamed "$uuid" && has_remote_changes "$uuid"; then
-        fetch_remote_to_local_path \
-            "$notebook" "$output_dir" "$uuid" "$src_file" "$hash"
-        printf 'pull: "%s" to "%s" (v%s)\n' "$dest_file" "$src_file" "$version"
+        fetch_remote_file \
+            "$notebook" \
+            "$output_dir" \
+            "$uuid" \
+            "$dest_file" \
+            "$hash" \
+            "$version" \
+            "$src_file"
 
     else
         if file_matches_hash "$dest_path" "$hash"; then
             update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
         else
-            fetch_remote_file "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash"
-            printf "pull: \"%s\" (v%s)\n" "$dest_file" "$version"
+            fetch_remote_file \
+                "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
         fi
     fi
 }
@@ -506,14 +578,22 @@ function check_for_stale_files {
     done < "$state_file"
 }
 
+function calculate_next_poll_time {
+    local now flutter flutter_max
+    now=$(date +%s)
+    flutter_max=$(( poll_seconds / 10 ))
+    flutter=$(( (RANDOM % (flutter_max * 2 + 1)) - flutter_max ))
+    echo $(( now + poll_seconds + flutter ))
+}
+
 function watch_for_changes {
     local notebook="$1"
     local output_dir="$2"
     local -a pending_events=()
-    local last_event_time=0 last_sync_time now real_output_dir
+    local last_event_time=0 next_poll_time now real_output_dir
 
     real_output_dir=$(cd "$output_dir" && pwd -P)
-    last_sync_time=$(date +%s)
+    next_poll_time=$(calculate_next_poll_time)
 
     log_watch_event "watching '${real_output_dir}' for changes"
 
@@ -529,7 +609,6 @@ function watch_for_changes {
                 "${filepath#"$real_output_dir"/}" \
                 "${event#*:}"
         else
-            local now
             now=$(date +%s)
             if [[ ${#pending_events[@]} -gt 0 \
                     && $((now - last_event_time)) -ge $debounce_seconds ]]; then
@@ -537,11 +616,11 @@ function watch_for_changes {
                 sync_notebook "$notebook" "$output_dir"
                 log_watch_event "----"
                 pending_events=()
-                last_sync_time=$now
-            elif [[ $((now - last_sync_time)) -ge $poll_seconds ]]; then
+                next_poll_time=$(calculate_next_poll_time)
+            elif [[ $now -ge $next_poll_time ]]; then
                 log_watch_event "polling remote"
                 sync_notebook "$notebook" "$output_dir"
-                last_sync_time=$now
+                next_poll_time=$(calculate_next_poll_time)
             fi
         fi
     done < <(fswatch --format='%p:%f' --exclude '.sync-state' "$output_dir")
@@ -765,12 +844,11 @@ function rename_remote_file {
 
     local response
     response=$(
-        curl -s -w "\n%{http_code}" \
-            -X PATCH \
-            -H "Authorization: Token $api_token" \
-            -H "Content-Type: application/json" \
-            -d "$payload" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+        do_curl \
+            --request PATCH \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
 
     local http_code body
@@ -797,7 +875,7 @@ function rename_remote_file {
 
     if [[ "$http_code" != "200" ]]; then
         printf 'push: ERROR failed to rename "%s" (HTTP %s)\n' "$new_file" "$http_code"
-        return 1
+        exit 1
     fi
 
     local new_hash version
@@ -820,10 +898,9 @@ function delete_remote_file {
     has_remote_changes "$uuid" \
         && had_changes=1
     response=$(
-        curl -s -w "\n%{http_code}" \
-            -X DELETE \
-            -H "Authorization: Token $api_token" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+        do_curl \
+            --request DELETE \
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
     http_code=$(echo "$response" | tail -1)
 
@@ -840,7 +917,7 @@ function delete_remote_file {
 
     if [[ "$http_code" != "204" && "$http_code" != "404" ]]; then
         printf 'push: ERROR failed to delete "%s" (HTTP %s)\n' "$filename" "$http_code"
-        return 1
+        exit 1
     fi
 
     update_remote_state -d "$uuid"
@@ -863,12 +940,11 @@ function create_remote_file {
     local body error_msg http_code new_hash response uuid
 
     response=$(
-        curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Authorization: Token $api_token" \
-            -F "file=@$filepath" \
-            -F "filename=$file" \
-            "${base_url}/api/notebooks/${notebook}/"
+        do_curl \
+            --request POST \
+            --form "file=@$filepath" \
+            --form "filename=$file" \
+            "${base_url}/v1/notebooks/${notebook}/"
     )
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
@@ -891,8 +967,8 @@ function create_remote_file {
     fi
 
     if [[ "$http_code" != "201" ]]; then
-        printf "   %s failed to upload (HTTP %s)\n" "$file" "$http_code"
-        return 1
+        printf "push: ERROR failed to upload \"%s\" (HTTP %s)\n" "$file" "$http_code"
+        exit 1
     fi
 
     uuid=$(echo "$body" | jq -r '.uuid')
@@ -919,12 +995,11 @@ function update_remote_file {
     [[ "$mime_type" == "text/plain" && "$file" == *.md ]] \
         && mime_type="text/markdown"
     response=$(
-        curl -s -w "\n%{http_code}" \
-            -X PUT \
-            -H "Authorization: Token $api_token" \
-            -H "Content-Type: $mime_type" \
+        do_curl \
+            --request PUT \
+            --header "Content-Type: $mime_type" \
             --data-binary "@$filepath" \
-            "${base_url}/api/notebooks/${notebook}/${uuid}"
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
     http_code=$(echo "$response" | tail -1)
     body=$(echo "$response" | sed '$d')
@@ -941,13 +1016,22 @@ function update_remote_file {
     fi
 
     if [[ "$http_code" != "200" ]]; then
-        printf "   %s failed to upload (HTTP %s)\n" "$file" "$http_code"
-        return 1
+        printf "push: ERROR failed to upload \"%s\" (HTTP %s)\n" "$file" "$http_code"
+        exit 1
     fi
 
     previous_hash=$(echo "$body" | jq -r '.previous_hash')
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
+
+    local actual_hash
+    actual_hash=$(sha256sum "$filepath" | awk '{print $1}')
+
+    if [[ "$new_hash" != "$actual_hash" ]]; then
+        # the server normalised the line endings
+        fetch_remote_file \
+            "$notebook" "$(dirname "$filepath")" "$uuid" "$file" "$new_hash"
+    fi
 
     update_remote_state "$uuid" "" "$new_hash" "$version"
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
@@ -959,64 +1043,26 @@ function update_remote_file {
     fi
 }
 
-function fetch_remote_to_local_path {
-    local notebook="$1"
-    local output_dir="$2"
-    local uuid="$3"
-    local local_file="$4"
-    local hash="$5"
-    local filepath="${output_dir}/${local_file}"
-    local tmp http_code
-
-    mkdir -p "$(dirname "$filepath")"
-
-    tmp=$(mktemp)
-
-    http_code=$(
-        curl \
-            -s \
-            -w "%{http_code}" \
-            -H "Authorization: Token $api_token" \
-            -o "$tmp" \
-                "${base_url}/api/notebooks/${notebook}/${uuid}"
-    )
-
-    if [[ "$http_code" == "401" ]]; then
-        rm -f "$tmp"
-        echo "sync: ERROR API token invalid"
-        exit 1
-    fi
-
-    if [[ "$http_code" == "403" ]]; then
-        rm -f "$tmp"
-        echo "sync: ERROR permission denied"
-        exit 1
-    fi
-
-    mv "$tmp" "$filepath"
-    update_sync_state "$uuid" "" "" "$hash" "$hash"
-}
-
 function fetch_remote_file {
     local notebook="$1"
     local output_dir="$2"
     local uuid="$3"
-    local file="$4"
+    local remote_file="$4"
     local hash="$5"
-    local filepath="${output_dir}/${file}"
+    local version="${6:-}"
+    local local_file="${7:-$remote_file}"
+    local filepath="${output_dir}/${local_file}"
     local tmp http_code
 
     tmp=$(mktemp)
     mkdir -p "$(dirname "$filepath")"
 
-    http_code=$(
-        curl \
-            -s \
-            -w "%{http_code}" \
-            -H "Authorization: Token $api_token" \
-            -o "$tmp" \
-                "${base_url}/api/notebooks/${notebook}/${uuid}"
+    response=$(
+        do_curl \
+            --output "$tmp" \
+            "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
+    http_code=$(echo "$response" | tail -1)
 
     if [[ "$http_code" == "401" ]]; then
         rm -f "$tmp"
@@ -1030,8 +1076,31 @@ function fetch_remote_file {
         exit 1
     fi
 
+    if [[ "$http_code" == "404" ]]; then
+        rm -f "$tmp"
+        [[ -n "$version" ]] \
+            && printf \
+                'pull: SKIPPING "%s", deleted remotely during sync\n' \
+                "$remote_file"
+        return 0
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        rm -f "$tmp"
+        echo "sync: ERROR unexpected response (HTTP $http_code)"
+        exit 1
+    fi
+
     mv "$tmp" "$filepath"
-    update_sync_state "$uuid" "$file" "$file" "$hash" "$hash"
+
+    if [[ "$local_file" == "$remote_file" ]]; then
+        update_sync_state "$uuid" "$remote_file" "$remote_file" "$hash" "$hash"
+        [[ -n "$version" ]] \
+            && printf 'pull: "%s" (v%s)\n' "$remote_file" "$version"
+    else
+        update_sync_state "$uuid" "" "" "$hash" "$hash"
+        printf 'pull: "%s" to "%s" (v%s)\n' "$remote_file" "$local_file" "$version"
+    fi
 }
 
 function local_file_was_removed {
@@ -1273,9 +1342,9 @@ function usage {
     sed -e 's/^        //' >&2 <<-EOF
         Usage: $0 [options] <notebook> <dir>
 
-            -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5843)
-            -d SECS  Debounce seconds (default: 300)
-            -i SECS  Poll interval seconds (default: 900)
+            -b URL   Base URL (default: \$YOUR5E_API_BASE or localhost:5844)
+            -d SECS  Debounce seconds (default: 180)
+            -i SECS  Poll interval seconds (default: 600)
             -p       Pull only (do not push local changes)
             -t TOKEN API token (default: \$YOUR5E_API_TOKEN)
             -v       Verbose (show debug output in watch mode)

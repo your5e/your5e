@@ -9,7 +9,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 DEFAULT_TIMEOUT = 2000
-DEFAULT_BASE_URL = "http://localhost:5844"
+DEFAULT_BASE_URL = "http://localhost:5853"
 verbose = False
 captured = {}
 
@@ -24,9 +24,10 @@ def reset_database():
     subprocess.run(
         [
             "docker", "compose",
+            "-f", "docker-compose.yml",
             "-f", "docker-compose.test.yml",
             "-p", "your5e-test",
-            "exec", "-T", "db-test",
+            "exec", "-T", "db",
             "psql", "-U", "your5e", "postgres",
         ],
         input=b"""

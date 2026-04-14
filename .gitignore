@@ -4,8 +4,12 @@ __pycache__/
 *.token
 tests/*.token
 tests/seed.sql
+tests/last_update
 
 static/css/*.css*
+
+obsidian-plugin/node_modules/
+obsidian-plugin/dist/
 
 deploy/terraform/.terraform/
 deploy/terraform/*.tfstate

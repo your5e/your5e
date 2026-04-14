@@ -1,5 +1,6 @@
 from http import HTTPStatus
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db.models import OuterRef, Subquery
 from django.http import HttpResponse, HttpResponseRedirect
@@ -20,6 +21,11 @@ from users.models import User
 from wikis.models import Page, Version
 
 MAX_UPLOAD_SIZE = 2 * 1024 * 1024
+
+
+class NotebookMineRedirectView(LoginRequiredMixin, View):
+    def get(self, request):
+        return redirect("notebook_user_list", username=request.user.username)
 
 
 class NotebookFromURLMixin:
@@ -371,18 +377,21 @@ class NotebookIndexView(NotebookContextMixin, NotebookFromURLMixin, TemplateView
         )
 
 
-class NotebookSettingsView(NotebookSettingsMixin, NotebookFromURLMixin, View):
-    @NotebookPermissions.owner_required
-    def get(self, request, username, slug):
-        breadcrumbs = [
+class NotebookSettingsView(NotebookSettingsMixin, NotebookFromURLMixin, TemplateView):
+    template_name = "notebooks/settings.html"
+
+    @NotebookPermissions.view_required
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["breadcrumbs"] = [
             {"name": self.object.name, "url": self.object.get_absolute_url()},
             {"name": "Settings"},
         ]
-        return render(
-            request,
-            "notebooks/settings.html",
-            self.get_context_data(breadcrumbs=breadcrumbs),
-        )
+        context["is_owner"] = self.object.owner == self.request.user
+        return context
 
 
 class NotebookDeletedPagesView(NotebookContextMixin, NotebookFromURLMixin, View):
@@ -641,24 +650,25 @@ class NotebookCollaboratorsView(NotebookSettingsMixin, NotebookFromPOSTMixin, Vi
 
         return redirect(self.object)
 
+    def render_settings_with_error(self, request, error):
+        return render(
+            request,
+            "notebooks/settings.html",
+            self.get_context_data(error=error, is_owner=True),
+        )
+
     def handle_add(self, request, confirm):
         username = request.POST.get("username")
         role = request.POST.get("role")
 
         if not username:
-            return render(
-                request,
-                "notebooks/settings.html",
-                self.get_context_data(error="No username provided"),
-            )
+            return self.render_settings_with_error(request, "No username provided")
 
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:
-            return render(
-                request,
-                "notebooks/settings.html",
-                self.get_context_data(error=f"User '{username}' not found"),
+            return self.render_settings_with_error(
+                request, f"User '{username}' not found"
             )
 
         if not confirm:
@@ -1058,6 +1068,7 @@ class NotebookUserListView(NotebookDescriptionMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["owner"] = self.owner
+        context["is_own_list"] = self.request.user == self.owner
 
         if self.request.user.is_authenticated:
             viewer = self.request.user

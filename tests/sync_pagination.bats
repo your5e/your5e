@@ -4,7 +4,7 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
-    export YOUR5E_API_BASE="http://localhost:5844"
+    export YOUR5E_API_BASE="http://localhost:5854"
     export page_size=$(sed -n 's/^PAGE_SIZE = //p' api/notebooks/views.py)
     export pages_to_create=$((page_size + 1))
     restore_database
@@ -14,12 +14,13 @@ setup_file() {
             -X POST \
             -H "Authorization: Token $YOUR5E_API_TOKEN" \
             -F "file=@-;filename=page-${i}.md" \
-                "${YOUR5E_API_BASE}/api/notebooks/norm/campaign-notes/" \
+                "${YOUR5E_API_BASE}/v1/notebooks/norm/campaign-notes/" \
                     <<< "# Page ${i}"
     done
 }
 
 setup() {
+    fail_on_since_parameter
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
 }
@@ -57,5 +58,6 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_exists
     [ $status -eq 0 ]
 }

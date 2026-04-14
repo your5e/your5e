@@ -294,6 +294,20 @@ class TestNotebookPageEditView(NotebookMixin):
         assert page.version_set.count() == initial_version_count + 1
         assert page.latest_version.content.data == b"# Updated Notes\n\nNew content.\n"
 
+    @UserMixin.as_user("wendy")
+    def test_editing_sanitises_crlf_line_endings(self, client):
+        response = client.post("/notebooks/wendy/heros-legendes/test-file", {
+            # browsers send CRLF in textarea content per HTML spec
+            "filename": "test-file",
+            "content": "First line\r\nSecond line\r\nThird line",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page = self.wendys_notebook.get_page(path="test-file")
+        assert (
+            page.latest_version.content.data
+            == b"First line\nSecond line\nThird line\n"
+        )
+
     @UserMixin.as_user("susan")
     def test_editor_can_edit_page(self, client):
         page = self.wendys_notebook.get_page(path="notes")

@@ -13,7 +13,7 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
-    export YOUR5E_API_BASE="http://localhost:5844"
+    export YOUR5E_API_BASE="http://localhost:5854"
     restore_database
     setup_pages_file
 }
@@ -22,10 +22,27 @@ setup() {
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
     init_synced_dir
+    setup_recent_sync_metadata
+    fail_on_missing_since_parameter
 }
 
 
-@test "no change" {
+@test "no change, outdated timestamp" {
+    setup_old_sync_metadata
+    fail_on_since_parameter
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_dir_matches_fixture
+    assert_state_matches_fixture
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "no change, recent timestamp" {
     fail_on_multiple_curl_calls
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -35,6 +52,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_exists
     assert_success
 }
 
@@ -56,6 +74,7 @@ setup() {
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -80,6 +99,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -103,6 +123,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -127,6 +148,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -152,6 +174,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -168,6 +191,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -184,6 +208,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -208,6 +233,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -226,6 +252,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -245,6 +272,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -263,6 +291,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -281,6 +310,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -302,6 +332,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -331,6 +362,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -360,6 +392,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -380,6 +413,29 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, CRLF line endings" {
+    printf "First line\r\nSecond line\r\nThird line" > "$output_dir/Home.md"
+
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    expected_content=$'First line\r\nSecond line\r\nThird line'
+    diff -u <(echo -n "$expected_content") "$output_dir/Home.md"
+    assert_file_in_state "Home.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -404,6 +460,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -429,6 +486,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -455,6 +513,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -479,6 +538,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -504,11 +564,13 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
 @test "stale file" {
     add_stale_file "my-notes.md"
+    setup_old_sync_metadata
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
@@ -527,6 +589,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -544,6 +607,7 @@ setup() {
     assert_not_in_state "stale-uuid"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -568,12 +632,14 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
 @test "stale file, local deleted" {
     add_stale_file "my-notes.md"
     delete_tracked_file "my-notes.md"
+    setup_old_sync_metadata
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
@@ -583,6 +649,7 @@ setup() {
     assert_tracked_file_deleted "my-notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -601,6 +668,7 @@ setup() {
     assert_not_in_state "stale-uuid"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -623,6 +691,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -640,6 +709,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -664,6 +734,7 @@ setup() {
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -682,6 +753,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -709,6 +781,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -733,6 +806,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -754,6 +828,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -776,6 +851,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -801,6 +877,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -827,6 +904,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -853,6 +931,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -880,6 +959,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -908,6 +988,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -937,6 +1018,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -962,6 +1044,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -988,12 +1071,14 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
 @test "local renamed, stale file" {
     add_stale_file "original.md"
     rename_local_file "original.md" "my-notes.md"
+    setup_old_sync_metadata
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
@@ -1012,6 +1097,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -1019,6 +1105,7 @@ setup() {
     add_stale_file "original.md"
     rename_local_file "original.md" "my-notes.md"
     modify_file "my-notes.md"
+    setup_old_sync_metadata
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
@@ -1038,6 +1125,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -1062,6 +1150,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 
@@ -1087,6 +1176,7 @@ setup() {
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
     assert_success
 }
 

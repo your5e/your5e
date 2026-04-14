@@ -9,7 +9,7 @@ The endpoint is cursor-paginated, ordered by most recently updated. Use the
 Pages that have been deleted but not yet purged return `deleted_at`
 instead of `updated_at`.
 
-## GET `/api/notebooks/{username}/{notebook-slug}/`
+## GET `/v1/notebooks/{username}/{notebook-slug}/`
 
 The response structure is:
 
@@ -21,7 +21,7 @@ The response structure is:
   "results": [
     {
       "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "url": "/api/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "url": "/v1/notebooks/norm/campaign-notes/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "html_url": "https://your5e.com/notebooks/norm/campaign-notes/session-one",
       "filename": "Session One.md",
       "mime_type": "text/markdown",
@@ -33,7 +33,7 @@ The response structure is:
     },
     {
       "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "url": "/api/notebooks/norm/campaign-notes/b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "url": "/v1/notebooks/norm/campaign-notes/b2c3d4e5-f6a7-8901-bcde-f12345678901",
       "html_url": "https://your5e.com/notebooks/norm/campaign-notes/old-draft",
       "filename": "old-draft.md",
       "mime_type": "text/markdown",
@@ -47,9 +47,14 @@ The response structure is:
       ...
     }
   ],
-  "total_results": 8
+  "total_results": 8,
+  "last_update": "2024-01-15T10:30:00Z"
 }
 ```
+
+The `last_update` field contains the timestamp of the most recent update or
+deletion across all pages in the notebook, useful for tracking when the
+notebook last changed.
 
 Arguments:
 

@@ -1,13 +1,11 @@
 .PHONY: clean setup reset dev
-.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration
+.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration test-obsidian-plugin
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 .PHONY: build deploy update-notebooks
+.PHONY: setup-obsidian-plugin build-obsidian-plugin
 
-COMPOSE_FILE := docker-compose.yml:docker-compose.dev.yml
-export COMPOSE_FILE
-
-TEST_COMPOSE_FILE := docker-compose.test.yml
+TEST_COMPOSE_FILE := docker-compose.yml:docker-compose.test.yml
 TEST_COMPOSE_PROJECT := your5e-test
 
 EXEC_FLAGS ?=
@@ -50,11 +48,16 @@ scry:
 
 server-tests:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) up --build -d --wait
-	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py migrate
-	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web-test python manage.py seed_development
-	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db-test psql -U your5e postgres \
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web python manage.py migrate
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T web python manage.py seed_development
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db psql -U your5e postgres \
 		-c "DROP DATABASE IF EXISTS your5e_seed" \
 		-c "CREATE DATABASE your5e_seed WITH TEMPLATE your5e_test"
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db \
+		psql -U your5e -d your5e_seed -tA -c \
+		"SELECT to_char(GREATEST(COALESCE(MAX(v.created_at), '-infinity'), COALESCE(MAX(p.deleted_at), '-infinity')), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM wikis_page p LEFT JOIN wikis_version v ON v.page_id = p.id WHERE p.wiki_id = 2" \
+		| tr -d '\n' > tests/last_update
+	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T api python -c "print('api ready')"
 
 server-tests-down:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
@@ -64,10 +67,23 @@ test-django: lint-django
 
 test-sync-integration:
 	shellcheck tests/*.sh
+	python tests/check-test-coverage.py
 	awk -f tests/check-line-length.awk tests/*.sh
 	bats tests/*.bats
 
-test: test-django test-sync-integration
+test-obsidian-plugin:
+	tests/check-page-size-sync.sh
+	python tests/check-test-coverage.py
+	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
+	cd obsidian-plugin && npm run lint && npm test
+
+setup-obsidian-plugin:
+	cd obsidian-plugin && npm install
+
+build-obsidian-plugin:
+	cd obsidian-plugin && npm run build
+
+test: test-django test-sync-integration test-obsidian-plugin
 
 terraform-plan:
 	cd deploy/terraform && terraform plan
@@ -84,7 +100,7 @@ ansible-os:
 ansible-app:
 	cd deploy/ansible && ansible-playbook app.yml
 
-build:
+build: build-obsidian-plugin
 	docker build --platform linux/amd64 --target prod --build-arg GIT_SHA=$$(git rev-parse --short HEAD) -t ghcr.io/your5e/your5e:latest .
 	docker push ghcr.io/your5e/your5e:latest
 

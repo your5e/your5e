@@ -24,3 +24,6 @@ Update the notebook list.
 - [X] a notebook with `index.md` can contain frontmatter to explain the
       notebook, which is shown on the notebooks list
 - [X] /notebooks/[user]/ shows only public notebooks to anonymous users
+- [X] redirect `/notebooks/mine` to the logged-in user's list
+        - reserve "mine" as a username
+- [X] your notebooks list includes 'create notebook' form

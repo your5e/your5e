@@ -13,11 +13,12 @@ load 'setup_helpers.sh'
 
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
-    export YOUR5E_API_BASE="http://localhost:5844"
+    export YOUR5E_API_BASE="http://localhost:5854"
 }
 
 setup() {
     restore_database
+    fail_on_since_parameter
 
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
@@ -43,6 +44,19 @@ setup() {
     assert_file_not_downloaded "Old Notes.md"
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
+    assert_success
+}
+
+@test "empty notebook" {
+    run tests/sync-notebook.sh norm/empty-notebook "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_output_dir_exists
+    assert_state_has_no_files
+    assert_last_updated_is_epoch
     assert_success
 }
 
@@ -81,6 +95,7 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -104,6 +119,7 @@ setup() {
 
     assert_dir_matches_fixture
     assert_state_matches_fixture
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -135,6 +151,7 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -166,6 +183,7 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -192,6 +210,7 @@ setup() {
 
     assert_file_unchanged ".hidden.md"
     assert_file_unchanged ".obsidian/app.json"
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -223,6 +242,7 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }
 
@@ -254,5 +274,6 @@ setup() {
     assert_file_downloaded "characters/NPCs.md"
     assert_file_downloaded "The Old Café.md"
     assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_matches_expected
     assert_success
 }

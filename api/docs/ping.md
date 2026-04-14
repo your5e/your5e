@@ -2,7 +2,7 @@
 
 Test your authentication works.
 
-## GET /api/ping
+## GET /v1/ping
 
 Returns:
 

@@ -26,21 +26,29 @@ class ApiMixin(UserMixin):
 
 
 @pytest.mark.django_db
+class TestHealth:
+    def test_health_returns_ok(self):
+        response = APIClient().get("/v1/health")
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.django_db
 class TestPing(ApiMixin):
     def test_ping_without_token_returns_unauthorized(self, api_client):
-        response = api_client.get("/api/ping")
+        response = api_client.get("/v1/ping")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Authentication required."}
 
     def test_ping_with_invalid_token_returns_unauthorized(self, api_client):
         api_client.credentials(HTTP_AUTHORIZATION="Token invalid-token")
-        response = api_client.get("/api/ping")
+        response = api_client.get("/v1/ping")
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json() == {"error": "Invalid token."}
 
     def test_ping_with_valid_token_returns_username(self, api_client):
         _, token = AuthToken.objects.create(user=self.wendy)
         api_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
-        response = api_client.get("/api/ping")
+        response = api_client.get("/v1/ping")
         assert response.status_code == HTTPStatus.OK
         assert response.json() == {"username": "wendy"}

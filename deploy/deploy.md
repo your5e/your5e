@@ -3,18 +3,30 @@
 Single-node Docker Swarm on Hetzner Cloud, with Traefik reverse proxy and
 Let's Encrypt certificates.
 
+## Architecture
+
+| Service  | Stack Definition                    | Ansible Task                 |
+| -------- | ----------------------------------- | ---------------------------- |
+| Traefik  | `ansible/files/traefik-stack.yml`   | `ansible/tasks/traefik.yml`  |
+| Postgres | `ansible/files/postgres-stack.yml`  | `ansible/tasks/postgres.yml` |
+| App      | `ansible/files/app-stack.yml`       | `ansible/tasks/app.yml`      |
+
+The app stack contains two services: `web` (your5e.com) and `api` (api.your5e.com).
+
+The app image is built from `Dockerfile` and published to
+`ghcr.io/your5e/your5e:latest`.
+
 ## Deploying changes
 
-Build and push the image, then update the service:
+The GitHub workflow (`.github/workflows/build.yml`) automatically builds and
+pushes the image when tests pass on main.
 
 ```bash
-make deploy
-```
+# manually build the docker image, if necessary
+(computer)% make build deploy
 
-To update infrastructure or stack configuration:
-
-```bash
-make ansible-app
+# deploy the image tagged 'latest'
+(computer)% make deploy
 ```
 
 ## Rebuilding from scratch
@@ -33,7 +45,7 @@ Tools:
 
 ### 1. Terraform
 
-Create `deploy/terraform/terraform.tfvars`:
+Create `terraform/terraform.tfvars`:
 
 ```hcl
 hcloud_token   = "your-hetzner-api-token"
@@ -74,7 +86,7 @@ This installs Docker, initialises Swarm, and creates overlay networks.
 make ansible-app
 ```
 
-This creates secrets (if missing), deploys Traefik, Postgres, and the app.
+This creates secrets (if missing), deploys Traefik, Postgres, and the app services.
 
 ### 5. Build and push the app image
 
@@ -86,8 +98,7 @@ make deploy
 ## Destroying everything
 
 ```bash
-make tf-apply   # with terraform destroy
-cd deploy/terraform && terraform destroy
+cd terraform && terraform destroy
 ```
 
 This removes the VPS and DNS zone. The Hetzner API token and GitHub PAT remain.

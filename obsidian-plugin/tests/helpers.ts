@@ -1,0 +1,763 @@
+import { execSync } from "node:child_process";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
+import { expect } from "vitest";
+import type { SyncStateEntry } from "../src/sync/types.js";
+
+const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
+const FIXTURES_DIR = path.join(PROJECT_ROOT, "tests/fixtures");
+
+export const API_BASE = "http://localhost:5854";
+
+export async function getToken(user = "norm"): Promise<string> {
+    const tokenFile = path.join(PROJECT_ROOT, `tests/${user}.token`);
+    return (await fs.readFile(tokenFile, "utf-8")).trim();
+}
+
+export function restoreDatabase(): void {
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
+      psql -U your5e postgres <<-SQL
+        SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity WHERE datname = 'your5e_test';
+        DROP DATABASE IF EXISTS your5e_test;
+        CREATE DATABASE your5e_test WITH TEMPLATE your5e_seed;
+SQL
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
+export async function createTestDir(): Promise<{
+    testDir: string;
+    outputDir: string;
+}> {
+    const testDir = await fs.mkdtemp(path.join(tmpdir(), "your5e-test-"));
+    const outputDir = path.join(testDir, "output");
+    return { testDir, outputDir };
+}
+
+export async function cleanupTestDir(testDir: string): Promise<void> {
+    await fs.rm(testDir, { recursive: true, force: true });
+}
+
+export async function createFile(
+    outputDir: string,
+    filePath: string,
+    content = "local content\n",
+): Promise<void> {
+    const fullPath = path.join(outputDir, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content);
+}
+
+export async function copyFixture(
+    outputDir: string,
+    source: string,
+    dest?: string,
+): Promise<void> {
+    const srcPath = path.join(FIXTURES_DIR, "campaign-notes", source);
+    const destPath = path.join(outputDir, dest ?? source);
+    await fs.mkdir(path.dirname(destPath), { recursive: true });
+    await fs.copyFile(srcPath, destPath);
+}
+
+async function hashFile(filePath: string): Promise<string> {
+    const content = await fs.readFile(filePath);
+    return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+function findByLocalFilename(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): SyncStateEntry | undefined {
+    for (const entry of state.values()) {
+        if (entry.localFilename === filename) {
+            return entry;
+        }
+    }
+    return undefined;
+}
+
+export async function assertFileDownloaded(
+    outputDir: string,
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const fixturePath = path.join(FIXTURES_DIR, "campaign-notes", filename);
+
+    const actual = await fs.readFile(filePath);
+    const expected = await fs.readFile(fixturePath);
+    expect(actual.equals(expected)).toBe(true);
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeDefined();
+}
+
+export async function assertFileNotDownloaded(
+    outputDir: string,
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const isFile = await fs
+        .stat(filePath)
+        .then((stat) => stat.isFile())
+        .catch(() => false);
+    expect(isFile).toBe(false);
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeUndefined();
+}
+
+export async function assertFileIgnored(
+    outputDir: string,
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    expect(content).toBe("local content\n");
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeUndefined();
+}
+
+export async function assertFileUnchanged(
+    outputDir: string,
+    filename: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    expect(content).toBe("local content\n");
+}
+
+export function assertFileNotInState(
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): void {
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeUndefined();
+}
+
+export function assertFileInState(
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+): void {
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeDefined();
+}
+
+export async function assertFileMatchesFixture(
+    outputDir: string,
+    fixture: string,
+    filename?: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename ?? fixture);
+    const fixturePath = path.join(FIXTURES_DIR, "campaign-notes", fixture);
+
+    const actual = await fs.readFile(filePath);
+    const expected = await fs.readFile(fixturePath);
+    expect(actual.equals(expected)).toBe(true);
+}
+
+async function walkDir(
+    base: string,
+    dir: string,
+    onFile: (relativePath: string, fullPath: string) => Promise<void>,
+): Promise<void> {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            await walkDir(base, fullPath, onFile);
+        } else {
+            await onFile(path.relative(base, fullPath), fullPath);
+        }
+    }
+}
+
+export async function assertDirMatchesFixture(outputDir: string): Promise<void> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+
+    const actualFiles: string[] = [];
+    await walkDir(outputDir, outputDir, async (relativePath) => {
+        actualFiles.push(relativePath);
+    });
+
+    const expectedFiles: string[] = [];
+    await walkDir(fixtureDir, fixtureDir, async (relativePath) => {
+        expectedFiles.push(relativePath);
+    });
+
+    expect(actualFiles.sort()).toEqual(expectedFiles.sort());
+
+    for (const file of expectedFiles) {
+        const actualContent = await fs.readFile(path.join(outputDir, file));
+        const expectedContent = await fs.readFile(path.join(fixtureDir, file));
+        expect(actualContent.equals(expectedContent)).toBe(true);
+    }
+}
+
+export async function assertStateMatchesFixture(
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+
+    const expected = new Map<string, string>();
+    await walkDir(fixtureDir, fixtureDir, async (relativePath, fullPath) => {
+        const hash = await hashFile(fullPath);
+        expected.set(relativePath, hash);
+    });
+
+    const actual = new Map<string, string>();
+    for (const entry of state.values()) {
+        actual.set(entry.localFilename, entry.serverHash);
+    }
+
+    expect(actual).toEqual(expected);
+}
+
+export async function assertFilePushed(
+    outputDir: string,
+    filename: string,
+    state: Map<string, SyncStateEntry>,
+    token: string,
+    expectedContentType?: string,
+): Promise<void> {
+    const entry = findByLocalFilename(state, filename);
+    if (!entry) {
+        throw new Error(`File ${filename} not found in sync state`);
+    }
+
+    const filePath = path.join(outputDir, filename);
+    const actualHash = await hashFile(filePath);
+    expect(actualHash).toBe(entry.serverHash);
+
+    const response = await fetch(
+        `${API_BASE}/v1/notebooks/norm/campaign-notes/${entry.uuid}`,
+        { headers: { Authorization: `Token ${token}` } },
+    );
+
+    const localContent = await fs.readFile(filePath);
+    const remoteContent = Buffer.from(await response.arrayBuffer());
+    expect(localContent.equals(remoteContent)).toBe(true);
+
+    if (expectedContentType) {
+        const contentType = response.headers.get("content-type")?.split(";")[0];
+        expect(contentType).toBe(expectedContentType);
+    }
+}
+
+export async function assertOutputDirExists(outputDir: string): Promise<void> {
+    const exists = await fs
+        .stat(outputDir)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+    expect(exists).toBe(true);
+}
+
+export function assertStateIsEmpty(state: Map<string, SyncStateEntry>): void {
+    expect(state.size).toBe(0);
+}
+
+export async function assertNoOutputDir(outputDir: string): Promise<void> {
+    const exists = await fs
+        .stat(outputDir)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(false);
+}
+
+export function assertNotInState(
+    state: Map<string, SyncStateEntry>,
+    uuidPrefix: string,
+): void {
+    for (const uuid of state.keys()) {
+        if (uuid.startsWith(uuidPrefix)) {
+            throw new Error(`Found entry with UUID starting with ${uuidPrefix}`);
+        }
+    }
+}
+
+// State building functions
+
+interface PageData {
+    filename: string;
+    uuid: string;
+    contentHash: string;
+    deletedAt: string | null;
+}
+
+let cachedPages: PageData[] | null = null;
+
+async function fetchPagesData(token: string): Promise<PageData[]> {
+    if (cachedPages) {
+        return cachedPages;
+    }
+
+    const response = await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/`, {
+        headers: { Authorization: `Token ${token}` },
+    });
+    const data = await response.json();
+    const pages: PageData[] = data.results.map(
+        (p: {
+            filename: string;
+            uuid: string;
+            content_hash: string;
+            deleted_at: string | null;
+        }) => ({
+            filename: p.filename,
+            uuid: p.uuid,
+            contentHash: p.content_hash,
+            deletedAt: p.deleted_at,
+        }),
+    );
+    cachedPages = pages;
+    return pages;
+}
+
+export function clearPagesCache(): void {
+    cachedPages = null;
+}
+
+async function copyDir(src: string, dest: string): Promise<void> {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            await copyDir(srcPath, destPath);
+        } else {
+            await fs.copyFile(srcPath, destPath);
+        }
+    }
+}
+
+export async function initSyncedDir(
+    outputDir: string,
+    token: string,
+): Promise<Map<string, SyncStateEntry>> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+    await copyDir(fixtureDir, outputDir);
+
+    const pages = await fetchPagesData(token);
+    const state = new Map<string, SyncStateEntry>();
+
+    for (const page of pages) {
+        if (page.deletedAt) {
+            continue;
+        }
+        state.set(page.uuid, {
+            uuid: page.uuid,
+            serverFilename: page.filename,
+            localFilename: page.filename,
+            serverHash: page.contentHash,
+            localHash: page.contentHash,
+        });
+    }
+
+    return state;
+}
+
+async function removeEmptyParents(dir: string, stopAt: string): Promise<void> {
+    if (dir === stopAt || dir === path.dirname(dir)) {
+        return;
+    }
+    try {
+        const entries = await fs.readdir(dir);
+        if (entries.length === 0) {
+            await fs.rmdir(dir);
+            await removeEmptyParents(path.dirname(dir), stopAt);
+        }
+    } catch {
+        // Directory doesn't exist or not empty
+    }
+}
+
+export async function setOlderFilename(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    from: string,
+    to: string,
+): Promise<void> {
+    const fromPath = path.join(outputDir, from);
+    const toPath = path.join(outputDir, to);
+    await fs.mkdir(path.dirname(toPath), { recursive: true });
+    await fs.rename(fromPath, toPath);
+    await removeEmptyParents(path.dirname(fromPath), outputDir);
+
+    for (const entry of state.values()) {
+        if (entry.localFilename === from) {
+            entry.serverFilename = to;
+            entry.localFilename = to;
+        }
+    }
+}
+
+export async function setOlderContent(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    const content = "old content";
+    const hash = crypto.createHash("sha256").update(content).digest("hex");
+
+    await fs.writeFile(path.join(outputDir, filename), content);
+
+    for (const entry of state.values()) {
+        if (entry.localFilename === filename) {
+            entry.serverHash = hash;
+            entry.localHash = hash;
+        }
+    }
+}
+
+export async function modifyFile(outputDir: string, filename: string): Promise<void> {
+    await fs.writeFile(path.join(outputDir, filename), "local content\n");
+}
+
+export async function renameLocalFile(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    from: string,
+    to: string,
+): Promise<void> {
+    const fromPath = path.join(outputDir, from);
+    const toPath = path.join(outputDir, to);
+    await fs.mkdir(path.dirname(toPath), { recursive: true });
+    await fs.rename(fromPath, toPath);
+    await removeEmptyParents(path.dirname(fromPath), outputDir);
+
+    for (const entry of state.values()) {
+        if (entry.localFilename === from) {
+            entry.localFilename = to;
+        }
+    }
+}
+
+export async function renameLocalFileUntracked(
+    outputDir: string,
+    from: string,
+    to: string,
+): Promise<void> {
+    const fromPath = path.join(outputDir, from);
+    const toPath = path.join(outputDir, to);
+    await fs.mkdir(path.dirname(toPath), { recursive: true });
+    await fs.rename(fromPath, toPath);
+    await removeEmptyParents(path.dirname(fromPath), outputDir);
+}
+
+export async function deleteTrackedFile(
+    outputDir: string,
+    filename: string,
+): Promise<void> {
+    await fs.unlink(path.join(outputDir, filename));
+}
+
+export function untrackFile(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): void {
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            state.delete(uuid);
+            return;
+        }
+    }
+}
+
+export async function untrackAndRemoveFile(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    untrackFile(state, filename);
+    await fs.rm(path.join(outputDir, filename), { recursive: true, force: true });
+}
+
+export async function addStaleFile(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    const content = "local content";
+    const hash = crypto.createHash("sha256").update(content).digest("hex");
+    const uuid = `stale-uuid-${Math.random().toString(36).slice(2)}`;
+
+    await fs.mkdir(path.dirname(path.join(outputDir, filename)), {
+        recursive: true,
+    });
+    await fs.writeFile(path.join(outputDir, filename), content);
+
+    state.set(uuid, {
+        uuid,
+        serverFilename: filename,
+        localFilename: filename,
+        serverHash: hash,
+        localHash: hash,
+    });
+}
+
+export function markFileStale(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): void {
+    const newUuid = `stale-uuid-${Math.random().toString(36).slice(2)}`;
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            state.delete(uuid);
+            entry.uuid = newUuid;
+            state.set(newUuid, entry);
+            return;
+        }
+    }
+}
+
+export async function fileTracksDeletedRemote(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+    token: string,
+): Promise<void> {
+    const content = "# Old Notes\n\nThese notes are no longer needed.\n";
+    const hash = crypto.createHash("sha256").update(content).digest("hex");
+    const pages = await fetchPagesData(token);
+    const page = pages.find((p) => p.filename === "Old Notes.md");
+    if (!page) {
+        throw new Error("Old Notes.md not found");
+    }
+
+    await fs.mkdir(path.dirname(path.join(outputDir, filename)), {
+        recursive: true,
+    });
+    await fs.writeFile(path.join(outputDir, filename), content);
+
+    state.set(page.uuid, {
+        uuid: page.uuid,
+        serverFilename: filename,
+        localFilename: filename,
+        serverHash: hash,
+        localHash: hash,
+    });
+}
+
+export async function assertTrackedFileIntact(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const exists = await fs
+        .stat(filePath)
+        .then((s) => s.isFile())
+        .catch(() => false);
+    expect(exists).toBe(true);
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeDefined();
+
+    const actualHash = await hashFile(filePath);
+    expect(actualHash).toBe(entry?.serverHash);
+}
+
+export async function assertTrackedFileDeleted(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const exists = await fs
+        .stat(filePath)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(false);
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeUndefined();
+}
+
+export async function assertTrackedFileNotRestored(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const exists = await fs
+        .stat(filePath)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(false);
+
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeDefined();
+}
+
+export async function assertEmptyDirRemoved(
+    outputDir: string,
+    dirname: string,
+): Promise<void> {
+    const dirPath = path.join(outputDir, dirname);
+    const exists = await fs
+        .stat(dirPath)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+    expect(exists).toBe(false);
+}
+
+export async function assertTrackedFileMatchesFixture(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    fixture: string,
+    filename?: string,
+): Promise<void> {
+    const localFile = filename ?? fixture;
+    const filePath = path.join(outputDir, localFile);
+    const fixturePath = path.join(FIXTURES_DIR, "campaign-notes", fixture);
+
+    const actual = await fs.readFile(filePath);
+    const expected = await fs.readFile(fixturePath);
+    expect(actual.equals(expected)).toBe(true);
+
+    const entry = findByLocalFilename(state, localFile);
+    expect(entry).toBeDefined();
+}
+
+export async function assertServerFileDeleted(
+    filename: string,
+    token: string,
+): Promise<void> {
+    const response = await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/`, {
+        headers: { Authorization: `Token ${token}` },
+    });
+    const data = await response.json();
+    const page = data.results.find(
+        (p: { filename: string }) => p.filename === filename,
+    );
+    expect(page).toBeDefined();
+    expect(page.deleted_at).not.toBeNull();
+}
+
+export async function assertFileDeletedOnServer(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+    token: string,
+): Promise<void> {
+    const entry = findByLocalFilename(state, filename);
+    expect(entry).toBeUndefined();
+
+    const filePath = path.join(outputDir, filename);
+    const exists = await fs
+        .stat(filePath)
+        .then(() => true)
+        .catch(() => false);
+    expect(exists).toBe(false);
+
+    await assertServerFileDeleted(filename, token);
+}
+
+export function invalidateToken(token: string): void {
+    const tokenKey = token.slice(0, 15);
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
+      psql -U your5e your5e_test \\
+      -c "DELETE FROM users_authtoken WHERE token_key = '${tokenKey}'"
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
+export function downgradeToViewer(
+    username: string,
+    notebookOwner: string,
+    notebookSlug: string,
+): void {
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
+      psql -U your5e your5e_test \\
+      -c "UPDATE notebooks_notebookpermission SET role = 'viewer'
+          FROM users_user u, notebooks_notebook n
+          WHERE notebooks_notebookpermission.user_id = u.id
+          AND notebooks_notebookpermission.notebook_id = n.wiki_ptr_id
+          AND u.username = '${username}'
+          AND n.owner_id = (
+              SELECT id FROM users_user WHERE username = '${notebookOwner}')
+          AND n.slug = '${notebookSlug}'"
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
+export function deletePageByUuid(uuid: string): void {
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
+      psql -U your5e your5e_test \\
+      -c "UPDATE wikis_page SET deleted_at = NOW() WHERE uuid = '${uuid}'"
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
+export async function uuidFor(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+): Promise<string> {
+    for (const [uuid, entry] of state) {
+        if (entry.localFilename === filename) {
+            return uuid;
+        }
+    }
+    throw new Error(`No UUID found for ${filename}`);
+}
+
+export async function removeFile(outputDir: string, filename: string): Promise<void> {
+    await fs.unlink(path.join(outputDir, filename));
+}
+
+export async function assertLastUpdateMatchesExpected(
+    lastUpdate: string | undefined,
+): Promise<void> {
+    expect(lastUpdate).toBeDefined();
+    const expectedFile = path.join(PROJECT_ROOT, "tests/last_update");
+    const expected = (await fs.readFile(expectedFile, "utf-8")).trim();
+    expect(lastUpdate).toBe(expected);
+}
+
+export function assertLastUpdateIsEpoch(lastUpdate: string | undefined): void {
+    expect(lastUpdate).toBe("0001-01-01T00:00:00Z");
+}
+
+export function assertLastUpdateExists(lastUpdate: string | undefined): void {
+    expect(lastUpdate).toBeDefined();
+}
+
+export function assertSyncMetadataUpdated(
+    lastUpdate: string | undefined,
+    lastFullSync: string | undefined,
+): void {
+    expect(lastUpdate).toBeDefined();
+    expect(lastUpdate).not.toBe("2020-01-01T00:00:00Z");
+
+    expect(lastFullSync).toBeDefined();
+    if (!lastFullSync) {
+        throw new Error("lastFullSync is undefined");
+    }
+
+    const now = Date.now();
+    const lastFullSyncTime = new Date(lastFullSync).getTime();
+    const ageSeconds = (now - lastFullSyncTime) / 1000;
+    expect(ageSeconds).toBeLessThan(60);
+}
