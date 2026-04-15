@@ -67,9 +67,7 @@ function main {
 function sync_notebook {
     local notebook="$1"
     local output_dir="$2"
-    local incremental_sync=0
-
-    : > "$remote_state_file"
+    incremental_sync=0
 
     if [[ -f "$state_file" ]]; then
         local last_full_sync
@@ -167,16 +165,28 @@ function find_untracked_file_by_hash {
 
 function fetch_remote_state {
     local notebook="$1"
-    local incremental_sync="$2"
+    local incremental="$2"
     local next_page="${base_url}/v1/notebooks/${notebook}/"
     local body first_page=1 http_code response
 
-    if [[ -f "$state_file" && $incremental_sync -eq 1 ]]; then
+    if [[ $incremental -eq 1 ]]; then
+        # Update our local cache of the remote state with the incremental changes.
+        # The limitation is that a stale file (where the server has purged a
+        # soft-deleted file) cannot be detected by this, so we should still do a
+        # full fetch of the notebook state regularly to catch purged files.
+        awk -F'\t' '
+            $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC" {
+                print $1 "\t" $2 "\t" $4 "\t\t"
+            }
+        ' "$state_file" > "$remote_state_file"
+
         local since
         since=$(get_sync_state "LAST_UPDATED" server_filename)
         if [[ -n "$since" ]]; then
             next_page="${next_page}?since=${since}"
         fi
+    else
+        : > "$remote_state_file"
     fi
 
     while [[ -n "$next_page" ]]; do
@@ -218,14 +228,30 @@ function fetch_remote_state {
         [[ -n "$next_page" && "$next_page" != http* ]] \
             && next_page="${base_url}${next_page}"
 
-        echo "$body" \
-            | jq -r '
-                    .results[]
-                        | [.uuid, .filename, .content_hash, .version, .deleted_at // ""]
-                        | @tsv
-                ' \
-            >> "$remote_state_file"
+        if [[ $incremental -eq 1 ]]; then
+            while IFS=$'\t' read -r uuid filename hash version deleted_at; do
+                update_remote_state "$uuid" "$filename" "$hash" "$version" "$deleted_at"
+            done < <(
+                echo "$body" \
+                    | jq -r '
+                            .results[]
+                                | [.uuid, .filename, .content_hash,
+                                   .version, .deleted_at // ""]
+                                | @tsv
+                        '
+            )
+        else
+            echo "$body" \
+                | jq -r '
+                        .results[]
+                            | [.uuid, .filename, .content_hash,
+                               .version, .deleted_at // ""]
+                            | @tsv
+                    ' \
+                >> "$remote_state_file"
+        fi
     done
+
 }
 
 function apply_local_updates {
@@ -273,7 +299,9 @@ function apply_local_updates {
 
             if local_file_was_edited "$filepath" "$hash"; then
                 if local_file_is_stale "$uuid"; then
-                    create_remote_file "$notebook" "$local_fn" "$filepath" "$uuid" \
+                    update_sync_state -d "$uuid"
+                    update_remote_state -d "$uuid"
+                    create_remote_file "$notebook" "$local_fn" "$filepath" \
                         || stale_uuids+=("$uuid")
                     continue
                 fi
@@ -681,6 +709,8 @@ function update_remote_state {
     local filename="${2:-}"
     local hash="${3:-}"
     local version="${4:-}"
+    local deleted_at="${5:-}"
+    local deleted_at_provided=$(( $# >= 5 ))
     local tmp
     tmp=$(mktemp)
     local found=0
@@ -692,14 +722,15 @@ function update_remote_state {
                 [[ -n "$filename" ]] && f="$filename"
                 [[ -n "$hash" ]] && h="$hash"
                 [[ -n "$version" ]] && v="$version"
-                d=""  # clear deleted_at when updating
+                [[ $deleted_at_provided -eq 1 ]] && d="$deleted_at"
             fi
             printf '%s\t%s\t%s\t%s\t%s\n' "$u" "$f" "$h" "$v" "$d" >> "$tmp"
         done < "$remote_state_file"
     fi
 
     if [[ $found -eq 0 ]]; then
-        printf '%s\t%s\t%s\t%s\t\n' "$uuid" "$filename" "$hash" "$version" >> "$tmp"
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$uuid" "$filename" "$hash" "$version" "$deleted_at" >> "$tmp"
     fi
 
     mv "$tmp" "$remote_state_file"
@@ -725,10 +756,11 @@ function get_remote_state {
 
     local key_col value_col active_only=0
     case "$field" in
-        filename) key_col=1; value_col=2 ;;
-        hash)     key_col=1; value_col=3 ;;
-        version)  key_col=1; value_col=4 ;;
-        uuid)     key_col=2; value_col=1; active_only=1 ;;
+        filename)   key_col=1; value_col=2 ;;
+        hash)       key_col=1; value_col=3 ;;
+        version)    key_col=1; value_col=4 ;;
+        deleted_at) key_col=1; value_col=5 ;;
+        uuid)       key_col=2; value_col=1; active_only=1 ;;
     esac
 
     awk \
@@ -869,7 +901,8 @@ function rename_remote_file {
     if [[ "$http_code" == "409" ]]; then
         local error_msg
         error_msg=$(echo "$body" | jq -r '.error')
-        printf 'push: ERROR cannot rename "%s": %s\n' "$new_file" "$error_msg"
+        printf 'push: ERROR cannot rename "%s" to "%s": %s\n' \
+            "$old_file" "$new_file" "$error_msg"
         return 1
     fi
 
@@ -882,7 +915,7 @@ function rename_remote_file {
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
 
-    update_remote_state "$uuid" "$new_file" "$new_hash" "$version"
+    update_remote_state "$uuid" "$new_file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$new_file" "$new_file"
 
     printf 'push: renamed "%s" to "%s"\n' "$old_file" "$new_file"
@@ -936,7 +969,6 @@ function create_remote_file {
     local notebook="$1"
     local file="$2"
     local filepath="$3"
-    local old_uuid="${4:-}"
     local body error_msg http_code new_hash response uuid
 
     response=$(
@@ -973,9 +1005,6 @@ function create_remote_file {
 
     uuid=$(echo "$body" | jq -r '.uuid')
     new_hash=$(echo "$body" | jq -r '.content_hash')
-
-    [[ -n "$old_uuid" ]] \
-        && update_sync_state -d "$old_uuid"
 
     update_remote_state "$uuid" "$file" "$new_hash" "1"
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
@@ -1015,6 +1044,14 @@ function update_remote_file {
         return 1
     fi
 
+    if [[ "$http_code" == "404" ]]; then
+        # UUID is stale, so create file instead
+        update_sync_state -d "$uuid"
+        update_remote_state -d "$uuid"
+        create_remote_file "$notebook" "$file" "$filepath"
+        return $?
+    fi
+
     if [[ "$http_code" != "200" ]]; then
         printf "push: ERROR failed to upload \"%s\" (HTTP %s)\n" "$file" "$http_code"
         exit 1
@@ -1033,7 +1070,7 @@ function update_remote_file {
             "$notebook" "$(dirname "$filepath")" "$uuid" "$file" "$new_hash"
     fi
 
-    update_remote_state "$uuid" "" "$new_hash" "$version"
+    update_remote_state "$uuid" "$file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
     if [[ "$previous_hash" != "$cached_hash" ]]; then
@@ -1176,6 +1213,9 @@ function local_file_is_stale {
     local remote_filename
 
     remote_filename=$(get_remote_state "$uuid" filename)
+
+    [[ -z "$remote_filename" && $incremental_sync -eq 1 ]] \
+        && return 1
 
     [[ -z "$remote_filename" ]]
 }

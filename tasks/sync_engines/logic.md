@@ -10,5 +10,5 @@ The current tests rewind the _local_ state to _simulate_ server changes.
 We should actually be mutating the server state instead, so we can properly
 test the incremental sync in all of the scenarios.
 
-- [ ] rewrite the setup helpers for the BATS tests
+- [X] rewrite the setup helpers for the BATS tests
 - [ ] rewrite the setup helpers for the Obsidian tests

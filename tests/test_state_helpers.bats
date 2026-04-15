@@ -232,6 +232,14 @@ given_remote_entry() {
     diff -u <(echo "42") <(echo "$output")
 }
 
+@test "get_remote_state deleted_at" {
+    given_remote_entry "uuid-1" "file.md" "hash1" "1" "2024-01-15T12:00:00Z"
+
+    run get_remote_state "uuid-1" deleted_at
+
+    diff -u <(echo "2024-01-15T12:00:00Z") <(echo "$output")
+}
+
 @test "get_remote_state uuid" {
     given_remote_entry "uuid-1" "file.md" "hash1" "1"
 

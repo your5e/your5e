@@ -18,3 +18,6 @@ Then use what has been provided.
 - [ ] update the API PATCH to accept a header with the previous hash
 - [ ] update sync-notebook.sh to provide the previous hash
 - [ ] update sync-engine.ts to provide the previous hash
+- [ ] local delete vs server modified file should no longer win, as we now can
+      prove there are updates we didn't delete and that should take precedence
+- [ ] revisit "local renamed untracked" to ensure they are correct

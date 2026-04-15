@@ -40,7 +40,7 @@ function init_synced_dir {
 function set_cached_state {
     local uuid="$1" filename="$2" content="$3"
     local hash
-    hash=$(printf '%s' "$content" | shasum -a 256 | cut -d' ' -f1)
+    hash=$(printf '%s\n' "$content" | shasum -a 256 | cut -d' ' -f1)
     local state_file="$output_dir/.sync-state"
 
     # remove existing file for this UUID if different
@@ -50,7 +50,7 @@ function set_cached_state {
 
     # create file with content
     mkdir -p "$(dirname "$output_dir/$filename")"
-    printf "%s" "$content" > "$output_dir/$filename"
+    printf "%s\n" "$content" > "$output_dir/$filename"
 
     # update cache (both filenames same, both hashes same after reconciliation)
     grep -v "^$uuid"$'\t' "$state_file" > "$state_file.new"
@@ -77,22 +77,6 @@ function delete_tracked_file {
     rm "$output_dir/$1"
 }
 
-function set_older_filename {
-    local from="$1" to="$2"
-    local state_file="$output_dir/.sync-state"
-
-    mkdir -p "$(dirname "$output_dir/$to")"
-    mv "$output_dir/$from" "$output_dir/$to"
-    rmdir -p "$(dirname "$output_dir/$from")" 2>/dev/null || true
-
-    # rewind cache to before server renamed: both filenames set to old name
-    local uuid
-    uuid=$(awk -F'\t' -v f="$from" '$3 == f {print $1; exit}' "$state_file")
-    awk -F'\t' -v u="$uuid" -v old="$to" -v OFS='\t' \
-        '$1 == u {$2 = old; $3 = old} {print}' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
-}
-
 function rename_local_file {
     local from="$1" to="$2"
     local state_file="$output_dir/.sync-state"
@@ -115,24 +99,8 @@ function rename_local_file_untracked {
     rmdir -p "$(dirname "$output_dir/$from")" 2>/dev/null || true
 }
 
-function set_older_content {
-    local filename="$1"
-    local state_file="$output_dir/.sync-state"
-    local content="old content"
-    local hash
-    hash=$(printf '%s' "$content" | shasum -a 256 | cut -d' ' -f1)
-
-    # update file content
-    printf "%s" "$content" > "$output_dir/$filename"
-
-    # update both hash columns, preserving server_fn and local_fn
-    awk -F'\t' -v f="$filename" -v h="$hash" -v OFS='\t' \
-        '$3 == f {$4 = h; $5 = h} {print}' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
-}
-
 function modify_file {
-    echo "local content" > "$output_dir/$1"
+    echo "modified local content" > "$output_dir/$1"
 }
 
 
@@ -164,13 +132,12 @@ function add_stale_file {
     set_cached_state "stale-uuid-$RANDOM" "$filename" "local content"
 }
 
-function file_tracks_deleted_remote {
-    local content=$'# Old Notes\n\nThese notes are no longer needed.\n'
-    set_cached_state "$(uuid_for "Old Notes.md")" "$1" "$content"
-}
-
 function assert_not_in_state {
     ! grep "$1" "$output_dir/.sync-state" || false
+}
+
+function assert_in_state {
+    grep -q "$1" "$output_dir/.sync-state"
 }
 
 function assert_file_not_downloaded {
@@ -226,6 +193,23 @@ function assert_file_in_state {
 function assert_file_unchanged {
     local filename="$1"
     diff -u <(echo "local content") "$output_dir/$filename"
+}
+
+function assert_file_modified {
+    local filename="$1"
+    diff -u <(echo "modified local content") "$output_dir/$filename"
+}
+
+function assert_server_edited_content {
+    local filename="$1"
+    local content="${2:-server edited content}"
+    diff -u <(echo "$content") "$output_dir/$filename"
+}
+
+function assert_file_content {
+    local filename="$1"
+    local content="$2"
+    diff -u <(printf '%s' "$content") "$output_dir/$filename"
 }
 
 function assert_file_matches_fixture {
@@ -353,11 +337,33 @@ function fail_on_since_parameter {
     export -f curl
 }
 
+function fail_when_results_not {
+    export EXPECTED_RESULTS="$1"
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        local response
+        response=$(command curl "$@")
+        if [[ "$*" == *"/v1/notebooks/"*"?"*"since="* ]]; then
+            local total
+            total=$(echo "$response" | sed '$d' | jq -r '.total_results')
+            if [[ "$total" != "$EXPECTED_RESULTS" ]]; then
+                printf "TEST GUARD: since= query returned %s results, " "$total" >&2
+                echo "expected $EXPECTED_RESULTS" >&2
+                return 1
+            fi
+        fi
+        echo "$response"
+    }
+    export -f curl
+}
+
 function setup_recent_sync_metadata {
+    local last_update
+    last_update=$(cat "$BATS_TEST_DIRNAME/last_update")
     awk -F'\t' -v OFS='\t' '
         $1 != "LAST_UPDATED" && $1 != "LAST_FULL_SYNC"
     ' "$output_dir/.sync-state" > "$output_dir/.sync-state.tmp" || true
-    printf "LAST_UPDATED\t2020-01-01T00:00:00Z\t\t\t\n" >> "$output_dir/.sync-state.tmp"
+    printf "LAST_UPDATED\t%s\t\t\t\n" "$last_update" >> "$output_dir/.sync-state.tmp"
     local now_iso
     now_iso=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     printf "LAST_FULL_SYNC\t%s\t\t\t\n" "$now_iso" >> "$output_dir/.sync-state.tmp"
@@ -428,9 +434,10 @@ function assert_sync_metadata_updated {
 }
 
 function assert_last_updated_unchanged {
-    local timestamp state="$output_dir/.sync-state"
+    local expected timestamp state="$output_dir/.sync-state"
+    expected=$(cat "$BATS_TEST_DIRNAME/last_update")
     timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
-    [[ "$timestamp" == "2020-01-01T00:00:00Z" ]]
+    [[ "$timestamp" == "$expected" ]]
 }
 
 function assert_file_pushed {
@@ -524,4 +531,54 @@ function delete_page_by_uuid {
 
 function remove_file {
     rm "$output_dir/$1"
+}
+
+function server_edit_content {
+    local uuid="$1"
+    local content="${2:-server edited content}"
+
+    curl -s -X PUT \
+        -H "Authorization: Token $YOUR5E_API_TOKEN" \
+        -H "Content-Type: text/markdown" \
+        -d "$content" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid" \
+        >/dev/null
+}
+
+function server_rename {
+    local uuid="$1"
+    local to="$2"
+
+    curl -s -X PATCH \
+        -H "Authorization: Token $YOUR5E_API_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"filename\": \"$to\"}" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid" \
+        >/dev/null
+}
+
+function server_delete {
+    local filename="$1"
+    local uuid
+    uuid=$(grep "^$filename"$'\t' "$BATS_FILE_TMPDIR/pages" | cut -f2)
+
+    curl -s -X DELETE \
+        -H "Authorization: Token $YOUR5E_API_TOKEN" \
+        "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid" \
+        >/dev/null
+}
+
+function server_create {
+    local filename="$1"
+    local content="${2:-# $(basename "$filename" .md)}"
+    local response
+
+    response=$(
+        curl -s -X POST \
+            -H "Authorization: Token $YOUR5E_API_TOKEN" \
+            -F "file=@-;filename=$filename" \
+            "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/" \
+            <<< "$content"
+    )
+    echo "$response" | jq -r '.uuid'
 }

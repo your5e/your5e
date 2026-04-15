@@ -233,7 +233,7 @@ setup() {
 }
 
 @test "mid-sync, downgraded, new file" {
-    set_older_content "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
     create_file "newfile.md"
     export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
 
@@ -241,14 +241,14 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         sync: NOTE permission denied, switching to pull-only mode
-        pull: "Bestiary.md" (v2)
+        pull: "Bestiary.md" (v3)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "newfile.md"
     assert_tracked_file_matches_fixture "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_server_edited_content "Bestiary.md"
     assert_tracked_file_matches_fixture "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
@@ -270,7 +270,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_unchanged "index.md"
+    assert_file_modified "index.md"
     assert_tracked_file_matches_fixture "Bestiary.md"
     assert_tracked_file_matches_fixture "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
@@ -283,7 +283,7 @@ setup() {
 }
 
 @test "mid-sync, downgraded, local update" {
-    set_older_content "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
     modify_file "index.md"
     export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
 
@@ -291,13 +291,13 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         sync: NOTE permission denied, switching to pull-only mode
-        pull: "Bestiary.md" (v2)
+        pull: "Bestiary.md" (v3)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_unchanged "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_file_modified "index.md"
+    assert_server_edited_content "Bestiary.md"
     assert_tracked_file_matches_fixture "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
@@ -332,7 +332,7 @@ setup() {
 }
 
 @test "mid-sync, downgraded, local rename" {
-    set_older_content "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
     rename_local_file "index.md" "renamed.md"
     export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
 
@@ -340,14 +340,14 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         sync: NOTE permission denied, switching to pull-only mode
-        pull: "Bestiary.md" (v2)
+        pull: "Bestiary.md" (v3)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_matches_fixture "index.md" "renamed.md"
     assert_file_not_downloaded "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_server_edited_content "Bestiary.md"
     assert_tracked_file_matches_fixture "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
@@ -381,7 +381,7 @@ setup() {
 }
 
 @test "mid-sync, downgraded, local delete" {
-    set_older_content "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
     remove_file "index.md"
     export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
 
@@ -390,13 +390,13 @@ setup() {
     expected_output=$(sed -e 's/^        //' <<-EOF
         sync: NOTE permission denied, switching to pull-only mode
         pull: SKIPPING pull "index.md", already deleted locally
-        pull: "Bestiary.md" (v2)
+        pull: "Bestiary.md" (v3)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_not_restored "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
+    assert_server_edited_content "Bestiary.md"
     assert_tracked_file_matches_fixture "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
@@ -407,7 +407,7 @@ setup() {
 }
 
 @test "mid-sync, revoked, content update" {
-    set_older_content "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
     export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -430,15 +430,15 @@ setup() {
 }
 
 @test "mid-sync, page deleted, content update" {
-    set_older_content "Bestiary.md"
-    set_older_content "Home.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
+    server_edit_content "$(uuid_for "Home.md")"
     bestiary_uuid=$(uuid_for "Bestiary.md")
     export AFTER_FETCH_HOOK="delete_page_by_uuid '$bestiary_uuid'"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: "Home.md" (v2)
+        pull: "Home.md" (v3)
         pull: SKIPPING "Bestiary.md", deleted remotely during sync
 	EOF
     )
@@ -446,7 +446,7 @@ setup() {
 
     assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_matches_fixture "index.md"
-    assert_tracked_file_matches_fixture "Home.md"
+    assert_server_edited_content "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
@@ -456,30 +456,29 @@ setup() {
 }
 
 @test "mid-sync, page deleted, new file" {
-    frosthold_uuid=$(uuid_for "World Regions/Northern Kingdoms/Frosthold.md")
-    untrack_file "World Regions/Northern Kingdoms/Frosthold.md"
-    remove_file "World Regions/Northern Kingdoms/Frosthold.md"
-    set_older_content "Home.md"
-    export AFTER_FETCH_HOOK="delete_page_by_uuid '$frosthold_uuid'"
+    rumours_uuid=$(server_create "Rumours.md")
+    server_edit_content "$(uuid_for "Home.md")"
+    export AFTER_FETCH_HOOK="delete_page_by_uuid '$rumours_uuid'"
 
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: "Home.md" (v2)
-        pull: SKIPPING "World Regions/Northern Kingdoms/Frosthold.md", deleted remotely during sync
+        pull: SKIPPING "Rumours.md", deleted remotely during sync
+        pull: "Home.md" (v3)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_not_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
-    assert_file_not_in_state "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_not_downloaded "Rumours.md"
+    assert_file_not_in_state "Rumours.md"
     assert_tracked_file_matches_fixture "index.md"
-    assert_tracked_file_matches_fixture "Home.md"
+    assert_server_edited_content "Home.md"
     assert_tracked_file_matches_fixture "characters/NPCs.md"
     assert_tracked_file_matches_fixture "sessions/session-01.md"
     assert_tracked_file_matches_fixture "Bestiary.md"
     assert_tracked_file_matches_fixture "The Old Café.md"
     assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_tracked_file_matches_fixture "World Regions/Northern Kingdoms/Frosthold.md"
     assert_sync_metadata_updated
     assert_success
 }
