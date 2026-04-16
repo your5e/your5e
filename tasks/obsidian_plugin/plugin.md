@@ -31,9 +31,10 @@ Add more control and observability to sync. An in-memory sync log,
 `[YYYY-MM-DD HH:MM:SS {folder}] {message}`, keep the last 10k lines.
 
 - [X] add 'sync now' to command palette
-- [ ] send sync commands to the log
+- [X] send sync commands to the log
         - inc. `sync starting` and `sync complete, next at HH:MM:SS`
-- [ ] add 'show sync log' to command palette
-- [ ] add 'show sync log' for the ribbon, but not on by default
+- [X] add 'show sync log' to command palette
+- [X] add 'show sync log' for the ribbon
 - [ ] add sync status to statusbar, context menu includes opening the log
 - [ ] add debug mode setting
+- [ ] popup notice when sync has errors

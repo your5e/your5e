@@ -31,6 +31,11 @@ export class SyncEngine {
         this.lastFullSync = config.lastFullSync;
     }
 
+    private log(line: string): void {
+        this.output.push(line);
+        this.config.onOutput?.(line);
+    }
+
     async run(): Promise<SyncResult> {
         this.output = [];
         this.remotePages = new Map();
@@ -39,7 +44,7 @@ export class SyncEngine {
         this.incrementalResults = undefined;
 
         if (!this.config.token) {
-            this.output.push("sync: ERROR API token missing");
+            this.log("ERROR API token missing");
             throw new Error("API token missing");
         }
 
@@ -60,9 +65,7 @@ export class SyncEngine {
 
         let pullOnly = this.config.pullOnly;
         if (!pullOnly && !editable) {
-            this.output.push(
-                "sync: NOTE read-only access, switching to pull-only mode",
-            );
+            this.log("NOTE read-only access, switching to pull-only mode");
             pullOnly = true;
         }
 
@@ -126,7 +129,7 @@ export class SyncEngine {
                 continue;
             }
 
-            this.output.push(
+            this.log(
                 `info: detected rename "${entry.localFilename}" to "${newFilename}"`,
             );
             this.updateSyncState(uuid, "", newFilename);
@@ -184,17 +187,15 @@ export class SyncEngine {
             });
 
             if (response.status === 401 || response.status === 403) {
-                this.output.push("sync: ERROR API token invalid");
+                this.log("ERROR API token invalid");
                 throw new Error("API token invalid");
             }
             if (response.status === 404) {
-                this.output.push("sync: ERROR notebook not found");
+                this.log("ERROR notebook not found");
                 throw new Error("Notebook not found");
             }
             if (!response.ok) {
-                this.output.push(
-                    `sync: ERROR unexpected response (HTTP ${response.status})`,
-                );
+                this.log(`sync: ERROR unexpected response (HTTP ${response.status})`);
                 throw new Error(`Unexpected response (HTTP ${response.status})`);
             }
 
@@ -248,7 +249,7 @@ export class SyncEngine {
             if (isStale && localEdited) {
                 const errorMsg = await this.tryCreateRemoteFile(entry.localFilename);
                 if (errorMsg) {
-                    this.output.push(
+                    this.log(
                         `push: ERROR cannot push "${entry.localFilename}": ${errorMsg}`,
                     );
                     staleUuids.push(uuid);
@@ -300,7 +301,7 @@ export class SyncEngine {
 
             const errorMsg = await this.tryCreateRemoteFile(file);
             if (errorMsg) {
-                this.output.push(`push: ERROR cannot push "${file}": ${errorMsg}`);
+                this.log(`push: ERROR cannot push "${file}": ${errorMsg}`);
             }
         }
 
@@ -344,7 +345,7 @@ export class SyncEngine {
                 return;
             }
             if (renameResponse.ok) {
-                this.output.push(
+                this.log(
                     `push: renamed "${remote.filename}" to "${entry.localFilename}"`,
                 );
                 entry.serverFilename = entry.localFilename;
@@ -369,11 +370,9 @@ export class SyncEngine {
         }
         if (response.ok) {
             if (remoteEdited) {
-                this.output.push(
-                    `push: deleted "${entry.localFilename}" (had remote changes)`,
-                );
+                this.log(`push: deleted "${entry.localFilename}" (had remote changes)`);
             } else {
-                this.output.push(`push: deleted "${entry.localFilename}"`);
+                this.log(`push: deleted "${entry.localFilename}"`);
             }
             this.deleteSyncState(uuid);
             this.remotePages.delete(uuid);
@@ -386,14 +385,12 @@ export class SyncEngine {
 
     private handlePushAuthError(response: Response): boolean {
         if (response.status === 401) {
-            this.output.push("sync: ERROR API token invalid");
+            this.log("ERROR API token invalid");
             throw new Error("API token invalid");
         }
         if (response.status === 403) {
             if (!this.permissionDenied) {
-                this.output.push(
-                    "sync: NOTE permission denied, switching to pull-only mode",
-                );
+                this.log("NOTE permission denied, switching to pull-only mode");
                 this.permissionDenied = true;
             }
             return true;
@@ -436,9 +433,7 @@ export class SyncEngine {
         }
         if (response.ok) {
             const data = await response.json();
-            this.output.push(
-                `push: renamed "${remote.filename}" to "${entry.localFilename}"`,
-            );
+            this.log(`push: renamed "${remote.filename}" to "${entry.localFilename}"`);
             entry.serverFilename = entry.localFilename;
             remote.filename = entry.localFilename;
             remote.content_hash = data.content_hash;
@@ -449,7 +444,7 @@ export class SyncEngine {
 
         if (response.status === 400 || response.status === 409) {
             const data = await response.json();
-            this.output.push(
+            this.log(
                 `push: ERROR cannot rename "${remote.filename}" ` +
                     `to "${entry.localFilename}": ${data.error}`,
             );
@@ -522,12 +517,12 @@ export class SyncEngine {
             }
 
             if (remoteEdited) {
-                this.output.push(
+                this.log(
                     `push: "${entry.localFilename}" (v${data.version}, ` +
                         "remote changes overwritten)",
                 );
             } else {
-                this.output.push(`push: "${entry.localFilename}" (v${data.version})`);
+                this.log(`push: "${entry.localFilename}" (v${data.version})`);
             }
         } else if (response.status === 404) {
             // UUID is stale - the file no longer exists on the server
@@ -551,13 +546,13 @@ export class SyncEngine {
 
             if (await this.hasLocalChanges(uuid, localPath)) {
                 if (entry.localFilename !== entry.serverFilename) {
-                    this.output.push(
+                    this.log(
                         `pull: SKIPPING delete "${entry.serverFilename}" ` +
                             `(at "${entry.localFilename}"), ` +
                             "local changes would be lost",
                     );
                 } else {
-                    this.output.push(
+                    this.log(
                         `pull: SKIPPING delete "${entry.localFilename}", ` +
                             "local changes would be lost",
                     );
@@ -567,12 +562,12 @@ export class SyncEngine {
                     await this.fs.delete(localPath);
                 }
                 if (entry.localFilename !== entry.serverFilename) {
-                    this.output.push(
+                    this.log(
                         `pull: deleted "${entry.serverFilename}" ` +
                             `(was "${entry.localFilename}")`,
                     );
                 } else {
-                    this.output.push(`pull: deleted "${entry.localFilename}"`);
+                    this.log(`pull: deleted "${entry.localFilename}"`);
                 }
                 this.deleteSyncState(uuid);
             }
@@ -632,7 +627,7 @@ export class SyncEngine {
                 (await this.fs.isFile(destPath)) &&
                 (await this.hasLocalChanges(cachedUuid, destPath))
             ) {
-                this.output.push(
+                this.log(
                     `pull: SKIPPING delete "${destFile}", ` +
                         "local changes would be lost",
                 );
@@ -645,20 +640,18 @@ export class SyncEngine {
         }
 
         if (await this.fileBlockedByDirectory(destPath, uuid, destFile)) {
-            this.output.push(
+            this.log(
                 `pull: ERROR cannot pull "${destFile}", blocked by local directory`,
             );
         } else if (await this.parentBlockedByFile(destFile)) {
-            this.output.push(
-                `pull: ERROR cannot pull "${destFile}", blocked by local file`,
-            );
+            this.log(`pull: ERROR cannot pull "${destFile}", blocked by local file`);
         } else if (await this.fileExistsWithDifferentCase(destFile)) {
-            this.output.push(
+            this.log(
                 `pull: ERROR cannot pull "${destFile}", ` +
                     "blocked by local file with different case",
             );
         } else if ((await this.fileMatchesHash(destPath, hash)) && !entry) {
-            this.output.push(`pull: tracking "${destFile}" (v${version})`);
+            this.log(`pull: tracking "${destFile}" (v${version})`);
             this.updateSyncState(uuid, destFile, destFile, hash, hash);
         } else if (entry && this.isBeingRenamed(uuid, destFile)) {
             // To break a rename cycle, the last in the chain is put in a
@@ -671,7 +664,7 @@ export class SyncEngine {
 
             if (this.isLocallyRenamed(uuid)) {
                 const cachedRemoteFn = entry.serverFilename;
-                this.output.push(
+                this.log(
                     `pull: SKIPPING rename "${cachedRemoteFn}" to "${destFile}", ` +
                         `already "${srcFile}" locally`,
                 );
@@ -680,7 +673,7 @@ export class SyncEngine {
                     this.hasRemoteChanges(uuid) &&
                     (await this.hasLocalChanges(uuid, actualSrcPath))
                 ) {
-                    this.output.push(
+                    this.log(
                         `pull: SKIPPING pull "${destFile}" to "${srcFile}", ` +
                             "local changes would be lost",
                     );
@@ -691,13 +684,11 @@ export class SyncEngine {
                         hash,
                     );
                     if (fetched) {
-                        this.output.push(
-                            `pull: "${destFile}" to "${srcFile}" (v${version})`,
-                        );
+                        this.log(`pull: "${destFile}" to "${srcFile}" (v${version})`);
                     }
                 }
             } else if (await this.hasLocalChanges(uuid, actualSrcPath)) {
-                this.output.push(
+                this.log(
                     `pull: SKIPPING rename "${srcFile}" to "${destFile}", ` +
                         "local changes would be lost",
                 );
@@ -708,7 +699,7 @@ export class SyncEngine {
                     // moved aside temporarily.
                     await this.fs.rename(destPath, destPath + ".vacated");
                     await this.fs.rename(actualSrcPath, destPath);
-                    this.output.push(`pull: renamed "${srcFile}" to "${destFile}"`);
+                    this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
 
                     if (await this.fileMatchesHash(destPath, hash)) {
                         this.updateSyncState(uuid, destFile, destFile, hash, hash);
@@ -719,17 +710,17 @@ export class SyncEngine {
                             hash,
                         );
                         if (fetched) {
-                            this.output.push(`pull: "${destFile}" (v${version})`);
+                            this.log(`pull: "${destFile}" (v${version})`);
                         }
                     }
                 } else {
-                    this.output.push(
+                    this.log(
                         `pull: ERROR cannot rename "${srcFile}" to "${destFile}", ` +
                             "blocked by local file",
                     );
                 }
             } else if (await this.fs.isDirectory(destPath)) {
-                this.output.push(
+                this.log(
                     `pull: ERROR cannot rename "${srcFile}" to "${destFile}", ` +
                         "blocked by local directory",
                 );
@@ -737,42 +728,40 @@ export class SyncEngine {
                 if (this.hasRemoteChanges(uuid)) {
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
-                        this.output.push(`pull: "${destFile}" (v${version})`);
+                        this.log(`pull: "${destFile}" (v${version})`);
                     }
                 } else {
-                    this.output.push(
+                    this.log(
                         `pull: SKIPPING rename "${srcFile}" to "${destFile}", ` +
                             `"${srcFile}" deleted locally`,
                     );
                 }
             } else {
                 await this.fs.rename(actualSrcPath, destPath);
-                this.output.push(`pull: renamed "${srcFile}" to "${destFile}"`);
+                this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
 
                 if (await this.fileMatchesHash(destPath, hash)) {
                     this.updateSyncState(uuid, destFile, destFile, hash, hash);
                 } else {
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
-                        this.output.push(`pull: "${destFile}" (v${version})`);
+                        this.log(`pull: "${destFile}" (v${version})`);
                     }
                 }
             }
         } else if (await this.hasLocalChanges(uuid, destPath)) {
             if (!entry) {
-                this.output.push(
+                this.log(
                     `pull: ERROR cannot pull "${destFile}", blocked by local file`,
                 );
             } else if (this.hasRemoteChanges(uuid)) {
-                this.output.push(
+                this.log(
                     `pull: SKIPPING pull "${destFile}", ` +
                         "local changes would be lost",
                 );
             }
         } else if (await this.deletedLocallyNoNewContent(uuid, destFile, destPath)) {
-            this.output.push(
-                `pull: SKIPPING pull "${destFile}", already deleted locally`,
-            );
+            this.log(`pull: SKIPPING pull "${destFile}", already deleted locally`);
         } else if (
             entry &&
             this.isLocallyRenamed(uuid) &&
@@ -784,7 +773,7 @@ export class SyncEngine {
             this.isLocallyRenamed(uuid) &&
             (await this.hasLocalChanges(uuid, srcPath))
         ) {
-            this.output.push(
+            this.log(
                 `pull: SKIPPING pull "${destFile}" to "${srcFile}", ` +
                     "local changes would be lost",
             );
@@ -795,7 +784,7 @@ export class SyncEngine {
         ) {
             const fetched = await this.fetchRemoteToLocalPath(uuid, srcFile, hash);
             if (fetched) {
-                this.output.push(`pull: "${destFile}" to "${srcFile}" (v${version})`);
+                this.log(`pull: "${destFile}" to "${srcFile}" (v${version})`);
             }
         } else {
             if (await this.fileMatchesHash(destPath, hash)) {
@@ -803,7 +792,7 @@ export class SyncEngine {
             } else {
                 const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                 if (fetched) {
-                    this.output.push(`pull: "${destFile}" (v${version})`);
+                    this.log(`pull: "${destFile}" (v${version})`);
                 }
             }
         }
@@ -912,13 +901,11 @@ export class SyncEngine {
         );
 
         if (response.status === 401) {
-            this.output.push("sync: ERROR API token invalid");
+            this.log("ERROR API token invalid");
             throw new Error("API token invalid");
         }
         if (response.status === 404) {
-            this.output.push(
-                `pull: SKIPPING "${localFile}", deleted remotely during sync`,
-            );
+            this.log(`pull: SKIPPING "${localFile}", deleted remotely during sync`);
             return false;
         }
         if (!response.ok) {
@@ -951,13 +938,11 @@ export class SyncEngine {
         );
 
         if (response.status === 401) {
-            this.output.push("sync: ERROR API token invalid");
+            this.log("ERROR API token invalid");
             throw new Error("API token invalid");
         }
         if (response.status === 404) {
-            this.output.push(
-                `pull: SKIPPING "${destFile}", deleted remotely during sync`,
-            );
+            this.log(`pull: SKIPPING "${destFile}", deleted remotely during sync`);
             return false;
         }
         if (!response.ok) {
@@ -1002,7 +987,7 @@ export class SyncEngine {
             const hasChanges = currentHash !== entry.serverHash;
 
             if (hasChanges) {
-                this.output.push(
+                this.log(
                     `pull: SKIPPING delete "${entry.localFilename}", ` +
                         "local changes would be lost",
                 );
@@ -1011,7 +996,7 @@ export class SyncEngine {
 
             // Delete stale file
             await this.fs.delete(localPath);
-            this.output.push(`pull: deleted "${entry.localFilename}"`);
+            this.log(`pull: deleted "${entry.localFilename}"`);
             this.deleteSyncState(uuid);
         }
     }
@@ -1099,7 +1084,7 @@ export class SyncEngine {
                 version: data.version,
                 deleted_at: null,
             });
-            this.output.push(`push: "${file}" (v${data.version})`);
+            this.log(`push: "${file}" (v${data.version})`);
             return null;
         }
 

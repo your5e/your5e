@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { App, FuzzySuggestModal, Notice, Plugin } from "obsidian";
+import { type App, FuzzySuggestModal, Notice, Plugin } from "obsidian";
 import { Your5eSyncSettingTab } from "./settings-tab.js";
 import {
     DEFAULT_BASE_URL,
@@ -7,6 +7,7 @@ import {
     type FolderMapping,
     type PluginSettings,
 } from "./settings.js";
+import { SyncLog, SyncLogModal } from "./sync-log.js";
 import { SyncScheduler } from "./sync-scheduler.js";
 import { NodeFileSystem } from "./sync/node-fs.js";
 import { SyncEngine } from "./sync/sync-engine.js";
@@ -36,6 +37,7 @@ class FolderSuggestModal extends FuzzySuggestModal<FolderMapping> {
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
     scheduler: SyncScheduler | null = null;
+    syncLog: SyncLog = new SyncLog();
     private syncing: Set<string> = new Set();
 
     async onload() {
@@ -49,16 +51,25 @@ export default class Your5eSyncPlugin extends Plugin {
             callback: () => new FolderSuggestModal(this.app, this).open(),
         });
 
+        this.addCommand({
+            id: "show-sync-log",
+            name: "Show sync log",
+            callback: () => new SyncLogModal(this.app, this.syncLog).open(),
+        });
+
+        this.addRibbonIcon("scroll", "Show sync log", () =>
+            new SyncLogModal(this.app, this.syncLog).open(),
+        );
+
         this.scheduler = new SyncScheduler({
             setTimeout: (fn, delay) => window.setTimeout(fn, delay),
             clearTimeout: (id) => window.clearTimeout(id),
             random: () => Math.random(),
             onSync: (folder) => this.syncFolder(folder),
             onSchedule: (folder, delay) => {
-                const mapping = this.settings.folders.find((f) => f.folder === folder);
-                if (mapping) {
-                    const nextSync = new Date(Date.now() + delay);
-                }
+                const nextSync = new Date(Date.now() + delay);
+                const time = nextSync.toTimeString().slice(0, 8);
+                this.syncLog.log(folder, `next sync at ${time}`);
             },
         });
 
@@ -66,8 +77,6 @@ export default class Your5eSyncPlugin extends Plugin {
         if (folders.length > 0) {
             this.scheduler.start(folders);
         }
-
-        new Notice("Your5e Sync plugin loaded");
     }
 
     onunload() {
@@ -102,6 +111,7 @@ export default class Your5eSyncPlugin extends Plugin {
         }
 
         this.syncing.add(folder);
+        this.syncLog.log(folder, "sync starting");
 
         // biome-ignore lint/suspicious/noExplicitAny: basePath exists on FileSystemAdapter but isn't in public types
         const vaultPath = (this.app.vault.adapter as any).basePath as string;
@@ -119,20 +129,18 @@ export default class Your5eSyncPlugin extends Plugin {
             initialState: folderState.state,
             lastUpdate: folderState.lastUpdate,
             lastFullSync: folderState.lastFullSync,
+            onOutput: (line) => this.syncLog.log(folder, line),
         };
 
         try {
             const engine = new SyncEngine(config);
             const result = await engine.run();
 
-            for (const line of result.output) {
-                console.log(`[${folderMapping.folder}] ${line}`);
-            }
-
+            this.syncLog.log(folder, "sync complete");
             this.saveFolderState(folderMapping.folder, result);
             await this.saveData(this.settings);
         } catch (error) {
-            console.error(`Sync failed for folder "${folderMapping.folder}":`, error);
+            this.syncLog.log(folder, `sync failed: ${error.message}`);
             new Notice(
                 `Your5e sync failed for ${folderMapping.folder}: ${error.message}`,
             );

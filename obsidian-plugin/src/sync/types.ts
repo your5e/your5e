@@ -32,6 +32,7 @@ export interface SyncConfig {
     lastUpdate?: string;
     lastFullSync?: string;
     afterFetchHook?: () => Promise<void>;
+    onOutput?: (line: string) => void;
 }
 
 export interface SyncResult {

@@ -99,7 +99,7 @@ describe("sync permissions", () => {
         const result = await sync.run();
 
         const expectedOutput = [
-            "sync: NOTE read-only access, switching to pull-only mode",
+            "NOTE read-only access, switching to pull-only mode",
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
             'pull: "Home.md" (v2)',
@@ -275,7 +275,7 @@ describe("sync permissions", () => {
             const result = await sync.run();
 
             const expectedOutput = [
-                "sync: NOTE permission denied, switching to pull-only mode",
+                "NOTE permission denied, switching to pull-only mode",
                 'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
@@ -368,7 +368,7 @@ describe("sync permissions", () => {
             const result = await sync.run();
 
             const expectedOutput = [
-                "sync: NOTE permission denied, switching to pull-only mode",
+                "NOTE permission denied, switching to pull-only mode",
                 'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
@@ -466,7 +466,7 @@ describe("sync permissions", () => {
             const result = await sync.run();
 
             const expectedOutput = [
-                "sync: NOTE permission denied, switching to pull-only mode",
+                "NOTE permission denied, switching to pull-only mode",
                 'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
@@ -564,7 +564,7 @@ describe("sync permissions", () => {
             const result = await sync.run();
 
             const expectedOutput = [
-                "sync: NOTE permission denied, switching to pull-only mode",
+                "NOTE permission denied, switching to pull-only mode",
                 'pull: SKIPPING pull "index.md", already deleted locally',
                 'pull: "Bestiary.md" (v3)',
             ];
