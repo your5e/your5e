@@ -36,6 +36,7 @@ class FolderSuggestModal extends FuzzySuggestModal<FolderMapping> {
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
     scheduler: SyncScheduler | null = null;
+    private syncing: Set<string> = new Set();
 
     async onload() {
         await this.loadSettings();
@@ -83,6 +84,10 @@ export default class Your5eSyncPlugin extends Plugin {
     }
 
     async syncFolder(folder: string): Promise<void> {
+        if (this.syncing.has(folder)) {
+            return;
+        }
+
         const folderMapping = this.settings.folders.find((f) => f.folder === folder);
         if (!folderMapping) {
             return;
@@ -95,6 +100,8 @@ export default class Your5eSyncPlugin extends Plugin {
         if (!baseUrl || !token) {
             return;
         }
+
+        this.syncing.add(folder);
 
         // biome-ignore lint/suspicious/noExplicitAny: basePath exists on FileSystemAdapter but isn't in public types
         const vaultPath = (this.app.vault.adapter as any).basePath as string;
@@ -129,6 +136,8 @@ export default class Your5eSyncPlugin extends Plugin {
             new Notice(
                 `Your5e sync failed for ${folderMapping.folder}: ${error.message}`,
             );
+        } finally {
+            this.syncing.delete(folder);
         }
     }
 
