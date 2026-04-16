@@ -11,23 +11,12 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
     }
 
     display(): void {
-        this.plugin.settingsOpen = true;
-
         const { containerEl } = this;
         containerEl.empty();
 
         new Setting(containerEl)
             .setName("API Token")
             .setDesc("Required")
-            .addText((text) => {
-                text.inputEl.type = "password";
-                text.setPlaceholder("your-api-token")
-                    .setValue(this.plugin.settings.token)
-                    .onChange(async (value) => {
-                        this.plugin.settings.token = value.trim();
-                        await this.plugin.saveSettings();
-                    });
-            })
             .addExtraButton((button) =>
                 button.setIcon("eye").onClick(() => {
                     const input = button.extraSettingsEl.parentElement?.querySelector(
@@ -41,7 +30,16 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                         button.setIcon("eye");
                     }
                 }),
-            );
+            )
+            .addText((text) => {
+                text.inputEl.type = "password";
+                text.setPlaceholder("your-api-token")
+                    .setValue(this.plugin.settings.token)
+                    .onChange(async (value) => {
+                        this.plugin.settings.token = value.trim();
+                        await this.plugin.saveSettings();
+                    });
+            });
 
         new Setting(containerEl)
             .setName("API Base URL")
@@ -63,16 +61,15 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
             this.displayFolderMapping(containerEl, mapping, i);
         }
 
-        new Setting(containerEl).addButton((button) =>
-            button.setButtonText("Add new folder").onClick(async () => {
-                this.plugin.settings.folders.push({
-                    folder: "",
-                    notebook: "",
-                });
-                await this.plugin.saveSettings();
-                this.display();
-            }),
-        );
+        const addButton = containerEl.createEl("button", { text: "Add new folder" });
+        addButton.addEventListener("click", async () => {
+            this.plugin.settings.folders.push({
+                folder: "",
+                notebook: "",
+            });
+            await this.plugin.saveSettings();
+            this.display();
+        });
     }
 
     async hide(): Promise<void> {
@@ -80,7 +77,6 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
             (m) => m.folder || m.notebook,
         );
         await this.plugin.saveSettings();
-        this.plugin.settingsOpen = false;
     }
 
     displayFolderMapping(
@@ -90,13 +86,27 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
     ): void {
         const isComplete = mapping.folder && mapping.notebook;
         const wrapper = containerEl.createDiv("setting-item");
+        wrapper.style.display = "flex";
+        wrapper.style.alignItems = "flex-start";
+        wrapper.style.gap = "8px";
+
         const details = wrapper.createEl("details");
+        details.style.flexGrow = "1";
         if (!isComplete) {
             details.setAttribute("open", "");
         }
 
-        details.createEl("summary", {
+        const summary = details.createEl("summary", {
             text: isComplete ? `${mapping.folder}: ${mapping.notebook}` : "New mapping",
+        });
+
+        const removeButton = wrapper.createEl("button", { text: "Remove" });
+        removeButton.addClass("mod-warning");
+        removeButton.addEventListener("click", async () => {
+            this.plugin.scheduler?.cancelFolder(mapping.folder);
+            this.plugin.settings.folders.splice(index, 1);
+            await this.plugin.saveSettings();
+            this.display();
         });
 
         const content = details.createDiv();
@@ -131,15 +141,6 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         new Setting(content)
             .setName("Override API Token")
             .setDesc("Optional: use a different API token for this folder")
-            .addText((text) => {
-                text.inputEl.type = "password";
-                text.setPlaceholder("Leave empty to use default")
-                    .setValue(mapping.token || "")
-                    .onChange(async (value) => {
-                        mapping.token = value.trim() || undefined;
-                        await this.plugin.saveSettings();
-                    });
-            })
             .addExtraButton((button) =>
                 button.setIcon("eye").onClick(() => {
                     const input = button.extraSettingsEl.parentElement?.querySelector(
@@ -153,7 +154,16 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                         button.setIcon("eye");
                     }
                 }),
-            );
+            )
+            .addText((text) => {
+                text.inputEl.type = "password";
+                text.setPlaceholder("Leave empty to use default")
+                    .setValue(mapping.token || "")
+                    .onChange(async (value) => {
+                        mapping.token = value.trim() || undefined;
+                        await this.plugin.saveSettings();
+                    });
+            });
 
         new Setting(content)
             .setName("Override API URL")
@@ -180,12 +190,13 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
 
         new Setting(content).addButton((button) =>
             button
-                .setButtonText("Remove")
-                .setWarning()
+                .setButtonText("Save")
+                .setCta()
                 .onClick(async () => {
-                    this.plugin.settings.folders.splice(index, 1);
-                    await this.plugin.saveSettings();
-                    this.display();
+                    summary.textContent = `${mapping.folder}: ${mapping.notebook}`;
+                    details.removeAttribute("open");
+                    await this.plugin.syncFolder(mapping.folder);
+                    this.plugin.scheduler?.reschedule(mapping.folder);
                 }),
         );
     }

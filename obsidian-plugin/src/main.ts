@@ -9,8 +9,7 @@ import type { SyncConfig, SyncResult, SyncStateEntry } from "./sync/types.js";
 
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
-    settingsOpen = false;
-    private scheduler: SyncScheduler | null = null;
+    scheduler: SyncScheduler | null = null;
 
     async onload() {
         await this.loadSettings();
@@ -21,8 +20,13 @@ export default class Your5eSyncPlugin extends Plugin {
             setTimeout: (fn, delay) => window.setTimeout(fn, delay),
             clearTimeout: (id) => window.clearTimeout(id),
             random: () => Math.random(),
-            onSync: (folder) => this.runSyncForFolder(folder),
-            onSchedule: () => {},
+            onSync: (folder) => this.syncFolder(folder),
+            onSchedule: (folder, delay) => {
+                const mapping = this.settings.folders.find((f) => f.folder === folder);
+                if (mapping) {
+                    const nextSync = new Date(Date.now() + delay);
+                }
+            },
         });
 
         const folders = this.settings.folders.map((f) => f.folder);
@@ -45,11 +49,7 @@ export default class Your5eSyncPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
-    private async runSyncForFolder(folder: string): Promise<void> {
-        if (this.settingsOpen) {
-            return;
-        }
-
+    async syncFolder(folder: string): Promise<void> {
         const folderMapping = this.settings.folders.find((f) => f.folder === folder);
         if (!folderMapping) {
             return;
@@ -90,7 +90,7 @@ export default class Your5eSyncPlugin extends Plugin {
             }
 
             this.saveFolderState(folderMapping.folder, result);
-            await this.saveSettings();
+            await this.saveData(this.settings);
         } catch (error) {
             console.error(`Sync failed for folder "${folderMapping.folder}":`, error);
             new Notice(
@@ -104,10 +104,6 @@ export default class Your5eSyncPlugin extends Plugin {
         lastUpdate?: string;
         lastFullSync?: string;
     } {
-        if (!this.settings.syncStates) {
-            this.settings.syncStates = {};
-        }
-
         const folderState = this.settings.syncStates[folder];
         if (!folderState) {
             return { state: new Map() };
@@ -125,10 +121,6 @@ export default class Your5eSyncPlugin extends Plugin {
     }
 
     private saveFolderState(folder: string, result: SyncResult): void {
-        if (!this.settings.syncStates) {
-            this.settings.syncStates = {};
-        }
-
         const entries: { [uuid: string]: SyncStateEntry } = {};
         for (const [uuid, entry] of result.state) {
             entries[uuid] = entry;
