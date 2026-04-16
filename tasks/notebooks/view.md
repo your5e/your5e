@@ -37,6 +37,7 @@ logically "under" this folder. If `.../index.md` exists, it is folded in.
 - [X] clarify what uploading a file with an existing filename does
         - add tests to document the current behaviour
         - decide if it should update the existing page or error
+- [ ] be able to defer index.md to another file
 
 
 # Notebook viewing @phase
