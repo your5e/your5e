@@ -27,9 +27,12 @@ Push updates more readily than waiting for sync.
           the sync timer
         - prove updates to files outside of the target folder do not trigger
 
-Add more control and observability to sync.
+Add more control and observability to sync. An in-memory sync log,
+`[YYYY-MM-DD HH:MM:SS {folder}] {message}`, keep the last 10k lines.
 
-- [ ] add 'sync now' to command palette
+- [X] add 'sync now' to command palette
+- [ ] send sync commands to the log
+        - inc. `sync starting` and `sync complete, next at HH:MM:SS`
 - [ ] add 'show sync log' to command palette
 - [ ] add 'show sync log' for the ribbon, but not on by default
 - [ ] add sync status to statusbar, context menu includes opening the log

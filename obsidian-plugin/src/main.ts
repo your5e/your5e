@@ -1,11 +1,37 @@
 import * as path from "node:path";
-import { Notice, Plugin } from "obsidian";
+import { App, FuzzySuggestModal, Notice, Plugin } from "obsidian";
 import { Your5eSyncSettingTab } from "./settings-tab.js";
-import { DEFAULT_BASE_URL, DEFAULT_SETTINGS, type PluginSettings } from "./settings.js";
+import {
+    DEFAULT_BASE_URL,
+    DEFAULT_SETTINGS,
+    type FolderMapping,
+    type PluginSettings,
+} from "./settings.js";
 import { SyncScheduler } from "./sync-scheduler.js";
 import { NodeFileSystem } from "./sync/node-fs.js";
 import { SyncEngine } from "./sync/sync-engine.js";
 import type { SyncConfig, SyncResult, SyncStateEntry } from "./sync/types.js";
+
+class FolderSuggestModal extends FuzzySuggestModal<FolderMapping> {
+    plugin: Your5eSyncPlugin;
+
+    constructor(app: App, plugin: Your5eSyncPlugin) {
+        super(app);
+        this.plugin = plugin;
+    }
+
+    getItems(): FolderMapping[] {
+        return this.plugin.settings.folders;
+    }
+
+    getItemText(folder: FolderMapping): string {
+        return folder.folder;
+    }
+
+    onChooseItem(folder: FolderMapping): void {
+        this.plugin.syncFolder(folder.folder);
+    }
+}
 
 export default class Your5eSyncPlugin extends Plugin {
     settings: PluginSettings;
@@ -15,6 +41,12 @@ export default class Your5eSyncPlugin extends Plugin {
         await this.loadSettings();
 
         this.addSettingTab(new Your5eSyncSettingTab(this.app, this));
+
+        this.addCommand({
+            id: "sync-folder-now",
+            name: "Sync folder now",
+            callback: () => new FolderSuggestModal(this.app, this).open(),
+        });
 
         this.scheduler = new SyncScheduler({
             setTimeout: (fn, delay) => window.setTimeout(fn, delay),
