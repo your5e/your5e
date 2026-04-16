@@ -39,4 +39,6 @@ export interface SyncResult {
     state: Map<string, SyncStateEntry>;
     lastUpdate?: string;
     lastFullSync?: string;
+    /** Results from incremental sync query (undefined for full sync) */
+    incrementalResults?: number;
 }

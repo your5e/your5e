@@ -11,4 +11,4 @@ We should actually be mutating the server state instead, so we can properly
 test the incremental sync in all of the scenarios.
 
 - [X] rewrite the setup helpers for the BATS tests
-- [ ] rewrite the setup helpers for the Obsidian tests
+- [X] rewrite the setup helpers for the Obsidian tests

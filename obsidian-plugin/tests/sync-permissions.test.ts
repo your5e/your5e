@@ -17,11 +17,13 @@ import type { SyncStateEntry } from "../src/sync/types.js";
 import {
     API_BASE,
     assertDirMatchesFixture,
+    assertFileModified,
     assertFileNotDownloaded,
     assertFileNotInState,
     assertFileUnchanged,
     assertLastUpdateMatchesExpected,
     assertNoOutputDir,
+    assertServerEditedContent,
     assertStateMatchesFixture,
     assertSyncMetadataUpdated,
     assertTrackedFileIntact,
@@ -39,8 +41,8 @@ import {
     modifyFile,
     renameLocalFile,
     restoreDatabase,
-    setOlderContent,
-    untrackAndRemoveFile,
+    serverCreate,
+    serverEditContent,
     uuidFor,
 } from "./helpers.js";
 
@@ -255,7 +257,10 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, downgraded, new file", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
+            await serverEditContent(
+                normToken,
+                await uuidFor(initialState, "Bestiary.md"),
+            );
             await createFile(outputDir, "newfile.md");
             const sync = createSync({
                 token: wendyToken,
@@ -271,17 +276,13 @@ describe("sync permissions", () => {
 
             const expectedOutput = [
                 "sync: NOTE permission denied, switching to pull-only mode",
-                'pull: "Bestiary.md" (v2)',
+                'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
 
             await assertFileUnchanged(outputDir, "newfile.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "index.md");
-            await assertTrackedFileMatchesFixture(
-                outputDir,
-                result.state,
-                "Bestiary.md",
-            );
+            await assertServerEditedContent(outputDir, "Bestiary.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
@@ -319,7 +320,7 @@ describe("sync permissions", () => {
 
             await expect(sync.run()).rejects.toThrow("API token invalid");
 
-            await assertFileUnchanged(outputDir, "index.md");
+            await assertFileModified(outputDir, "index.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
                 initialState,
@@ -349,7 +350,10 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, downgraded, local update", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
+            await serverEditContent(
+                normToken,
+                await uuidFor(initialState, "Bestiary.md"),
+            );
             await modifyFile(outputDir, "index.md");
             const sync = createSync({
                 token: wendyToken,
@@ -365,16 +369,12 @@ describe("sync permissions", () => {
 
             const expectedOutput = [
                 "sync: NOTE permission denied, switching to pull-only mode",
-                'pull: "Bestiary.md" (v2)',
+                'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
 
-            await assertFileUnchanged(outputDir, "index.md");
-            await assertTrackedFileMatchesFixture(
-                outputDir,
-                result.state,
-                "Bestiary.md",
-            );
+            await assertFileModified(outputDir, "index.md");
+            await assertServerEditedContent(outputDir, "Bestiary.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
@@ -448,7 +448,10 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, downgraded, local rename", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
+            await serverEditContent(
+                normToken,
+                await uuidFor(initialState, "Bestiary.md"),
+            );
             await renameLocalFile(outputDir, initialState, "index.md", "renamed.md");
             const sync = createSync({
                 token: wendyToken,
@@ -464,7 +467,7 @@ describe("sync permissions", () => {
 
             const expectedOutput = [
                 "sync: NOTE permission denied, switching to pull-only mode",
-                'pull: "Bestiary.md" (v2)',
+                'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
 
@@ -475,11 +478,7 @@ describe("sync permissions", () => {
                 "renamed.md",
             );
             await assertFileNotDownloaded(outputDir, "index.md", result.state);
-            await assertTrackedFileMatchesFixture(
-                outputDir,
-                result.state,
-                "Bestiary.md",
-            );
+            await assertServerEditedContent(outputDir, "Bestiary.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
@@ -547,7 +546,10 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, downgraded, local delete", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
+            await serverEditContent(
+                normToken,
+                await uuidFor(initialState, "Bestiary.md"),
+            );
             await deleteTrackedFile(outputDir, "index.md");
             const sync = createSync({
                 token: wendyToken,
@@ -564,16 +566,12 @@ describe("sync permissions", () => {
             const expectedOutput = [
                 "sync: NOTE permission denied, switching to pull-only mode",
                 'pull: SKIPPING pull "index.md", already deleted locally',
-                'pull: "Bestiary.md" (v2)',
+                'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
 
             await assertTrackedFileNotRestored(outputDir, result.state, "index.md");
-            await assertTrackedFileMatchesFixture(
-                outputDir,
-                result.state,
-                "Bestiary.md",
-            );
+            await assertServerEditedContent(outputDir, "Bestiary.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
@@ -599,7 +597,10 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, revoked, content update", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
+            await serverEditContent(
+                normToken,
+                await uuidFor(initialState, "Bestiary.md"),
+            );
             const sync = createSync({
                 pullOnly: true,
                 initialState,
@@ -638,9 +639,9 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, page deleted, content update", async () => {
-            await setOlderContent(outputDir, initialState, "Bestiary.md");
-            await setOlderContent(outputDir, initialState, "Home.md");
             const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+            await serverEditContent(normToken, bestiaryUuid);
+            await serverEditContent(normToken, await uuidFor(initialState, "Home.md"));
             const sync = createSync({
                 pullOnly: true,
                 initialState,
@@ -654,14 +655,14 @@ describe("sync permissions", () => {
             const result = await sync.run();
 
             const expectedOutput = [
-                'pull: "Home.md" (v2)',
+                'pull: "Home.md" (v3)',
                 'pull: SKIPPING "Bestiary.md", deleted remotely during sync',
             ];
             expect(result.output).toEqual(expectedOutput);
 
             await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
             await assertTrackedFileMatchesFixture(outputDir, result.state, "index.md");
-            await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
+            await assertServerEditedContent(outputDir, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
                 result.state,
@@ -686,46 +687,30 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, page deleted, new file", async () => {
-            const frostholdUuid = await uuidFor(
-                initialState,
-                "World Regions/Northern Kingdoms/Frosthold.md",
-            );
-            await untrackAndRemoveFile(
-                outputDir,
-                initialState,
-                "World Regions/Northern Kingdoms/Frosthold.md",
-            );
-            await setOlderContent(outputDir, initialState, "Home.md");
+            const rumoursUuid = await serverCreate(normToken, "Rumours.md");
+            await serverEditContent(normToken, await uuidFor(initialState, "Home.md"));
             const sync = createSync({
                 pullOnly: true,
                 initialState,
                 lastUpdate: "2020-01-01T00:00:00Z",
                 lastFullSync: recentSyncTime,
                 afterFetchHook: async () => {
-                    deletePageByUuid(frostholdUuid);
+                    deletePageByUuid(rumoursUuid);
                 },
             });
 
             const result = await sync.run();
 
             const expectedOutput = [
-                'pull: "Home.md" (v2)',
-                'pull: SKIPPING "World Regions/Northern Kingdoms/Frosthold.md", ' +
-                    "deleted remotely during sync",
+                'pull: SKIPPING "Rumours.md", deleted remotely during sync',
+                'pull: "Home.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
 
-            await assertFileNotDownloaded(
-                outputDir,
-                "World Regions/Northern Kingdoms/Frosthold.md",
-                result.state,
-            );
-            assertFileNotInState(
-                "World Regions/Northern Kingdoms/Frosthold.md",
-                result.state,
-            );
+            await assertFileNotDownloaded(outputDir, "Rumours.md", result.state);
+            assertFileNotInState("Rumours.md", result.state);
             await assertTrackedFileMatchesFixture(outputDir, result.state, "index.md");
-            await assertTrackedFileMatchesFixture(outputDir, result.state, "Home.md");
+            await assertServerEditedContent(outputDir, "Home.md");
             await assertTrackedFileMatchesFixture(
                 outputDir,
                 result.state,
@@ -750,6 +735,11 @@ describe("sync permissions", () => {
                 outputDir,
                 result.state,
                 "random-hexmap-7.png",
+            );
+            await assertTrackedFileMatchesFixture(
+                outputDir,
+                result.state,
+                "World Regions/Northern Kingdoms/Frosthold.md",
             );
             assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
         });

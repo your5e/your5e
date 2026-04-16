@@ -137,6 +137,25 @@ export async function assertFileUnchanged(
     expect(content).toBe("local content\n");
 }
 
+export async function assertFileModified(
+    outputDir: string,
+    filename: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    expect(content).toBe("modified local content\n");
+}
+
+export async function assertServerEditedContent(
+    outputDir: string,
+    filename: string,
+    expectedContent = "server edited content\n",
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    expect(content).toBe(expectedContent);
+}
+
 export function assertFileNotInState(
     filename: string,
     state: Map<string, SyncStateEntry>,
@@ -285,6 +304,18 @@ export function assertNotInState(
     }
 }
 
+export function assertInState(
+    state: Map<string, SyncStateEntry>,
+    uuidPrefix: string,
+): void {
+    for (const uuid of state.keys()) {
+        if (uuid.startsWith(uuidPrefix)) {
+            return;
+        }
+    }
+    throw new Error(`No entry found with UUID starting with ${uuidPrefix}`);
+}
+
 // State building functions
 
 interface PageData {
@@ -381,46 +412,66 @@ async function removeEmptyParents(dir: string, stopAt: string): Promise<void> {
     }
 }
 
-export async function setOlderFilename(
-    outputDir: string,
-    state: Map<string, SyncStateEntry>,
-    from: string,
-    to: string,
+export async function serverEditContent(
+    token: string,
+    uuid: string,
+    content = "server edited content\n",
 ): Promise<void> {
-    const fromPath = path.join(outputDir, from);
-    const toPath = path.join(outputDir, to);
-    await fs.mkdir(path.dirname(toPath), { recursive: true });
-    await fs.rename(fromPath, toPath);
-    await removeEmptyParents(path.dirname(fromPath), outputDir);
-
-    for (const entry of state.values()) {
-        if (entry.localFilename === from) {
-            entry.serverFilename = to;
-            entry.localFilename = to;
-        }
-    }
+    await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/${uuid}`, {
+        method: "PUT",
+        headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "text/markdown",
+        },
+        body: content,
+    });
 }
 
-export async function setOlderContent(
-    outputDir: string,
-    state: Map<string, SyncStateEntry>,
-    filename: string,
+export async function serverRename(
+    token: string,
+    uuid: string,
+    to: string,
 ): Promise<void> {
-    const content = "old content";
-    const hash = crypto.createHash("sha256").update(content).digest("hex");
+    await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/${uuid}`, {
+        method: "PATCH",
+        headers: {
+            Authorization: `Token ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ filename: to }),
+    });
+}
 
-    await fs.writeFile(path.join(outputDir, filename), content);
+export async function serverDelete(token: string, uuid: string): Promise<void> {
+    await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/${uuid}`, {
+        method: "DELETE",
+        headers: { Authorization: `Token ${token}` },
+    });
+}
 
-    for (const entry of state.values()) {
-        if (entry.localFilename === filename) {
-            entry.serverHash = hash;
-            entry.localHash = hash;
-        }
-    }
+export async function serverCreate(
+    token: string,
+    filename: string,
+    content?: string,
+): Promise<string> {
+    const basename = path.basename(filename, path.extname(filename));
+    const body = content ?? `# ${basename}\n`;
+
+    const formData = new FormData();
+    formData.append("file", new Blob([body]), filename);
+
+    const response = await fetch(`${API_BASE}/v1/notebooks/norm/campaign-notes/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${token}` },
+        body: formData,
+    });
+
+    const data = await response.json();
+    return data.uuid;
 }
 
 export async function modifyFile(outputDir: string, filename: string): Promise<void> {
-    await fs.writeFile(path.join(outputDir, filename), "local content\n");
+    await fs.writeFile(path.join(outputDir, filename), "modified local content\n");
 }
 
 export async function renameLocalFile(
@@ -487,7 +538,7 @@ export async function addStaleFile(
     state: Map<string, SyncStateEntry>,
     filename: string,
 ): Promise<void> {
-    const content = "local content";
+    const content = "local content\n";
     const hash = crypto.createHash("sha256").update(content).digest("hex");
     const uuid = `stale-uuid-${Math.random().toString(36).slice(2)}`;
 
@@ -518,34 +569,6 @@ export function markFileStale(
             return;
         }
     }
-}
-
-export async function fileTracksDeletedRemote(
-    outputDir: string,
-    state: Map<string, SyncStateEntry>,
-    filename: string,
-    token: string,
-): Promise<void> {
-    const content = "# Old Notes\n\nThese notes are no longer needed.\n";
-    const hash = crypto.createHash("sha256").update(content).digest("hex");
-    const pages = await fetchPagesData(token);
-    const page = pages.find((p) => p.filename === "Old Notes.md");
-    if (!page) {
-        throw new Error("Old Notes.md not found");
-    }
-
-    await fs.mkdir(path.dirname(path.join(outputDir, filename)), {
-        recursive: true,
-    });
-    await fs.writeFile(path.join(outputDir, filename), content);
-
-    state.set(page.uuid, {
-        uuid: page.uuid,
-        serverFilename: filename,
-        localFilename: filename,
-        serverHash: hash,
-        localHash: hash,
-    });
 }
 
 export async function assertTrackedFileIntact(
@@ -727,12 +750,16 @@ export async function removeFile(outputDir: string, filename: string): Promise<v
     await fs.unlink(path.join(outputDir, filename));
 }
 
+export async function getExpectedLastUpdate(): Promise<string> {
+    const expectedFile = path.join(PROJECT_ROOT, "tests/last_update");
+    return (await fs.readFile(expectedFile, "utf-8")).trim();
+}
+
 export async function assertLastUpdateMatchesExpected(
     lastUpdate: string | undefined,
 ): Promise<void> {
     expect(lastUpdate).toBeDefined();
-    const expectedFile = path.join(PROJECT_ROOT, "tests/last_update");
-    const expected = (await fs.readFile(expectedFile, "utf-8")).trim();
+    const expected = await getExpectedLastUpdate();
     expect(lastUpdate).toBe(expected);
 }
 
@@ -760,4 +787,11 @@ export function assertSyncMetadataUpdated(
     const lastFullSyncTime = new Date(lastFullSync).getTime();
     const ageSeconds = (now - lastFullSyncTime) / 1000;
     expect(ageSeconds).toBeLessThan(60);
+}
+
+export function assertIncrementalResults(
+    incrementalResults: number | undefined,
+    expected: number,
+): void {
+    expect(incrementalResults).toBe(expected);
 }

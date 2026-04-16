@@ -22,6 +22,7 @@ export class SyncEngine {
     private lastFullSync?: string;
     private isIncrementalSync = false;
     private permissionDenied = false;
+    private incrementalResults?: number;
 
     constructor(private config: SyncConfig) {
         this.fs = config.fileSystem;
@@ -35,6 +36,7 @@ export class SyncEngine {
         this.remotePages = new Map();
         this.syncState = this.config.initialState ?? new Map();
         this.permissionDenied = false;
+        this.incrementalResults = undefined;
 
         if (!this.config.token) {
             this.output.push("sync: ERROR API token missing");
@@ -96,6 +98,7 @@ export class SyncEngine {
             state: this.syncState,
             lastUpdate: this.lastUpdate,
             lastFullSync: this.lastFullSync,
+            incrementalResults: this.incrementalResults,
         };
     }
 
@@ -154,6 +157,20 @@ export class SyncEngine {
 
         // Add ?since= parameter for incremental sync
         if (this.isIncrementalSync && this.lastUpdate) {
+            // Update our local cache of the remote state with the incremental
+            // changes. The limitation is that a stale file (where the server
+            // has purged a soft-deleted file) cannot be detected by this, so
+            // we should still do a full fetch of the notebook state regularly
+            // to catch purged files.
+            for (const [uuid, entry] of this.syncState) {
+                this.remotePages.set(uuid, {
+                    uuid,
+                    filename: entry.serverFilename,
+                    content_hash: entry.serverHash,
+                    version: 0,
+                    deleted_at: null,
+                });
+            }
             baseUrl += `?since=${encodeURIComponent(this.lastUpdate)}`;
         }
 
@@ -190,6 +207,11 @@ export class SyncEngine {
             // Extract and store lastUpdate from API response
             if (data.last_update) {
                 this.lastUpdate = data.last_update;
+            }
+
+            // Track total results for incremental sync (first page only)
+            if (this.isIncrementalSync && this.incrementalResults === undefined) {
+                this.incrementalResults = data.total_results ?? 0;
             }
 
             for (const page of data.results as RemotePage[]) {
@@ -355,6 +377,10 @@ export class SyncEngine {
             }
             this.deleteSyncState(uuid);
             this.remotePages.delete(uuid);
+        } else if (response.status === 404) {
+            // UUID is stale - doesn't exist on server
+            this.deleteSyncState(uuid);
+            this.remotePages.delete(uuid);
         }
     }
 
@@ -424,7 +450,8 @@ export class SyncEngine {
         if (response.status === 400 || response.status === 409) {
             const data = await response.json();
             this.output.push(
-                `push: ERROR cannot rename "${entry.localFilename}": ${data.error}`,
+                `push: ERROR cannot rename "${remote.filename}" ` +
+                    `to "${entry.localFilename}": ${data.error}`,
             );
         }
         return false;
@@ -502,6 +529,13 @@ export class SyncEngine {
             } else {
                 this.output.push(`push: "${entry.localFilename}" (v${data.version})`);
             }
+        } else if (response.status === 404) {
+            // UUID is stale - the file no longer exists on the server
+            // Remove the stale entry from both syncState and remotePages,
+            // then create a new file
+            this.syncState.delete(uuid);
+            this.remotePages.delete(uuid);
+            await this.tryCreateRemoteFile(entry.localFilename);
         }
     }
 
