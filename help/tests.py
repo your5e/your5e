@@ -21,7 +21,7 @@ class TestSyncApiDocs:
 
     def run_sync(self, project_dir):
         with patch("django.conf.settings.BASE_DIR", project_dir):
-            call_command("sync_api_docs")
+            call_command("sync_docs")
 
     def test_syncs_api_docs_to_wiki(self, project_dir):
         api_docs = project_dir / "api" / "docs"

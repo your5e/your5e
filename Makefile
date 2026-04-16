@@ -111,4 +111,4 @@ update-notebooks:
 	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py import_notebook --all'
 
 update-help-docs:
-	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py sync_api_docs'
+	ssh your5e.com 'docker exec $$(docker ps -q -f name=your5e_web) python manage.py sync_docs'

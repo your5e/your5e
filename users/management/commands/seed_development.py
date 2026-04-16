@@ -439,4 +439,4 @@ class Command(BaseCommand):
             visibility=Notebook.Visibility.PUBLIC,
         )
 
-        call_command("sync_api_docs")
+        call_command("sync_docs")
