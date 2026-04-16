@@ -105,6 +105,7 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
         removeButton.addEventListener("click", async () => {
             this.plugin.scheduler?.cancelFolder(mapping.folder);
             this.plugin.settings.folders.splice(index, 1);
+            delete this.plugin.settings.syncStates[mapping.folder];
             await this.plugin.saveSettings();
             this.display();
         });

@@ -16,7 +16,7 @@ per folder. Per-folder config is vault folder, notebook ID (and overrides).
 - [X] initial sync on launch should also not swamp the server
 - [X] save button for new folder, folds section and triggers sync
 - [X] {re,}start the scheduler on settings change, not only on plugin load
-- [ ] removing a folder mapping should remove its state
+- [X] removing a folder mapping should remove its state
 - [ ] build to a permanent artifact zip file, not an emphemeral zip on the
       docker image
 

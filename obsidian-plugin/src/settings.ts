@@ -17,6 +17,7 @@ export interface FolderSyncState {
 }
 
 export interface PluginSettings {
+    version: string;
     baseUrl: string;
     token: string;
     folders: FolderMapping[];
@@ -24,6 +25,7 @@ export interface PluginSettings {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
+    version: "",
     baseUrl: "",
     token: "",
     folders: [],

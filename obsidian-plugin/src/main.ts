@@ -46,6 +46,7 @@ export default class Your5eSyncPlugin extends Plugin {
     }
 
     async saveSettings() {
+        this.settings.version = this.manifest.version;
         await this.saveData(this.settings);
     }
 
