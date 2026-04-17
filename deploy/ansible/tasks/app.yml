@@ -52,3 +52,6 @@
 
 - name: Update api service
   command: docker service update --force --image ghcr.io/your5e/your5e:latest your5e_api
+
+- name: Sync help documentation
+  shell: docker exec $(docker ps -q -f name=your5e_web) python manage.py sync_docs
