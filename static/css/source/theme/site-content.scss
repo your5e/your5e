@@ -1,0 +1,58 @@
+@use "../base/colours" as *;
+@use "typography" as *;
+
+.site-content {
+    h1, h2 {
+        color: $colour-header;
+        margin-bottom: 0;
+
+        + p {
+            margin-top: 0;
+        }
+    }
+
+    h1 {
+        font-size: $size-double-english;
+    }
+    h2 {
+        font-size: $size-double-small-pica;
+        margin-top: 1.5em;
+    }
+
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-block: 1em;
+    }
+
+    th, td {
+        padding: 0.5em 1em;
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid $colour-subtle-border;
+    }
+
+    th {
+        font-weight: 600;
+    }
+
+    &.roadmap {
+        table {
+            max-width: 48em;
+        }
+
+        th {
+            color: $colour-header;
+        }
+
+        th:nth-child(2),
+        td:nth-child(2) {
+            width: 6em;
+        }
+
+        th:nth-child(3),
+        td:nth-child(3) {
+            width: 7em;
+        }
+    }
+}

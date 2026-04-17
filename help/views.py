@@ -38,6 +38,7 @@ class HelpPageView(View):
 
         version = page.latest_version
         content = version.render(base_url="/help/")
+        cssclass = version.frontmatter().get("cssclass", "")
 
         if path.endswith("/index") or path == "index":
             breadcrumbs = wiki.breadcrumbs_for(version)[:-1]
@@ -47,5 +48,6 @@ class HelpPageView(View):
         return render(request, "help/page.html", {
             "page": version,
             "content": content,
+            "cssclass": cssclass,
             "breadcrumbs": breadcrumbs,
         })

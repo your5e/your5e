@@ -25,6 +25,11 @@ If you are an [Obsidian](https://obsidian.md) user, you can sync the notebooks
 available to you to your vault using the [[sync plugin]].
 
 
+## Roadmap
+
+See what features are [[roadmap|coming soon]].
+
+
 ## For Developers
 
 There is an [[api/index|API]] in development, which allows you access to your

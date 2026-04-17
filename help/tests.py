@@ -1,10 +1,20 @@
 from http import HTTPStatus
+from textwrap import dedent
 from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from whatnext.models import State
 
 from help.models import HelpWiki
+from help.roadmap import (
+    RoadmapEntry,
+    RoadmapState,
+    RoadmapTask,
+    calculate_entry_state,
+    generate_roadmap_markdown,
+    parse_roadmap_file,
+)
 from users.models import User
 from wikis.models import Page
 
@@ -170,3 +180,185 @@ class TestHelpPageView:
         assert "Obsidian Plugin" in content
         assert "/profile/" in content
         assert "token" in content.lower()
+
+    def test_cssclass_frontmatter_adds_class_to_article(self, client):
+        self.create_help_page(
+            "styled.md",
+            dedent("""\
+                ---
+                cssclass: roadmap
+                ---
+                # Styled Page
+
+                Content.
+            """).encode(),
+        )
+        response = client.get("/help/styled")
+        assert response.status_code == HTTPStatus.OK
+        assert b'class="site-content roadmap"' in response.content
+
+
+class RoadmapTasksMixin:
+    @pytest.fixture
+    def tasks_dir(self, tmp_path):
+        tasks = tmp_path / "tasks"
+        tasks.mkdir()
+        work = tasks / "work"
+        work.mkdir()
+        roadmap = tasks / "roadmap"
+        roadmap.mkdir()
+
+        (work / "complete.md").write_text(dedent("""\
+            - [X] done
+            - [X] also done
+        """))
+        (work / "partial.md").write_text(dedent("""\
+            - [X] done
+            - [ ] not done
+        """))
+        (work / "empty.md").write_text(dedent("""\
+            - [ ] not done
+            - [ ] also not done
+        """))
+
+        # Roadmap entries in different states
+        (roadmap / "notebook_sync.md").write_text(dedent("""\
+            # Notebook Sync
+
+            Sync your notebooks with Obsidian.
+
+            - [X] Released @after ../work/complete.md
+        """))
+        (roadmap / "dark_mode.md").write_text(dedent("""\
+            # Dark Mode
+
+            A dark theme for the site.
+
+            - [ ] Release @after ../work/partial.md
+        """))
+        (roadmap / "session_scheduler.md").write_text(dedent("""\
+            # Session Scheduler
+
+            Schedule and manage game sessions.
+
+            - [ ] Release @after ../work/empty.md
+        """))
+        (roadmap / "api_tokens.md").write_text(dedent("""\
+            # API Tokens
+
+            Manage access tokens for integrations.
+
+            - [ ] Release @after ../work/empty.md
+        """))
+        (roadmap / "character_sheets.md").write_text(dedent("""\
+            # Character Sheets
+
+            Create and manage character sheets.
+
+            - [ ] Equipment tracking @after ../work/empty.md
+            - [X] Ability scores @after ../work/complete.md
+            - [ ] Basic info @after ../work/partial.md
+        """))
+        return tasks
+
+
+class TestRoadmap(RoadmapTasksMixin):
+    def test_parse_roadmap_entry(self, tasks_dir):
+        assert parse_roadmap_file(
+            tasks_dir / "roadmap" / "notebook_sync.md"
+        ) == (
+            RoadmapEntry(
+                title="Notebook Sync",
+                description="Sync your notebooks with Obsidian.",
+                tasks=[
+                    RoadmapTask(
+                        text="Released",
+                        state=State.COMPLETE,
+                        dependencies=[
+                            str((tasks_dir / "work" / "complete.md").resolve())
+                        ],
+                    ),
+                ],
+            )
+        )
+
+    def test_calculates_entry_states(self, tasks_dir):
+        roadmap = tasks_dir / "roadmap"
+
+        notebook_sync = parse_roadmap_file(roadmap / "notebook_sync.md")
+        assert calculate_entry_state(notebook_sync) == RoadmapState.AVAILABLE
+
+        dark_mode = parse_roadmap_file(roadmap / "dark_mode.md")
+        assert calculate_entry_state(dark_mode) == RoadmapState.IN_PROGRESS
+
+        session_scheduler = parse_roadmap_file(roadmap / "session_scheduler.md")
+        assert calculate_entry_state(session_scheduler) == RoadmapState.PLANNED
+
+    def test_sorts_entries_by_activity(self, tasks_dir):
+        markdown = generate_roadmap_markdown(tasks_dir / "roadmap")
+
+        notebook_sync_pos = markdown.index("Notebook Sync")
+        dark_mode_pos = markdown.index("Dark Mode")
+        assert notebook_sync_pos < dark_mode_pos
+
+        api_tokens_pos = markdown.index("API Tokens")
+        assert dark_mode_pos < api_tokens_pos
+
+        session_scheduler_pos = markdown.index("Session Scheduler")
+        assert api_tokens_pos < session_scheduler_pos
+
+        assert "Sync your notebooks with Obsidian." in markdown
+        assert "A dark theme for the site." in markdown
+
+    def test_does_not_sort_inside_entries(self, tasks_dir):
+        markdown = generate_roadmap_markdown(tasks_dir / "roadmap")
+
+        equipment_pos = markdown.index("| Equipment tracking | Planned |")
+        ability_pos = markdown.index("| Ability scores | **Available** |")
+        basic_pos = markdown.index("| Basic info | _In Progress_ |")
+        assert equipment_pos < ability_pos < basic_pos
+
+    def test_calculates_progress_per_task(self, tasks_dir):
+        markdown = generate_roadmap_markdown(tasks_dir / "roadmap")
+
+        assert "| Released | **Available** | 3 of 3 tasks |" in markdown
+        assert "| Release | _In Progress_ | 1 of 3 tasks |" in markdown
+        assert "| Release | Planned | 0 of 3 tasks |" in markdown
+
+
+@pytest.mark.django_db
+class TestSyncDocsRoadmap:
+    @pytest.fixture
+    def project_dir(self, tmp_path):
+        help_docs = tmp_path / "help" / "docs"
+        help_docs.mkdir(parents=True)
+        tasks = tmp_path / "tasks"
+        tasks.mkdir()
+        work = tasks / "work"
+        work.mkdir()
+        roadmap = tasks / "roadmap"
+        roadmap.mkdir()
+        return tmp_path
+
+    def run_sync(self, project_dir):
+        with patch("django.conf.settings.BASE_DIR", project_dir):
+            call_command("sync_docs")
+
+    def test_generates_roadmap_page(self, project_dir):
+        work = project_dir / "tasks" / "work"
+        (work / "dice_roller.md").write_text("- [ ] task\n")
+
+        roadmap = project_dir / "tasks" / "roadmap"
+        (roadmap / "dice_roller.md").write_text(dedent("""\
+            # Dice Roller
+
+            Roll dice with standard notation.
+
+            - [ ] Release @after ../work/dice_roller.md
+        """))
+
+        self.run_sync(project_dir)
+
+        wiki = HelpWiki.objects.get()
+        page = wiki.get_page(path="roadmap")
+        assert b"Dice Roller" in page.latest_version.content.data

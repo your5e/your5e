@@ -10,7 +10,7 @@
 
 {% block page_content %}
 
-  <article class="site-content">
+  <article class="site-content{% if cssclass %} {{ cssclass }}{% endif %}">
     {{ content|safe }}
   </article>
 
