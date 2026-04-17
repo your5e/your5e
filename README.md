@@ -32,6 +32,9 @@ Development is done with docker, spinning up the stack is:
 # update archival/testing screenshots
 (computer)% make scry
 
+# update the Obsidian plugin in test vault during development
+(computer)% make debug-plugin
+
 # build the Obsidian plugin
 (computer)% make build-obsidian-plugin
 

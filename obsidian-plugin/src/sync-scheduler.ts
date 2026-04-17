@@ -55,6 +55,12 @@ export class SyncScheduler {
         this.scheduleNext(folder);
     }
 
+    async syncNow(folder: string): Promise<void> {
+        this.cancelFolder(folder);
+        await this.config.onSync(folder);
+        this.scheduleNext(folder);
+    }
+
     private scheduleFolder(folder: string, delay: number): void {
         if (this.stopped) {
             return;

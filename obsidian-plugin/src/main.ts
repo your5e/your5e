@@ -30,7 +30,7 @@ class FolderSuggestModal extends FuzzySuggestModal<FolderMapping> {
     }
 
     onChooseItem(folder: FolderMapping): void {
-        this.plugin.syncFolder(folder.folder);
+        this.plugin.scheduler?.syncNow(folder.folder);
     }
 }
 
@@ -54,12 +54,10 @@ export default class Your5eSyncPlugin extends Plugin {
         this.addCommand({
             id: "show-sync-log",
             name: "Show sync log",
-            callback: () => new SyncLogModal(this.app, this.syncLog).open(),
+            callback: () => this.openSyncLogModal(),
         });
 
-        this.addRibbonIcon("scroll", "Show sync log", () =>
-            new SyncLogModal(this.app, this.syncLog).open(),
-        );
+        this.addRibbonIcon("scroll", "Show sync log", () => this.openSyncLogModal());
 
         this.scheduler = new SyncScheduler({
             setTimeout: (fn, delay) => window.setTimeout(fn, delay),
@@ -90,6 +88,13 @@ export default class Your5eSyncPlugin extends Plugin {
     async saveSettings() {
         this.settings.version = this.manifest.version;
         await this.saveData(this.settings);
+    }
+
+    openSyncLogModal(): void {
+        new SyncLogModal(this.app, this.syncLog, {
+            folders: this.settings.folders.map((f) => f.folder),
+            onSync: (folder) => this.scheduler?.syncNow(folder),
+        }).open();
     }
 
     async syncFolder(folder: string): Promise<void> {
@@ -135,8 +140,6 @@ export default class Your5eSyncPlugin extends Plugin {
         try {
             const engine = new SyncEngine(config);
             const result = await engine.run();
-
-            this.syncLog.log(folder, "sync complete");
             this.saveFolderState(folderMapping.folder, result);
             await this.saveData(this.settings);
         } catch (error) {

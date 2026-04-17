@@ -3,7 +3,7 @@
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 .PHONY: build deploy update-notebooks update-help-docs
-.PHONY: setup-obsidian-plugin build-obsidian-plugin
+.PHONY: setup-obsidian-plugin build-obsidian-plugin debug-plugin
 
 TEST_COMPOSE_FILE := docker-compose.yml:docker-compose.test.yml
 TEST_COMPOSE_PROJECT := your5e-test
@@ -75,13 +75,18 @@ test-obsidian-plugin:
 	tests/check-page-size-sync.sh
 	python tests/check-test-coverage.py
 	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
-	cd obsidian-plugin && npm run lint && npm test
+	npm --prefix obsidian-plugin run lint
+	npm --prefix obsidian-plugin test
 
 setup-obsidian-plugin:
-	cd obsidian-plugin && npm install
+	npm --prefix obsidian-plugin install
 
 build-obsidian-plugin:
-	cd obsidian-plugin && npm run build
+	npm --prefix obsidian-plugin run build
+
+debug-plugin:
+	npm --prefix obsidian-plugin run build
+	cp obsidian-plugin/dist/* ~/Obsidian/test/.obsidian/plugins/your5e-folder-sync
 
 test: test-django test-sync-integration test-obsidian-plugin
 

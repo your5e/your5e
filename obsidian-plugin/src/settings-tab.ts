@@ -196,8 +196,7 @@ export class Your5eSyncSettingTab extends PluginSettingTab {
                 .onClick(async () => {
                     summary.textContent = `${mapping.folder}: ${mapping.notebook}`;
                     details.removeAttribute("open");
-                    await this.plugin.syncFolder(mapping.folder);
-                    this.plugin.scheduler?.reschedule(mapping.folder);
+                    await this.plugin.scheduler?.syncNow(mapping.folder);
                 }),
         );
     }

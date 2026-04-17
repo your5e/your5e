@@ -18,25 +18,66 @@ export class SyncLog {
     getLines(): string[] {
         return this.lines;
     }
+
+    clear(): void {
+        this.lines = [];
+    }
+}
+
+export interface SyncLogModalOptions {
+    folders: string[];
+    onSync: (folder: string) => void;
 }
 
 export class SyncLogModal extends Modal {
     private syncLog: SyncLog;
+    private options?: SyncLogModalOptions;
     private intervalId: number | null = null;
     private pre: HTMLPreElement | null = null;
+    private lastLineCount = 0;
 
-    constructor(app: App, syncLog: SyncLog) {
+    constructor(app: App, syncLog: SyncLog, options?: SyncLogModalOptions) {
         super(app);
         this.syncLog = syncLog;
+        this.options = options;
     }
 
     onOpen(): void {
-        const { contentEl } = this;
+        const { contentEl, modalEl } = this;
         contentEl.addClass("sync-log-modal");
 
+        modalEl.style.width = "80vw";
+        modalEl.style.maxWidth = "900px";
         contentEl.style.height = "80vh";
         contentEl.style.display = "flex";
         contentEl.style.flexDirection = "column";
+
+        const headerContainer = contentEl.createDiv();
+        headerContainer.style.display = "flex";
+        headerContainer.style.justifyContent = "space-between";
+        headerContainer.style.alignItems = "center";
+        headerContainer.style.marginBottom = "16px";
+
+        if (this.options && this.options.folders.length > 0) {
+            const select = headerContainer.createEl("select");
+            select.createEl("option", { text: "Sync now…", value: "" });
+            for (const folder of this.options.folders) {
+                select.createEl("option", { text: folder, value: folder });
+            }
+            select.addEventListener("change", () => {
+                if (select.value) {
+                    this.options?.onSync(select.value);
+                    select.value = "";
+                }
+            });
+        }
+
+        const clearButton = headerContainer.createEl("button", { text: "Clear" });
+        clearButton.addEventListener("click", () => {
+            this.syncLog.clear();
+            this.lastLineCount = 0;
+            this.render();
+        });
 
         this.pre = contentEl.createEl("pre");
         this.pre.style.flex = "1";
@@ -69,6 +110,11 @@ export class SyncLogModal extends Modal {
             this.pre.setText("No sync activity yet.");
             return;
         }
+
+        if (lines.length === this.lastLineCount) {
+            return;
+        }
+        this.lastLineCount = lines.length;
 
         const wasAtBottom =
             this.pre.scrollTop >= this.pre.scrollHeight - this.pre.clientHeight - 10;
