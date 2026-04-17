@@ -61,6 +61,7 @@ server-tests:
 
 server-tests-down:
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) down -v
+	docker system prune -f
 
 test-django: lint-django
 	docker compose exec $(EXEC_FLAGS) web pytest
