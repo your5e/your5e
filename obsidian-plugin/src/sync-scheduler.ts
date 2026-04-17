@@ -4,6 +4,7 @@ export interface SyncSchedulerConfig {
     random: () => number;
     onSync: (folder: string) => Promise<void>;
     onSchedule: (folder: string, delay: number) => void;
+    isActive?: (folder: string) => boolean;
 }
 
 const MINUTE = 60 * 1000;
@@ -63,6 +64,9 @@ export class SyncScheduler {
 
     private scheduleFolder(folder: string, delay: number): void {
         if (this.stopped) {
+            return;
+        }
+        if (this.config.isActive && !this.config.isActive(folder)) {
             return;
         }
         this.config.onSchedule(folder, delay);

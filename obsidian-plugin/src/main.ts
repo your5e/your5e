@@ -6,6 +6,7 @@ import {
     DEFAULT_SETTINGS,
     type FolderMapping,
     type PluginSettings,
+    handleVaultRename,
 } from "./settings.js";
 import { SyncLog, SyncLogModal } from "./sync-log.js";
 import { SyncScheduler } from "./sync-scheduler.js";
@@ -39,6 +40,7 @@ export default class Your5eSyncPlugin extends Plugin {
     scheduler: SyncScheduler | null = null;
     syncLog: SyncLog = new SyncLog();
     private syncing: Set<string> = new Set();
+    private abortControllers: Map<string, AbortController> = new Map();
 
     async onload() {
         await this.loadSettings();
@@ -69,12 +71,46 @@ export default class Your5eSyncPlugin extends Plugin {
                 const time = nextSync.toTimeString().slice(0, 8);
                 this.syncLog.log(folder, `next sync at ${time}`);
             },
+            isActive: (folder) => {
+                const mapping = this.settings.folders.find((f) => f.folder === folder);
+                return mapping !== undefined && mapping.active !== false;
+            },
         });
 
         const folders = this.settings.folders.map((f) => f.folder);
         if (folders.length > 0) {
             this.scheduler.start(folders);
         }
+
+        this.registerEvent(
+            this.app.vault.on("rename", async (file, oldPath) => {
+                if (!this.scheduler) {
+                    return;
+                }
+
+                const result = handleVaultRename(
+                    {
+                        settings: this.settings,
+                        isSyncing: (f) => this.isSyncing(f),
+                        abortSync: (f) => this.abortSync(f),
+                        scheduler: this.scheduler,
+                        log: (f, msg) => this.syncLog.log(f, msg),
+                    },
+                    oldPath,
+                    file.path,
+                );
+
+                if (result.action === "updated") {
+                    await this.saveSettings();
+                } else if (result.action === "conflict") {
+                    this.syncLog.log(
+                        oldPath,
+                        `Cannot update after rename: ${result.reason}`,
+                    );
+                    new Notice(`Sync folder conflict: ${result.reason}`);
+                }
+            }),
+        );
     }
 
     onunload() {
@@ -97,6 +133,17 @@ export default class Your5eSyncPlugin extends Plugin {
         }).open();
     }
 
+    isSyncing(folder: string): boolean {
+        return this.syncing.has(folder);
+    }
+
+    abortSync(folder: string): void {
+        const controller = this.abortControllers.get(folder);
+        if (controller) {
+            controller.abort();
+        }
+    }
+
     async syncFolder(folder: string): Promise<void> {
         if (this.syncing.has(folder)) {
             return;
@@ -116,6 +163,8 @@ export default class Your5eSyncPlugin extends Plugin {
         }
 
         this.syncing.add(folder);
+        const abortController = new AbortController();
+        this.abortControllers.set(folder, abortController);
         this.syncLog.log(folder, "sync starting");
 
         // biome-ignore lint/suspicious/noExplicitAny: basePath exists on FileSystemAdapter but isn't in public types
@@ -135,6 +184,7 @@ export default class Your5eSyncPlugin extends Plugin {
             lastUpdate: folderState.lastUpdate,
             lastFullSync: folderState.lastFullSync,
             onOutput: (line) => this.syncLog.log(folder, line),
+            abortSignal: abortController.signal,
         };
 
         try {
@@ -143,12 +193,17 @@ export default class Your5eSyncPlugin extends Plugin {
             this.saveFolderState(folderMapping.folder, result);
             await this.saveData(this.settings);
         } catch (error) {
-            this.syncLog.log(folder, `sync failed: ${error.message}`);
-            new Notice(
-                `Your5e sync failed for ${folderMapping.folder}: ${error.message}`,
-            );
+            if (error.message === "Sync aborted") {
+                this.syncLog.log(folder, "sync aborted");
+            } else {
+                this.syncLog.log(folder, `sync failed: ${error.message}`);
+                new Notice(
+                    `Your5e sync failed for ${folderMapping.folder}: ${error.message}`,
+                );
+            }
         } finally {
             this.syncing.delete(folder);
+            this.abortControllers.delete(folder);
         }
     }
 

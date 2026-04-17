@@ -36,6 +36,12 @@ export class SyncEngine {
         this.config.onOutput?.(line);
     }
 
+    private checkAborted(): void {
+        if (this.config.abortSignal?.aborted) {
+            throw new Error("Sync aborted");
+        }
+    }
+
     async run(): Promise<SyncResult> {
         this.output = [];
         this.remotePages = new Map();
@@ -52,6 +58,7 @@ export class SyncEngine {
         this.isIncrementalSync = this.shouldUseIncrementalSync();
 
         const editable = await this.fetchRemoteState();
+        this.checkAborted();
 
         if (this.config.afterFetchHook) {
             await this.config.afterFetchHook();
@@ -62,6 +69,7 @@ export class SyncEngine {
         }
 
         await this.detectUntrackedRenames();
+        this.checkAborted();
 
         let pullOnly = this.config.pullOnly;
         if (!pullOnly && !editable) {
@@ -71,6 +79,7 @@ export class SyncEngine {
 
         if (!pullOnly) {
             await this.applyLocalUpdates();
+            this.checkAborted();
         }
 
         const deletedUuids: string[] = [];
@@ -84,7 +93,10 @@ export class SyncEngine {
         }
 
         await this.applyRemoteDeletions(deletedUuids);
+        this.checkAborted();
+
         await this.applyRemoteUpdates(activeUuids, new Set<string>());
+        this.checkAborted();
 
         // Skip stale file checks during incremental sync
         if (!this.isIncrementalSync) {
@@ -181,6 +193,8 @@ export class SyncEngine {
         let editable = true;
 
         while (nextPage) {
+            this.checkAborted();
+
             const response = await fetch(nextPage, {
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
@@ -344,6 +358,8 @@ export class SyncEngine {
             if (this.handlePushAuthError(renameResponse)) {
                 return;
             }
+
+            this.checkAborted();
             if (renameResponse.ok) {
                 this.log(
                     `push: renamed "${remote.filename}" to "${entry.localFilename}"`,
@@ -368,6 +384,8 @@ export class SyncEngine {
         if (this.handlePushAuthError(response)) {
             return;
         }
+
+        this.checkAborted();
         if (response.ok) {
             if (remoteEdited) {
                 this.log(`push: deleted "${entry.localFilename}" (had remote changes)`);
@@ -431,6 +449,8 @@ export class SyncEngine {
         if (this.handlePushAuthError(response)) {
             return false;
         }
+
+        this.checkAborted();
         if (response.ok) {
             const data = await response.json();
             this.log(`push: renamed "${remote.filename}" to "${entry.localFilename}"`);
@@ -493,6 +513,8 @@ export class SyncEngine {
         if (this.handlePushAuthError(response)) {
             return;
         }
+
+        this.checkAborted();
         if (response.ok) {
             const data = await response.json();
             const localPath = path.join(this.config.outputDir, entry.localFilename);
@@ -912,6 +934,7 @@ export class SyncEngine {
             throw new Error(`Failed to fetch ${localFile}: HTTP ${response.status}`);
         }
 
+        this.checkAborted();
         const content = Buffer.from(await response.arrayBuffer());
         const destPath = path.join(this.config.outputDir, localFile);
         await this.fs.write(destPath, content);
@@ -949,6 +972,7 @@ export class SyncEngine {
             throw new Error(`Failed to fetch ${destFile}: HTTP ${response.status}`);
         }
 
+        this.checkAborted();
         const content = Buffer.from(await response.arrayBuffer());
         const destPath = path.join(this.config.outputDir, destFile);
         await this.fs.write(destPath, content);
@@ -1067,6 +1091,8 @@ export class SyncEngine {
         if (this.handlePushAuthError(response)) {
             return null;
         }
+
+        this.checkAborted();
         if (response.status === 400 || response.status === 409) {
             const data = await response.json();
             return data.error;

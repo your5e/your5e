@@ -197,4 +197,86 @@ describe("sync scheduler", () => {
         await callbacks.get(2)?.();
         expect(syncedFolders).toEqual(["notes", "journal"]);
     });
+
+    it("does not reschedule when isActive returns false", async () => {
+        const scheduled: Array<{ folder: string; delay: number }> = [];
+        const callbacks = new Map<number, () => void>();
+        let nextId = 1;
+
+        const mockSetTimeout = (fn: () => void, delay: number) => {
+            const id = nextId++;
+            callbacks.set(id, fn);
+            return id;
+        };
+        const mockClearTimeout = (_id: number) => {};
+        const mockRandom = () => 0.5;
+
+        const activeFolders = new Set(["notes", "journal"]);
+
+        const scheduler = new SyncScheduler({
+            setTimeout: mockSetTimeout,
+            clearTimeout: mockClearTimeout,
+            random: mockRandom,
+            onSync: async (folder) => {},
+            onSchedule: (folder, delay) => {
+                scheduled.push({ folder, delay });
+            },
+            isActive: (folder) => activeFolders.has(folder),
+        });
+
+        scheduler.start(["notes", "journal"]);
+        expect(scheduled).toHaveLength(2);
+
+        // Deactivate "notes" mid-sync
+        activeFolders.delete("notes");
+
+        // Trigger the first sync callback
+        await callbacks.get(1)?.();
+
+        // "notes" should not be rescheduled (still 2, not 3)
+        expect(scheduled).toHaveLength(2);
+
+        // "journal" should still reschedule
+        await callbacks.get(2)?.();
+        expect(scheduled).toHaveLength(3);
+        expect(scheduled[2].folder).toBe("journal");
+    });
+
+    it("does not reschedule after syncNow when isActive returns false", async () => {
+        const scheduled: Array<{ folder: string; delay: number }> = [];
+        const callbacks = new Map<number, () => void>();
+        let nextId = 1;
+
+        const mockSetTimeout = (fn: () => void, delay: number) => {
+            const id = nextId++;
+            callbacks.set(id, fn);
+            return id;
+        };
+        const mockClearTimeout = (_id: number) => {};
+        const mockRandom = () => 0.5;
+
+        const activeFolders = new Set(["notes"]);
+
+        const scheduler = new SyncScheduler({
+            setTimeout: mockSetTimeout,
+            clearTimeout: mockClearTimeout,
+            random: mockRandom,
+            onSync: async (folder) => {
+                // Deactivate during sync (simulates folder rename/removal)
+                activeFolders.delete(folder);
+            },
+            onSchedule: (folder, delay) => {
+                scheduled.push({ folder, delay });
+            },
+            isActive: (folder) => activeFolders.has(folder),
+        });
+
+        scheduler.start(["notes"]);
+        expect(scheduled).toHaveLength(1);
+
+        await scheduler.syncNow("notes");
+
+        // Should not reschedule since folder became inactive during sync
+        expect(scheduled).toHaveLength(1);
+    });
 });

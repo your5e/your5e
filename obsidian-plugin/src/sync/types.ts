@@ -33,6 +33,7 @@ export interface SyncConfig {
     lastFullSync?: string;
     afterFetchHook?: () => Promise<void>;
     onOutput?: (line: string) => void;
+    abortSignal?: AbortSignal;
 }
 
 export interface SyncResult {

@@ -7,8 +7,11 @@ export class SyncLog {
 
     log(folder: string, message: string): void {
         const now = new Date();
-        const timestamp = now.toISOString().slice(0, 19).replace("T", " ");
-        const entry = `[${timestamp} ${folder}] ${message}`;
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const day = String(now.getDate()).padStart(2, "0");
+        const time = now.toTimeString().slice(0, 8);
+        const entry = `[${year}-${month}-${day} ${time} ${folder}] ${message}`;
         this.lines.push(entry);
         if (this.lines.length > MAX_LINES) {
             this.lines = this.lines.slice(-MAX_LINES);

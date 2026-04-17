@@ -6,7 +6,7 @@ Settings window.
 - [X] completed mappings are behind disclosures to reduce noise
 - [X] Use notebook name/id as the name of the section, not "Folder 1"
 - [X] option to force pull-only mode
-- [ ] test 'Folder/Subfolder/Subsubfolder' works when none of that exists
-- [ ] renaming the folder in the settings window should rename the folder
+- [X] test 'Folder/Subfolder/Subsubfolder' works when none of that exists
+- [X] renaming the folder in the settings window should rename the folder
       in the vault
-        - is it possible to detect the reverse?
+- [X] detect when folder is renamed in vault and update settings
