@@ -794,6 +794,246 @@ class TestPage(WikiMixin):
         assert version.content.data == b"\x89PNG\r\n\x1a\n"
         assert version.mime_type == "image/png"
 
+    def test_update_with_matching_base_hash(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            # Goblin
+
+            Small humanoid, neutral evil.
+        """).encode()
+        version = page.update(
+            filename="goblin.md",
+            mime_type="text/markdown",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = version.content.hash
+        updated = dedent("""\
+            # Goblin
+
+            Small humanoid, neutral evil.
+            **HP:** 7
+        """).encode()
+        new_version = page.update(
+            filename="goblin.md",
+            mime_type="text/markdown",
+            data=updated,
+            created_by=self.wendy,
+            base_hash=base_hash,
+        )
+        assert new_version.content.data == updated
+
+    def test_update_with_base_hash_merges_changes(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            # Tavern Menu
+
+            - Ale: 4cp
+            - Bread: 2cp
+        """).encode()
+        v1 = page.update(
+            filename="tavern.md",
+            mime_type="text/markdown",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = v1.content.hash
+        page.update(
+            filename="tavern.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Tavern Menu
+
+                - Ale: 5cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.wendy,
+        )
+        merged = page.update(
+            filename="tavern.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Tavern Menu
+
+                - Ale: 4cp
+                - Bread: 3cp
+            """).encode(),
+            created_by=self.wendy,
+            base_hash=base_hash,
+        )
+        assert merged.content.data == dedent("""\
+            # Tavern Menu
+
+            - Ale: 5cp
+            - Bread: 3cp
+        """).encode()
+
+    def test_update_with_unknown_base_hash_raises(self):
+        page = Page.objects.create(wiki=self.wiki)
+        page.update(
+            filename="orc.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Orc
+
+                Medium humanoid, chaotic evil.
+            """).encode(),
+            created_by=self.wendy,
+        )
+        with pytest.raises(Content.DoesNotExist):
+            page.update(
+                filename="orc.md",
+                mime_type="text/markdown",
+                data=dedent("""\
+                    # Orc
+
+                    Medium humanoid, chaotic evil.
+                    **HP:** 15
+                """).encode(),
+                created_by=self.wendy,
+                base_hash="nonexistent" + "0" * 56,
+            )
+
+    def test_update_with_base_hash_does_not_merge_binary(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            # Goblin
+
+            **HP:** 7
+            **AC:** 15
+        """).encode()
+        v1 = page.update(
+            filename="image.png",
+            mime_type="image/png",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = v1.content.hash
+        page.update(
+            filename="image.png",
+            mime_type="image/png",
+            data=dedent("""\
+                # Goblin
+
+                **HP:** 12
+                **AC:** 15
+            """).encode(),
+            created_by=self.wendy,
+        )
+        incoming = dedent("""\
+            # Goblin
+
+            **HP:** 7
+            **AC:** 17
+        """).encode()
+        result = page.update(
+            filename="image.png",
+            mime_type="image/png",
+            data=incoming,
+            created_by=self.wendy,
+            base_hash=base_hash,
+        )
+        # Text merge would produce HP:12, AC:17. Binary skips merge.
+        assert result.content.data == incoming
+
+    def test_update_with_base_hash_conflict_incoming_wins(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            The dragon has mass 500.
+        """).encode()
+        v1 = page.update(
+            filename="dragon.md",
+            mime_type="text/markdown",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = v1.content.hash
+        page.update(
+            filename="dragon.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                The dragon weighs 4000 pounds.
+            """).encode(),
+            created_by=self.wendy,
+        )
+        incoming = dedent("""\
+            The dragon is mass 250 kg.
+        """).encode()
+        result = page.update(
+            filename="dragon.md",
+            mime_type="text/markdown",
+            data=incoming,
+            created_by=self.wendy,
+            base_hash=base_hash,
+        )
+        assert result.content.data == incoming
+
+    def test_three_way_merge_combines_changes(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            # Dragonborn Paladin
+
+            **HP:** 45
+            **AC:** 18
+        """).encode()
+        v1 = page.update(
+            filename="paladin.md",
+            mime_type="text/markdown",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = v1.content.hash
+        page.update(
+            filename="paladin.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Dragonborn Paladin
+
+                **HP:** 52
+                **AC:** 18
+            """).encode(),
+            created_by=self.wendy,
+        )
+        incoming = dedent("""\
+            # Dragonborn Paladin
+
+            **HP:** 45
+            **AC:** 19
+        """).encode()
+        result = page.three_way_merge(base_hash, incoming)
+        assert result == dedent("""\
+            # Dragonborn Paladin
+
+            **HP:** 52
+            **AC:** 19
+        """).encode()
+
+    def test_three_way_merge_conflict_returns_incoming(self):
+        page = Page.objects.create(wiki=self.wiki)
+        base = dedent("""\
+            The dragon has mass 500.
+        """).encode()
+        v1 = page.update(
+            filename="dragon.md",
+            mime_type="text/markdown",
+            data=base,
+            created_by=self.wendy,
+        )
+        base_hash = v1.content.hash
+        page.update(
+            filename="dragon.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                The dragon weighs 4000 pounds.
+            """).encode(),
+            created_by=self.wendy,
+        )
+        incoming = dedent("""\
+            The dragon is mass 250 kg.
+        """).encode()
+        result = page.three_way_merge(base_hash, incoming)
+        assert result == incoming
+
 
 @pytest.mark.django_db
 class TestWiki(WikiMixin):

@@ -3,6 +3,7 @@ import uuid
 from collections import namedtuple
 
 import yaml
+from diff_match_patch import diff_match_patch
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Coalesce, Greatest, Trunc
@@ -183,11 +184,23 @@ class Page(models.Model):
     def latest_version(self):
         return self.version_set.order_by("-number").first()
 
-    def update(self, *, filename, mime_type, data, created_by):
+    def three_way_merge(self, base_hash, incoming):
+        base = Content.objects.get(hash=base_hash).data
+        current = self.latest_version.content.data
+        dmp = diff_match_patch()
+        patches = dmp.patch_make(base.decode(), incoming.decode())
+        merged, results = dmp.patch_apply(patches, current.decode())
+        if all(results):
+            return merged.encode()
+        return incoming
+
+    def update(self, *, filename, mime_type, data, created_by, base_hash=None):
         if mime_type == "text/markdown":
             data = data.replace(b"\r\n", b"\n")
             if not data.endswith(b"\n"):
                 data = data + b"\n"
+            if base_hash is not None and self.latest_version:
+                data = self.three_way_merge(base_hash, data)
         content_hash = hashlib.sha256(data).hexdigest()
         content, _ = Content.objects.get_or_create(
             hash=content_hash,
