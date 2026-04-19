@@ -417,6 +417,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             raise Http404
 
         previous_hash = page.latest_version.content.hash
+        base_hash = request.META.get("HTTP_PREVIOUS_HASH")
 
         if page.deleted_at:
             try:
@@ -429,6 +430,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             mime_type=request.content_type,
             data=request.body,
             created_by=request.user,
+            base_hash=base_hash,
         )
 
         return self.version_response(request, notebook, page, version, previous_hash)
@@ -546,4 +548,5 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         }
         if previous_hash is not None:
             data["previous_hash"] = previous_hash
+            data["update"] = getattr(version, "update_type", "replaced")
         return Response(data)

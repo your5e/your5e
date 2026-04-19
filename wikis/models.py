@@ -185,22 +185,29 @@ class Page(models.Model):
         return self.version_set.order_by("-number").first()
 
     def three_way_merge(self, base_hash, incoming):
-        base = Content.objects.get(hash=base_hash).data
+        current_hash = self.latest_version.content.hash
+        if base_hash == current_hash:
+            return incoming, "applied"
+        try:
+            base = Content.objects.get(hash=base_hash).data
+        except Content.DoesNotExist:
+            return incoming, "replaced"
         current = self.latest_version.content.data
         dmp = diff_match_patch()
         patches = dmp.patch_make(base.decode(), incoming.decode())
         merged, results = dmp.patch_apply(patches, current.decode())
         if all(results):
-            return merged.encode()
-        return incoming
+            return merged.encode(), "merged"
+        return incoming, "replaced"
 
     def update(self, *, filename, mime_type, data, created_by, base_hash=None):
+        update_type = "replaced"
         if mime_type == "text/markdown":
             data = data.replace(b"\r\n", b"\n")
             if not data.endswith(b"\n"):
                 data = data + b"\n"
             if base_hash is not None and self.latest_version:
-                data = self.three_way_merge(base_hash, data)
+                data, update_type = self.three_way_merge(base_hash, data)
         content_hash = hashlib.sha256(data).hexdigest()
         content, _ = Content.objects.get_or_create(
             hash=content_hash,
@@ -213,6 +220,7 @@ class Page(models.Model):
             and latest.content.hash == content_hash
             and latest.filename == filename
         ):
+            latest.update_type = "unchanged"
             return latest
 
         number = (latest.number + 1) if latest else 1
@@ -227,6 +235,7 @@ class Page(models.Model):
         version.path = version.generate_path()
         version.full_clean()
         version.save()
+        version.update_type = update_type
         self.wiki.updated()
         return version
 

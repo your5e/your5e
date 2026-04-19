@@ -17,8 +17,8 @@ then just continue with last-write-wins if it cannot be successfully merged.
 
 Then use what has been provided.
 
-- [ ] update the notebook update view to pass the previous hash
-- [ ] update the API PATCH to accept a header with the previous hash
+- [X] update the notebook update view to pass the previous hash
+- [X] update the API PATCH to accept a header with the previous hash
 - [ ] update sync-notebook.sh to provide the previous hash
 - [ ] update sync-engine.ts to provide the previous hash
 - [ ] local delete vs server modified file should no longer win, as we now can

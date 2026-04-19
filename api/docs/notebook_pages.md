@@ -150,9 +150,28 @@ Update the content of a page, creating a new version. The request body
 should be the raw content, with the appropriate `Content-Type` header.
 If the page has been soft-deleted, this will restore it.
 
-The response structure is the same as PATCH, with an additional
-`previous_hash` field containing the content hash before this update,
-which can be used for client-side conflict detection.
+Headers:
+
+- `Previous-Hash` (optional): the content hash of the version this update is
+  based on, to attempt to merge local changes with server changes; omit if
+  not known or complete replacement is desired. Only affects `text/markdown`
+  pages.
+
+### Response
+
+The response structure is the same as PATCH, with additional fields:
+
+- `previous_hash`: the content hash before this update, for client-side
+  conflict detection
+- `update`: indicates how the update was applied:
+  - `applied`: the `Previous-Hash` matched the current version, update
+    applied directly
+  - `merged`: the `Previous-Hash` was found in history, changes were
+    merged with server changes
+  - `replaced`: no `Previous-Hash` was provided, or it was not found in
+    history, content was replaced
+  - `unchanged`: the content was identical to the current version, no
+    new version was created
 
 Returns _403 Forbidden_ if you don't have edit permission on the notebook.
 

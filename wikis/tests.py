@@ -868,7 +868,7 @@ class TestPage(WikiMixin):
             - Bread: 3cp
         """).encode()
 
-    def test_update_with_unknown_base_hash_raises(self):
+    def test_update_with_unknown_base_hash_uses_incoming(self):
         page = Page.objects.create(wiki=self.wiki)
         page.update(
             filename="orc.md",
@@ -880,19 +880,20 @@ class TestPage(WikiMixin):
             """).encode(),
             created_by=self.wendy,
         )
-        with pytest.raises(Content.DoesNotExist):
-            page.update(
-                filename="orc.md",
-                mime_type="text/markdown",
-                data=dedent("""\
-                    # Orc
+        incoming = dedent("""\
+            # Orc
 
-                    Medium humanoid, chaotic evil.
-                    **HP:** 15
-                """).encode(),
-                created_by=self.wendy,
-                base_hash="nonexistent" + "0" * 56,
-            )
+            Medium humanoid, chaotic evil.
+            **HP:** 15
+        """).encode()
+        result = page.update(
+            filename="orc.md",
+            mime_type="text/markdown",
+            data=incoming,
+            created_by=self.wendy,
+            base_hash="nonexistent" + "0" * 56,
+        )
+        assert result.content.data == incoming
 
     def test_update_with_base_hash_does_not_merge_binary(self):
         page = Page.objects.create(wiki=self.wiki)
@@ -1000,8 +1001,9 @@ class TestPage(WikiMixin):
             **HP:** 45
             **AC:** 19
         """).encode()
-        result = page.three_way_merge(base_hash, incoming)
-        assert result == dedent("""\
+        data, merge_type = page.three_way_merge(base_hash, incoming)
+        assert merge_type == "merged"
+        assert data == dedent("""\
             # Dragonborn Paladin
 
             **HP:** 52
@@ -1031,8 +1033,9 @@ class TestPage(WikiMixin):
         incoming = dedent("""\
             The dragon is mass 250 kg.
         """).encode()
-        result = page.three_way_merge(base_hash, incoming)
-        assert result == incoming
+        data, merge_type = page.three_way_merge(base_hash, incoming)
+        assert merge_type == "replaced"
+        assert data == incoming
 
 
 @pytest.mark.django_db
