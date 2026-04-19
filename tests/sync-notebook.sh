@@ -1017,7 +1017,7 @@ function update_remote_file {
     local uuid="$2"
     local file="$3"
     local filepath="$4"
-    local body cached_hash http_code mime_type new_hash previous_hash response version
+    local body cached_hash http_code mime_type new_hash response update version
 
     cached_hash=$(get_sync_state "$uuid" hash)
     mime_type=$(file --mime-type -b "$filepath")
@@ -1027,6 +1027,7 @@ function update_remote_file {
         do_curl \
             --request PUT \
             --header "Content-Type: $mime_type" \
+            --header "Previous-Hash: $cached_hash" \
             --data-binary "@$filepath" \
             "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
@@ -1057,9 +1058,9 @@ function update_remote_file {
         exit 1
     fi
 
-    previous_hash=$(echo "$body" | jq -r '.previous_hash')
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
+    update=$(echo "$body" | jq -r '.update')
 
     local actual_hash
     actual_hash=$(sha256sum "$filepath" | awk '{print $1}')
@@ -1073,11 +1074,20 @@ function update_remote_file {
     update_remote_state "$uuid" "$file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
-    if [[ "$previous_hash" != "$cached_hash" ]]; then
-        printf "push: \"%s\" (v%s, remote changes overwritten)\n" "$file" "$version"
-    else
-        printf "push: \"%s\" (v%s)\n" "$file" "$version"
-    fi
+    case "$update" in
+        unchanged)
+            ;;
+        applied)
+            printf "push: \"%s\" (v%s)\n" "$file" "$version"
+            ;;
+        merged|replaced)
+            printf "push: \"%s\" (v%s, %s)\n" "$file" "$version" "$update"
+            ;;
+        *)
+            printf 'push: WARNING unexpected update type "%s" for "%s"\n' \
+                "$update" "$file"
+            ;;
+    esac
 }
 
 function fetch_remote_file {

@@ -558,6 +558,59 @@ setup() {
     assert_success
 }
 
+@test "local edited, remote edited, same content" {
+    modify_file "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")" "modified local content"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING pull "Bestiary.md", local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "Bestiary.md"
+    assert_file_in_state "Bestiary.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, no common ancestor" {
+    modify_file "index.md"
+    server_edit_content "$(uuid_for "index.md")"
+    set_base_hash "index.md" "no-common-ancestor"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: SKIPPING pull "index.md", local changes would be lost
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "index.md"
+    assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
 @test "local edited, remote renamed" {
     modify_file "Bestiary.md"
     server_rename "$(uuid_for "Bestiary.md")" "renamed-bestiary.md"

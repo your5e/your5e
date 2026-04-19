@@ -564,24 +564,102 @@ setup() {
 }
 
 @test "local edited, remote edited" {
-    modify_file "Bestiary.md"
-    server_edit_content "$(uuid_for "Bestiary.md")"
+    # set to v1 (before goblin edit)
+    set_base_hash "Bestiary.md" \
+        "080d61003b28d4f35edaa4d2ee2d4216f245bd36c0d11b0740be0e6cd7d0b1ef"
 
-    fail_when_results_not 1
+    # update local with conflicting update
+    v1_plus_orc=$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Orc
+
+        Large and aggressive.
+	EOF
+    )
+    printf '%s\n' "$v1_plus_orc" > "$output_dir/Bestiary.md"
+
+    fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: "Bestiary.md" (v4, remote changes overwritten)
+        push: "Bestiary.md" (v3, merged)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_modified "Bestiary.md"
+    # local and server updates get merged
+    expected_content=$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Orc
+
+        Large and aggressive.
+
+        ## Goblin
+
+        Small and cunning.
+	EOF
+    )
+    diff -u <(echo "$expected_content") "$output_dir/Bestiary.md"
+
     assert_file_pushed "Bestiary.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, same content" {
+    modify_file "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")" "modified local content"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_pushed "Bestiary.md" "text/markdown"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, no common ancestor" {
+    modify_file "index.md"
+    set_base_hash "index.md" "no-common-ancestor"
+
+    fail_when_results_not 0
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: "index.md" (v2, replaced)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "index.md"
+    assert_file_pushed "index.md" "text/markdown"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
@@ -628,7 +706,7 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: renamed "renamed-home.md" to "Home.md"
-        push: "Home.md" (v6, remote changes overwritten)
+        push: "Home.md" (v6, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1108,7 +1186,7 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: renamed "Bestiary.md" to "renamed-bestiary.md"
-        push: "renamed-bestiary.md" (v5, remote changes overwritten)
+        push: "renamed-bestiary.md" (v5, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1226,7 +1304,7 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: renamed "server-index.md" to "my-index.md"
-        push: "my-index.md" (v5, remote changes overwritten)
+        push: "my-index.md" (v5, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")

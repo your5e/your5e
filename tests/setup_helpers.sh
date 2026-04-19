@@ -1,4 +1,7 @@
 # Shared test helpers for sync algorithm tests
+#
+# The fixtures in tests/fixtures are copies of what is created in the database
+# in seed_development.py, so editing just the files will not work.
 
 # shellcheck shell=bash
 declare fixtures output_dir BATS_FILE_TMPDIR
@@ -130,6 +133,16 @@ function copy_fixture {
 function add_stale_file {
     local filename="$1"
     set_cached_state "stale-uuid-$RANDOM" "$filename" "local content"
+}
+
+function set_base_hash {
+    local filename="$1"
+    local hash="$2"
+    local state_file="$output_dir/.sync-state"
+
+    awk -F'\t' -v f="$filename" -v h="$hash" -v OFS='\t' \
+        '$3 == f {$4 = h} {print}' "$state_file" > "$state_file.new"
+    mv "$state_file.new" "$state_file"
 }
 
 function assert_not_in_state {

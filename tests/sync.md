@@ -99,6 +99,8 @@ Test updating the state from an existing synced directory works.
 | local edited | ✔️ | ✔️ | | | | | | |
 | local edited, CRLF line endings | ✔️ | ✔️ | | | | | | |
 | local edited, remote edited | ✔️ | ✔️ | | | ✔️ | | | |
+| local edited, remote edited, same content | ✔️ | ✔️ | | | ✔️ | | | |
+| local edited, remote edited, no common ancestor | ✔️ | ✔️ | | | ✔️ | | | |
 | local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
 | local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
 | remote deleted | ✔️ | | | | | | ✔️ | |
