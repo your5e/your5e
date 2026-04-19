@@ -39,8 +39,8 @@ Next, add the folder to synchronise:
 - **Folder** — the folder within your vault, such as `Monsters`. It can be
   a folder within another folder, such as `Monsters/SRD 5.2`.
 
-  Changing this setting later will rename the folder in your vault. Renaming
-  the folder in your vault will likewise update this setting automatically.
+    Changing this setting later will rename the folder in your vault. Renaming
+    the folder in your vault will likewise update this setting automatically.
 
 - **Notebook ID** — the ID of the notebook on the site. This can be found
   under the notebook's settings page, or you can copy/paste it from the
