@@ -15,3 +15,5 @@ deploy/terraform/.terraform/
 deploy/terraform/*.tfstate
 deploy/terraform/*.tfstate.*
 deploy/terraform/*.tfvars
+
+.whatnext.mute
