@@ -390,8 +390,16 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             raise Http404
 
         version_number = request.query_params.get("version")
+        content_hash = request.query_params.get("hash")
+
+        if version_number and content_hash:
+            raise ValidationError("Cannot specify both version and hash.")
+
         try:
-            version = page.get_version(version_number)
+            if content_hash:
+                version = page.get_version_by_hash(content_hash)
+            else:
+                version = page.get_version(version_number)
         except page.DoesNotExist:
             raise Http404 from None
 

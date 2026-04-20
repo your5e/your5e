@@ -751,6 +751,16 @@ class TestPage(WikiMixin):
         with pytest.raises(Page.DoesNotExist):
             self.page_with_history.get_version(number="invalid")
 
+    def test_get_version_by_hash_returns_matching_version(self):
+        version = self.page_with_history.version_set.get(number=2)
+        result = self.page_with_history.get_version_by_hash(version.content.hash)
+        assert result.number == 2
+        assert result.content.data == b"Second revision"
+
+    def test_get_version_by_hash_raises_for_nonexistent_hash(self):
+        with pytest.raises(Page.DoesNotExist):
+            self.page_with_history.get_version_by_hash("0" * 64)
+
     def test_update_text_ensures_trailing_newline(self):
         page = Page.objects.create(wiki=self.wiki)
         version = page.update(

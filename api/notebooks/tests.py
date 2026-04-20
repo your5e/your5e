@@ -748,6 +748,38 @@ class TestPageContent(NotebookApiMixin):
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
+    def test_hash_parameter(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        page = self.wendys_notebook.get_page(path="session-one")
+        first_version_hash = page.version_set.get(number=1).content.hash
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"hash": first_version_hash},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.content == b"# Session One\n\nFirst draft.\n"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_hash_parameter_not_found(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"hash": "0" * 64},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_hash_and_version_mutually_exclusive(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"version": "1", "hash": "0" * 64},
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Cannot specify both version and hash."}
+
+    @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/v1/notebooks/wendy/no-such-notebook/{uuid}")

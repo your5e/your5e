@@ -55,9 +55,13 @@ header.
 Arguments:
 
 - `version` returns a specific version of the page instead of the latest
+- `hash` returns the version with the specified content hash
+
+Only one of `version` or `hash` may be specified. Returns _400 Bad Request_ if
+both are provided.
 
 Returns _404 Not Found_ if the notebook or page does not exist, you don't have
-access, the page has been deleted, or the specified version does not exist.
+access, the page has been deleted, or the specified version/hash does not exist.
 
 
 ## PATCH `/v1/notebooks/{username}/{notebook-slug}/{uuid}`

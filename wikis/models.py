@@ -280,6 +280,12 @@ class Page(models.Model):
         except (ValueError, Version.DoesNotExist) as err:
             raise Page.DoesNotExist() from err
 
+    def get_version_by_hash(self, content_hash):
+        version = self.version_set.filter(content__hash=content_hash).first()
+        if not version:
+            raise Page.DoesNotExist()
+        return version
+
     def revert(self, *, version_number, reverted_by):
         try:
             version = self.version_set.get(number=version_number)

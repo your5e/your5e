@@ -37,6 +37,6 @@ Keeping a copy of every synced document seems like overkill. When the server
 and client both have modified copies, pull the original hash again, and use
 that for the merge.
 
-- [ ] choose whether clients keep the version or we implement get-by-hash
+- [X] choose whether clients keep the version or we implement get-by-hash
 - [ ] modify the sync bash script to do three-way merge on pull-only
 - [ ] modify the obsidian engine to do three-way merge on pull-only
