@@ -823,49 +823,51 @@ describe("subsequent sync push", () => {
     });
 
     test("local edited, remote edited", async () => {
-        // Set to v1 (before goblin edit)
-        setBaseHash(
-            initialState,
+        // Local adds Orc section
+        await createFile(
+            outputDir,
             "Bestiary.md",
-            "080d61003b28d4f35edaa4d2ee2d4216f245bd36c0d11b0740be0e6cd7d0b1ef",
-        );
-
-        // Update local with conflicting update (v1 + orc)
-        const v1PlusOrc = `# Bestiary
+            `# Bestiary
 
 Creatures encountered.
+
+## Goblin
+
+Small and cunning.
 
 ## Orc
 
 Large and aggressive.
-`;
-        await createFile(outputDir, "Bestiary.md", v1PlusOrc);
+`,
+        );
+        // Server adds Troll section
+        await serverEditContent(
+            token,
+            await uuidFor(initialState, "Bestiary.md"),
+            `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Troll
+
+Regenerates health.
+`,
+        );
 
         const sync = createSync();
 
         const result = await sync.run();
 
-        assertIncrementalResults(result.incrementalResults, 0);
-        expect(result.output).toEqual(['push: "Bestiary.md" (v3, merged)']);
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual(['push: "Bestiary.md" (v4, merged)']);
 
-        // Local and server updates get merged
-        const expectedContent = `# Bestiary
-
-Creatures encountered.
-
-## Orc
-
-Large and aggressive.
-
-## Goblin
-
-Small and cunning.
-`;
-        const actualContent = await fs.readFile(
-            path.join(outputDir, "Bestiary.md"),
-            "utf-8",
-        );
-        expect(actualContent).toBe(expectedContent);
+        const content = await fs.readFile(path.join(outputDir, "Bestiary.md"), "utf-8");
+        expect(content).toContain("## Orc");
+        expect(content).toContain("## Troll");
 
         await assertFilePushed(
             outputDir,
@@ -893,11 +895,12 @@ Small and cunning.
     });
 
     test("local edited, remote edited, same content", async () => {
-        await modifyFile(outputDir, "Bestiary.md");
+        // Both local and remote have the same content
+        await createFile(outputDir, "Bestiary.md", "identical content\n");
         await serverEditContent(
             token,
             await uuidFor(initialState, "Bestiary.md"),
-            "modified local content",
+            "identical content\n",
         );
 
         const sync = createSync();
@@ -906,7 +909,8 @@ Small and cunning.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([]);
-        await assertFileModified(outputDir, "Bestiary.md");
+        const content = await fs.readFile(path.join(outputDir, "Bestiary.md"), "utf-8");
+        expect(content).toBe("identical content\n");
         await assertFilePushed(
             outputDir,
             "Bestiary.md",

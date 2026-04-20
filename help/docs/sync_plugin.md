@@ -6,9 +6,9 @@ your vault.
 It sends your changes to the site, then pulls any other changes back,
 running approximately every five minutes.
 
-In the event both you and someone else have modified a page, your local copy
-will take precedence, overwriting it. However, the site does keep copies of
-previous edits so nothing should be lost.
+In the event both you and someone else have modified a page, the changes
+are merged together where possible, preserving the local changes in the
+event they cannot. Previous versions of pages are kept.
 
 
 ## Installation

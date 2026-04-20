@@ -4,31 +4,37 @@ This document specifies the sync algorithm. The reference implementation is in
 `sync-notebook.sh`. The BATS test files contain scenarios that any sync
 client should handle — use them to verify your implementation.
 
-The one-line summary: local changes always take precedence over remote changes.
+The one-line summary: concurrent edits are merged automatically when possible,
+but local changes always take precedence when merging is impossible.
 
 The server both keeps deleted files for a while and keeps previous versions of
-files, so pushing old changes is never wholly destructive. This does put the
-burden of merging changes onto the user, unfortunately. But to start simple
-keeps the service reliable and predictable.
+files, so pushing old changes is never wholly destructive.
 
-The algorithm to sync the local directory is:
+Broadly, the algorithm to sync the local directory is:
 
 1.  _GET_ remote state of the notebook.
-2.  _PATCH_ locally renamed files (cached filename differs from server filename).
-3.  _DELETE_ any deleted files (in the cache, no longer in the directory).
-4.  _POST_ new local files (not in the cache).
-5.  _PUT_ changed local files (differ from the cache). Warn if the server
-    reports a different previous version than the cached hash (conflict).
-6.  Update the local cache to reflect this, either as a separate step or
-    after each individual operation.
-7.  _mv_ any files where the remote UUID now has a different filename.
-8.  _GET_ any files where the local hash matches, but the server's hash
-    has changed (remote updates).
-9.  _rm_ any files deleted remotely (any local editeds will have already
-    un-deleted them in step 3).
-10. Check for stale files (UUIDs in cache but not on remote).
-11. Cache the new state (either as a separate step at the end, or update
-    the state after each successful individual operation).
+2.  Scan for untracked renames (files moved locally outside of sync)
+    by matching missing tracked files to untracked files by content hash.
+3.  _PATCH_ locally renamed files (cached filename differs from server filename).
+4.  _DELETE_ any deleted files (in the cache, no longer in the directory).
+5.  _POST_ new local files (not in the cache).
+6.  _PUT_ changed local files (differ from the cache). The server will merge
+    or replace if the previous version differs from the cached hash. If the
+    returned hash differs from the local file (server merged or normalised
+    line endings), _GET_ the updated content.
+7.  _rm_ any files deleted remotely (any local edits will have already
+    un-deleted them in step 6).
+8.  _mv_ any files where the remote UUID now has a different filename.
+9.  _GET_ any files where the local hash matches, but the server's hash
+    has changed (remote updates). This includes files deleted locally but
+    updated remotely, restoring them with the new remote content.
+10. If both local and remote have changed, _GET_ the common ancestor by
+    hash and attempt a three-way merge. If merging fails, keep the local
+    version and warn the user.
+11. Check for stale files (UUIDs in cache but not on remote) and warn
+    the user.
+
+Update the local cache after each successful operation.
 
 Some API errors (400, 401, 404, 409) should be expected and handled, they are
 for the user to resolve. Other errors (network failures, 5xx server errors,

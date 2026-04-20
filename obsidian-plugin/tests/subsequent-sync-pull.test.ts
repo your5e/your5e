@@ -759,18 +759,50 @@ describe("subsequent sync pull", () => {
     });
 
     test("local edited, remote edited", async () => {
-        await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
-        await modifyFile(outputDir, "Bestiary.md");
+        // Local adds Orc section
+        await createFile(
+            outputDir,
+            "Bestiary.md",
+            `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Orc
+
+Large and aggressive.
+`,
+        );
+        // Server adds Troll section
+        await serverEditContent(
+            token,
+            await uuidFor(initialState, "Bestiary.md"),
+            `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Troll
+
+Regenerates health.
+`,
+        );
 
         const sync = createSync();
 
         const result = await sync.run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'pull: SKIPPING pull "Bestiary.md", local changes would be lost',
-        ]);
-        await assertFileModified(outputDir, "Bestiary.md");
+        expect(result.output).toEqual(['pull: "Bestiary.md" (v3, merged)']);
+        const content = await fs.readFile(path.join(outputDir, "Bestiary.md"), "utf-8");
+        expect(content).toContain("## Orc");
+        expect(content).toContain("## Troll");
         assertFileInState("Bestiary.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "index.md");
@@ -791,22 +823,23 @@ describe("subsequent sync pull", () => {
     });
 
     test("local edited, remote edited, same content", async () => {
+        // Both local and remote have the same content - should silently update state
+        await createFile(outputDir, "Bestiary.md", "identical content\n");
         await serverEditContent(
             token,
             await uuidFor(initialState, "Bestiary.md"),
-            "modified local content",
+            "identical content\n",
         );
-        await modifyFile(outputDir, "Bestiary.md");
 
         const sync = createSync();
 
         const result = await sync.run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'pull: SKIPPING pull "Bestiary.md", local changes would be lost',
-        ]);
-        await assertFileModified(outputDir, "Bestiary.md");
+        // Same content on both sides - state updates silently, no output
+        expect(result.output).toEqual([]);
+        const content = await fs.readFile(path.join(outputDir, "Bestiary.md"), "utf-8");
+        expect(content).toBe("identical content\n");
         assertFileInState("Bestiary.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "index.md");
@@ -1891,9 +1924,7 @@ describe("subsequent sync pull", () => {
         const result = await sync.run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'pull: "index.md" (v2, revivified)',
-        ]);
+        expect(result.output).toEqual(['pull: "index.md" (v2, revivified)']);
         await assertServerEditedContent(outputDir, "index.md");
         assertFileInState("index.md", result.state);
         await assertFileModified(outputDir, "renamed-index.md");

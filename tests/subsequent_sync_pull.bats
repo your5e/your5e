@@ -533,19 +533,64 @@ setup() {
 }
 
 @test "local edited, remote edited" {
-    modify_file "Bestiary.md"
-    server_edit_content "$(uuid_for "Bestiary.md")"
+    modify_file "Bestiary.md" "$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+	EOF
+    )"
+
+    server_edit_content "$(uuid_for "Bestiary.md")" "$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+    )"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: SKIPPING pull "Bestiary.md", local changes would be lost
+        pull: "Bestiary.md" (v3, merged)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_modified "Bestiary.md"
+    expected_content=$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+        ## Troll
+
+        Regenerates health.
+	EOF
+    )
+    diff -u <(echo "$expected_content") "$output_dir/Bestiary.md"
+
     assert_file_in_state "Bestiary.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
@@ -565,10 +610,7 @@ setup() {
     fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
-    expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: SKIPPING pull "Bestiary.md", local changes would be lost
-	EOF
-    )
+    expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_modified "Bestiary.md"

@@ -38,5 +38,5 @@ and client both have modified copies, pull the original hash again, and use
 that for the merge.
 
 - [X] choose whether clients keep the version or we implement get-by-hash
-- [ ] modify the sync bash script to do three-way merge on pull-only
-- [ ] modify the obsidian engine to do three-way merge on pull-only
+- [X] modify the sync bash script to do three-way merge on pull-only
+- [X] modify the obsidian engine to do three-way merge on pull-only

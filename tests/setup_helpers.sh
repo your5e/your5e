@@ -103,7 +103,8 @@ function rename_local_file_untracked {
 }
 
 function modify_file {
-    echo "modified local content" > "$output_dir/$1"
+    local content="${2:-modified local content}"
+    printf '%s\n' "$content" > "$output_dir/$1"
 }
 
 

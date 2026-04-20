@@ -567,8 +567,37 @@ function apply_remote_updates {
                 "$dest_file"
 
         elif has_remote_changes "$uuid"; then
-            printf 'pull: SKIPPING pull "%s", local changes would be lost\n' \
-                "$dest_file"
+            local base_hash remote_hash local_hash
+            base_hash=$(get_sync_state "$uuid" hash)
+            remote_hash=$(get_remote_state "$uuid" hash)
+            local_hash=$(hash_file "$dest_path")
+
+            if [[ "$local_hash" == "$remote_hash" ]]; then
+                # local and remote are identical, just update state
+                update_sync_state \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$dest_file" \
+                    "$remote_hash" \
+                    "$remote_hash"
+            elif try_three_way_merge \
+                    "$notebook" \
+                    "$uuid" \
+                    "$dest_path" \
+                    "$base_hash" \
+                    "$remote_hash"
+            then
+                update_sync_state \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$dest_file" \
+                    "$remote_hash" \
+                    "$(hash_file "$dest_path")"
+                printf 'pull: "%s" (v%s, merged)\n' "$dest_file" "$version"
+            else
+                printf 'pull: SKIPPING pull "%s", local changes would be lost\n' \
+                    "$dest_file"
+            fi
         fi
 
     elif deleted_locally_no_new_content "$uuid" "$dest_file" "$dest_path"; then
@@ -1196,6 +1225,62 @@ function fetch_remote_file {
         printf 'pull: "%s" to "%s" (v%s%s)\n' \
             "$remote_file" "$local_file" "$version" "$suffix"
     fi
+}
+
+function fetch_content_by_hash {
+    local notebook="$1"
+    local uuid="$2"
+    local hash="$3"
+    local output_file="$4"
+    local http_code response
+
+    response=$(
+        do_curl \
+            --output "$output_file" \
+            "${base_url}/v1/notebooks/${notebook}/${uuid}?hash=${hash}"
+    )
+    http_code=$(echo "$response" | tail -1)
+
+    [[ "$http_code" == "200" ]]
+}
+
+function try_three_way_merge {
+    local notebook="$1"
+    local uuid="$2"
+    local local_file="$3"
+    local base_hash="$4"
+    local remote_hash="$5"
+    local base_tmp remote_tmp merged_tmp
+
+    if ! command -v git >/dev/null 2>&1; then
+        return 1
+    fi
+
+    base_tmp=$(mktemp)
+    remote_tmp=$(mktemp)
+    merged_tmp=$(mktemp)
+
+    if ! fetch_content_by_hash "$notebook" "$uuid" "$base_hash" "$base_tmp"; then
+        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        return 1
+    fi
+    if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$remote_tmp"; then
+        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        return 1
+    fi
+
+    cp "$local_file" "$merged_tmp"
+    git merge-file -q --union "$merged_tmp" "$base_tmp" "$remote_tmp" 2>/dev/null
+    local merge_status=$?
+
+    if [[ $merge_status -eq 0 ]]; then
+        mv "$merged_tmp" "$local_file"
+        rm -f "$base_tmp" "$remote_tmp"
+        return 0
+    fi
+
+    rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+    return 1
 }
 
 function local_file_was_removed {

@@ -564,45 +564,61 @@ setup() {
 }
 
 @test "local edited, remote edited" {
-    # set to v1 (before goblin edit)
-    set_base_hash "Bestiary.md" \
-        "080d61003b28d4f35edaa4d2ee2d4216f245bd36c0d11b0740be0e6cd7d0b1ef"
-
-    # update local with conflicting update
-    v1_plus_orc=$(sed -e 's/^        //' <<-'EOF'
+    modify_file "Bestiary.md" "$(sed -e 's/^        //' <<-'EOF'
         # Bestiary
 
         Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
 
         ## Orc
 
         Large and aggressive.
 	EOF
-    )
-    printf '%s\n' "$v1_plus_orc" > "$output_dir/Bestiary.md"
+    )"
 
-    fail_when_results_not 0
+    server_edit_content "$(uuid_for "Bestiary.md")" "$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+    )"
+
+    fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: "Bestiary.md" (v3, merged)
+        push: "Bestiary.md" (v4, merged)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    # local and server updates get merged
     expected_content=$(sed -e 's/^        //' <<-'EOF'
         # Bestiary
 
         Creatures encountered.
 
+        ## Goblin
+
+        Small and cunning.
+
         ## Orc
 
         Large and aggressive.
 
-        ## Goblin
+        ## Troll
 
-        Small and cunning.
+        Regenerates health.
 	EOF
     )
     diff -u <(echo "$expected_content") "$output_dir/Bestiary.md"
