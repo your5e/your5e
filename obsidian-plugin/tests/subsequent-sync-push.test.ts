@@ -52,6 +52,7 @@ import {
     serverDelete,
     serverEditContent,
     serverRename,
+    setBaseHash,
     untrackAndRemoveFile,
     untrackFile,
     uuidFor,
@@ -822,17 +823,89 @@ describe("subsequent sync push", () => {
     });
 
     test("local edited, remote edited", async () => {
+        // Set to v1 (before goblin edit)
+        setBaseHash(
+            initialState,
+            "Bestiary.md",
+            "080d61003b28d4f35edaa4d2ee2d4216f245bd36c0d11b0740be0e6cd7d0b1ef",
+        );
+
+        // Update local with conflicting update (v1 + orc)
+        const v1PlusOrc = `# Bestiary
+
+Creatures encountered.
+
+## Orc
+
+Large and aggressive.
+`;
+        await createFile(outputDir, "Bestiary.md", v1PlusOrc);
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        assertIncrementalResults(result.incrementalResults, 0);
+        expect(result.output).toEqual(['push: "Bestiary.md" (v3, merged)']);
+
+        // Local and server updates get merged
+        const expectedContent = `# Bestiary
+
+Creatures encountered.
+
+## Orc
+
+Large and aggressive.
+
+## Goblin
+
+Small and cunning.
+`;
+        const actualContent = await fs.readFile(
+            path.join(outputDir, "Bestiary.md"),
+            "utf-8",
+        );
+        expect(actualContent).toBe(expectedContent);
+
+        await assertFilePushed(
+            outputDir,
+            "Bestiary.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, same content", async () => {
         await modifyFile(outputDir, "Bestiary.md");
-        await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
+        await serverEditContent(
+            token,
+            await uuidFor(initialState, "Bestiary.md"),
+            "modified local content",
+        );
 
         const sync = createSync();
 
         const result = await sync.run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'push: "Bestiary.md" (v4, remote changes overwritten)',
-        ]);
+        expect(result.output).toEqual([]);
         await assertFileModified(outputDir, "Bestiary.md");
         await assertFilePushed(
             outputDir,
@@ -849,6 +922,42 @@ describe("subsequent sync push", () => {
             result.state,
             "sessions/session-01.md",
         );
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, no common ancestor", async () => {
+        await modifyFile(outputDir, "index.md");
+        setBaseHash(initialState, "index.md", "no-common-ancestor");
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        assertIncrementalResults(result.incrementalResults, 0);
+        expect(result.output).toEqual(['push: "index.md" (v2, replaced)']);
+        await assertFileModified(outputDir, "index.md");
+        await assertFilePushed(
+            outputDir,
+            "index.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
         await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
         await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
         await assertTrackedFileIntact(
@@ -918,7 +1027,7 @@ describe("subsequent sync push", () => {
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
             'push: renamed "renamed-home.md" to "Home.md"',
-            'push: "Home.md" (v6, remote changes overwritten)',
+            'push: "Home.md" (v6, replaced)',
         ]);
         await assertFileModified(outputDir, "Home.md");
         await assertFilePushed(
@@ -1531,7 +1640,7 @@ describe("subsequent sync push", () => {
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
             'push: renamed "Bestiary.md" to "renamed-bestiary.md"',
-            'push: "renamed-bestiary.md" (v5, remote changes overwritten)',
+            'push: "renamed-bestiary.md" (v5, replaced)',
         ]);
         await assertFileModified(outputDir, "renamed-bestiary.md");
         await assertFilePushed(
@@ -1689,7 +1798,7 @@ describe("subsequent sync push", () => {
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
             'push: renamed "server-index.md" to "my-index.md"',
-            'push: "my-index.md" (v5, remote changes overwritten)',
+            'push: "my-index.md" (v5, replaced)',
         ]);
         await assertFileModified(outputDir, "my-index.md");
         await assertFilePushed(

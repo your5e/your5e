@@ -42,6 +42,7 @@ import {
     serverDelete,
     serverEditContent,
     serverRename,
+    setBaseHash,
     untrackAndRemoveFile,
     untrackFile,
     uuidFor,
@@ -779,6 +780,75 @@ describe("subsequent sync pull", () => {
             result.state,
             "sessions/session-01.md",
         );
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, same content", async () => {
+        await serverEditContent(
+            token,
+            await uuidFor(initialState, "Bestiary.md"),
+            "modified local content",
+        );
+        await modifyFile(outputDir, "Bestiary.md");
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'pull: SKIPPING pull "Bestiary.md", local changes would be lost',
+        ]);
+        await assertFileModified(outputDir, "Bestiary.md");
+        assertFileInState("Bestiary.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, no common ancestor", async () => {
+        await modifyFile(outputDir, "index.md");
+        await serverEditContent(token, await uuidFor(initialState, "index.md"));
+        setBaseHash(initialState, "index.md", "no-common-ancestor");
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'pull: SKIPPING pull "index.md", local changes would be lost',
+        ]);
+        await assertFileModified(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
         await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
         await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
         await assertTrackedFileIntact(

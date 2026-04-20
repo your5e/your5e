@@ -274,8 +274,6 @@ export class SyncEngine {
             }
 
             const remoteRenamed = remote && remote.filename !== entry.serverFilename;
-            const remoteEdited = remote && remote.content_hash !== entry.serverHash;
-            const remoteDeleted = remote && remote.deleted_at !== null;
 
             if (localRenamed) {
                 const renameSucceeded = await this.pushLocalRename(uuid, entry, remote);
@@ -291,13 +289,7 @@ export class SyncEngine {
                         continue;
                     }
                 }
-                await this.pushLocalEdit(
-                    uuid,
-                    entry,
-                    remote,
-                    remoteEdited ?? false,
-                    remoteDeleted ?? false,
-                );
+                await this.pushLocalEdit(uuid, entry, remote);
             }
         }
 
@@ -476,8 +468,6 @@ export class SyncEngine {
         uuid: string,
         entry: SyncStateEntry,
         remote: RemotePage | undefined,
-        remoteEdited: boolean,
-        _remoteDeleted: boolean,
     ): Promise<void> {
         if (this.permissionDenied) {
             return;
@@ -504,6 +494,7 @@ export class SyncEngine {
                 headers: {
                     Authorization: `Token ${this.config.token}`,
                     "Content-Type": contentType,
+                    "Previous-Hash": entry.serverHash,
                 },
                 body: content,
                 signal: AbortSignal.timeout(this.timeoutMs),
@@ -538,12 +529,11 @@ export class SyncEngine {
                 remote.deleted_at = null;
             }
 
-            if (remoteEdited) {
+            if (data.update === "merged" || data.update === "replaced") {
                 this.log(
-                    `push: "${entry.localFilename}" (v${data.version}, ` +
-                        "remote changes overwritten)",
+                    `push: "${entry.localFilename}" (v${data.version}, ${data.update})`,
                 );
-            } else {
+            } else if (data.update !== "unchanged") {
                 this.log(`push: "${entry.localFilename}" (v${data.version})`);
             }
         } else if (response.status === 404) {

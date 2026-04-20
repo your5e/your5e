@@ -571,6 +571,19 @@ export function markFileStale(
     }
 }
 
+export function setBaseHash(
+    state: Map<string, SyncStateEntry>,
+    filename: string,
+    hash: string,
+): void {
+    for (const entry of state.values()) {
+        if (entry.localFilename === filename) {
+            entry.serverHash = hash;
+            return;
+        }
+    }
+}
+
 export async function assertTrackedFileIntact(
     outputDir: string,
     state: Map<string, SyncStateEntry>,
