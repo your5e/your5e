@@ -972,12 +972,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: deleted "Bestiary.md" (had remote changes)
+        pull: "Bestiary.md" (v3, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_deleted_on_server "Bestiary.md"
+    assert_server_edited_content "Bestiary.md"
+    assert_file_in_state "Bestiary.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -1024,13 +1025,16 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: renamed "Welcome.md" to "Home.md"
-        push: deleted "Home.md" (had remote changes)
+        pull: renamed "Home.md" to "Welcome.md"
+        pull: "Welcome.md" (v4, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_deleted_on_server "Home.md"
+    assert_server_edited_content "Welcome.md"
+    assert_file_not_downloaded "Home.md"
+    assert_file_in_state "Welcome.md"
+    assert_file_not_in_state "Home.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -1052,15 +1056,16 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: renamed "Welcome.md" to "Home.md"
-        push: deleted "Home.md" (had remote changes)
-        push: "Welcome.md" (v1)
+        push: ERROR cannot delete "Home.md", server has updates.
+        push: ERROR cannot push "Welcome.md": Path 'welcome' already exists.
+        pull: ERROR cannot rename "Home.md" to "Welcome.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_server_file_deleted "Home.md"
-    assert_file_pushed "Welcome.md" "text/markdown"
+    assert_file_unchanged "Welcome.md"
+    assert_tracked_file_not_restored "Home.md"
+    assert_file_not_in_state "Welcome.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -1482,6 +1487,37 @@ setup() {
     assert_file_deleted_on_server "index.md"
     assert_file_in_state "renamed-index.md"
     assert_file_not_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local renamed untracked, hash mismatch, remote edited" {
+    rename_local_file_untracked "index.md" "renamed-index.md"
+    modify_file "renamed-index.md"
+    server_edit_content "$(uuid_for "index.md")"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: "renamed-index.md" (v1)
+        pull: "index.md" (v2, revivified)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
+    assert_file_modified "renamed-index.md"
+    assert_file_pushed "renamed-index.md" "text/markdown"
+    assert_file_in_state "renamed-index.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"

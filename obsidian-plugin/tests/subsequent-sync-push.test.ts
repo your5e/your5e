@@ -1343,10 +1343,9 @@ Small and cunning.
         const result = await sync.run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'push: deleted "Bestiary.md" (had remote changes)',
-        ]);
-        await assertFileDeletedOnServer(outputDir, result.state, "Bestiary.md", token);
+        expect(result.output).toEqual(['pull: "Bestiary.md" (v3, revivified)']);
+        await assertServerEditedContent(outputDir, "Bestiary.md");
+        assertFileInState("Bestiary.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "index.md");
         await assertTrackedFileIntact(outputDir, result.state, "Home.md");
@@ -1417,10 +1416,13 @@ Small and cunning.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "Welcome.md" to "Home.md"',
-            'push: deleted "Home.md" (had remote changes)',
+            'pull: renamed "Home.md" to "Welcome.md"',
+            'pull: "Welcome.md" (v4, revivified)',
         ]);
-        await assertFileDeletedOnServer(outputDir, result.state, "Home.md", token);
+        await assertServerEditedContent(outputDir, "Welcome.md");
+        await assertFileNotDownloaded(outputDir, "Home.md", result.state);
+        assertFileInState("Welcome.md", result.state);
+        assertFileNotInState("Home.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "index.md");
         await assertTrackedFileIntact(
@@ -1451,18 +1453,19 @@ Small and cunning.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "Welcome.md" to "Home.md"',
-            'push: deleted "Home.md" (had remote changes)',
-            'push: "Welcome.md" (v1)',
+            'push: ERROR cannot delete "Home.md", server has updates.',
+            "push: ERROR cannot push \"Welcome.md\": Path 'welcome' already exists.",
+            'pull: ERROR cannot rename "Home.md" to "Welcome.md", ' +
+                "blocked by local file",
         ]);
-        await assertServerFileDeleted("Home.md", token);
-        await assertFilePushed(
-            outputDir,
-            "Welcome.md",
-            result.state,
-            token,
-            "text/markdown",
-        );
+        await assertFileUnchanged(outputDir, "Welcome.md");
+        const homeExists = await fs
+            .stat(path.join(outputDir, "Home.md"))
+            .then((stat) => stat.isFile())
+            .catch(() => false);
+        expect(homeExists).toBe(false);
+        assertFileInState("Home.md", result.state);
+        assertFileNotInState("Welcome.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "index.md");
         await assertTrackedFileIntact(
@@ -2033,6 +2036,49 @@ Small and cunning.
         await assertFileDeletedOnServer(outputDir, result.state, "index.md", token);
         assertFileInState("renamed-index.md", result.state);
         assertFileNotInState("index.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local renamed untracked, hash mismatch, remote edited", async () => {
+        await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
+        await modifyFile(outputDir, "renamed-index.md");
+        await serverEditContent(token, await uuidFor(initialState, "index.md"));
+
+        const sync = createSync();
+
+        const result = await sync.run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'push: "renamed-index.md" (v1)',
+            'pull: "index.md" (v2, revivified)',
+        ]);
+        await assertServerEditedContent(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        await assertFileModified(outputDir, "renamed-index.md");
+        await assertFilePushed(
+            outputDir,
+            "renamed-index.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        assertFileInState("renamed-index.md", result.state);
         await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
         await assertTrackedFileIntact(outputDir, result.state, "Home.md");
         await assertTrackedFileIntact(

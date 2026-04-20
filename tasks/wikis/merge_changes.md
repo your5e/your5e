@@ -13,7 +13,8 @@ to the current server content.
 If the base hash cannot be found, attempt fuzzy patch or difflib merging,
 then just continue with last-write-wins if it cannot be successfully merged.
 
-- [ ] determine fallback merge strategies when the the hash is purged
+- [#] determine fallback merge strategies when the the hash is purged
+      (cancelled, no good strategy, last-write-wins remains)
 
 Then use what has been provided.
 
@@ -21,9 +22,9 @@ Then use what has been provided.
 - [X] update the API PATCH to accept a header with the previous hash
 - [X] update sync-notebook.sh to provide the previous hash
 - [X] update sync-engine.ts to provide the previous hash
-- [ ] local delete vs server modified file should no longer win, as we now can
+- [X] local delete vs server modified file should no longer win, as we now can
       prove there are updates we didn't delete and that should take precedence
-- [ ] revisit "local renamed untracked" to ensure they are correct
+- [X] revisit "local renamed untracked" to ensure they are correct
 
 # client-side merge @phase
 

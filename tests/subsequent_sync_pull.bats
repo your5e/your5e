@@ -917,7 +917,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: "Bestiary.md" (v3)
+        pull: "Bestiary.md" (v3, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -970,7 +970,8 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: "Welcome.md" (v4)
+        pull: renamed "Home.md" to "Welcome.md"
+        pull: "Welcome.md" (v4, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1412,6 +1413,35 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     [[ ! -f "$output_dir/index.md" ]]
+    assert_file_modified "renamed-index.md"
+    assert_file_not_in_state "renamed-index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local renamed untracked, hash mismatch, remote edited" {
+    rename_local_file_untracked "index.md" "renamed-index.md"
+    modify_file "renamed-index.md"
+    server_edit_content "$(uuid_for "index.md")"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: "index.md" (v2, revivified)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
     assert_file_modified "renamed-index.md"
     assert_file_not_in_state "renamed-index.md"
     assert_tracked_file_intact "random-hexmap-7.png"

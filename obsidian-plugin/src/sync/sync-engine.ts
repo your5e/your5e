@@ -331,6 +331,20 @@ export class SyncEngine {
             return;
         }
 
+        // server has updates we haven't seen; preserve server version
+        const remoteEdited = remote.content_hash !== entry.serverHash;
+        if (remoteEdited) {
+            // only log error if destination is blocked by local file
+            const destPath = `${this.config.outputDir}/${remote.filename}`;
+            if (await this.fs.isFile(destPath)) {
+                this.log(
+                    `push: ERROR cannot delete "${entry.localFilename}", ` +
+                        "server has updates.",
+                );
+            }
+            return;
+        }
+
         // local file was deleted but renamed remotely;
         // rename it back before deleting as local change takes precedence
         if (remote.filename !== entry.localFilename) {
@@ -363,7 +377,6 @@ export class SyncEngine {
             }
         }
 
-        const remoteEdited = remote.content_hash !== entry.serverHash;
         const response = await fetch(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
@@ -379,11 +392,7 @@ export class SyncEngine {
 
         this.checkAborted();
         if (response.ok) {
-            if (remoteEdited) {
-                this.log(`push: deleted "${entry.localFilename}" (had remote changes)`);
-            } else {
-                this.log(`push: deleted "${entry.localFilename}"`);
-            }
+            this.log(`push: deleted "${entry.localFilename}"`);
             this.deleteSyncState(uuid);
             this.remotePages.delete(uuid);
         } else if (response.status === 404) {
@@ -738,9 +747,10 @@ export class SyncEngine {
                 );
             } else if (await this.localFileWasRemoved(actualSrcPath)) {
                 if (this.hasRemoteChanges(uuid)) {
+                    this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
-                        this.log(`pull: "${destFile}" (v${version})`);
+                        this.log(`pull: "${destFile}" (v${version}, revivified)`);
                     }
                 } else {
                     this.log(
@@ -801,6 +811,11 @@ export class SyncEngine {
         } else {
             if (await this.fileMatchesHash(destPath, hash)) {
                 this.updateSyncState(uuid, destFile, destFile, hash, hash);
+            } else if (entry && (await this.localFileWasRemoved(destPath))) {
+                const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
+                if (fetched) {
+                    this.log(`pull: "${destFile}" (v${version}, revivified)`);
+                }
             } else {
                 const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                 if (fetched) {
