@@ -1,5 +1,5 @@
 .PHONY: clean setup reset dev
-.PHONY: server-tests server-tests-down test lint-django test-django test-sync-integration test-obsidian-plugin
+.PHONY: server-tests server-tests-down test audit lint-django test-django test-sync-integration test-obsidian-plugin
 .PHONY: css makemigrations migrate scry shell
 .PHONY: terraform-plan terraform-apply ansible-bootstrap ansible-os ansible-app
 .PHONY: build deploy update-notebooks update-help-docs
@@ -89,7 +89,10 @@ debug-plugin:
 	npm --prefix obsidian-plugin run build
 	cp obsidian-plugin/dist/* ~/Obsidian/test/.obsidian/plugins/your5e-folder-sync
 
-test: test-django test-sync-integration test-obsidian-plugin
+audit:
+	npm --prefix obsidian-plugin audit
+
+test: test-django test-sync-integration test-obsidian-plugin audit
 
 terraform-plan:
 	cd deploy/terraform && terraform plan
