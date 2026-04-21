@@ -16,7 +16,7 @@ event they cannot. Previous versions of pages are kept.
 This is a manual process as the plugin is still experimental, and not
 yet submitted to the plugin repository.
 
-1.  Download the [plugin zip (v0.0.3)](/static/downloads/your5e-folder-sync-0.0.3.zip)
+1.  Download the [plugin zip (v0.1.0)](/static/downloads/your5e-folder-sync-0.1.0.zip)
     and unpack it.
 2.  Copy the two files into your vault, under `.obsidian/plugins/your5e-folder-sync`.
 3.  In Obsidian Settings, under "Community plugins", turn on community plugins
