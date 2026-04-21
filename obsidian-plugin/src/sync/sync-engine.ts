@@ -13,6 +13,18 @@ interface RemotePage {
 
 const DEFAULT_TIMEOUT_MS = 30000;
 
+async function fetchWithContext(
+    url: string,
+    options: RequestInit,
+    context: string,
+): Promise<Response> {
+    try {
+        return await fetch(url, options);
+    } catch {
+        throw new Error(`Network request failed while ${context}`);
+    }
+}
+
 export class SyncEngine {
     private output: string[] = [];
     private remotePages: Map<string, RemotePage> = new Map();
@@ -196,10 +208,14 @@ export class SyncEngine {
         while (nextPage) {
             this.checkAborted();
 
-            const response = await fetch(nextPage, {
-                headers: { Authorization: `Token ${this.config.token}` },
-                signal: AbortSignal.timeout(this.timeoutMs),
-            });
+            const response = await fetchWithContext(
+                nextPage,
+                {
+                    headers: { Authorization: `Token ${this.config.token}` },
+                    signal: AbortSignal.timeout(this.timeoutMs),
+                },
+                "fetching notebook state",
+            );
 
             if (response.status === 401 || response.status === 403) {
                 this.log("ERROR API token invalid");
@@ -349,7 +365,7 @@ export class SyncEngine {
         // local file was deleted but renamed remotely;
         // rename it back before deleting as local change takes precedence
         if (remote.filename !== entry.localFilename) {
-            const renameResponse = await fetch(
+            const renameResponse = await fetchWithContext(
                 `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
                 {
                     method: "PATCH",
@@ -360,6 +376,7 @@ export class SyncEngine {
                     body: JSON.stringify({ filename: entry.localFilename }),
                     signal: AbortSignal.timeout(this.timeoutMs),
                 },
+                `renaming "${remote.filename}" before delete`,
             );
 
             if (this.handlePushAuthError(renameResponse)) {
@@ -378,13 +395,14 @@ export class SyncEngine {
             }
         }
 
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "DELETE",
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `deleting "${entry.localFilename}"`,
         );
 
         if (this.handlePushAuthError(response)) {
@@ -435,7 +453,7 @@ export class SyncEngine {
             payload.restore = true;
         }
 
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "PATCH",
@@ -446,6 +464,7 @@ export class SyncEngine {
                 body: JSON.stringify(payload),
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `renaming "${remote.filename}" to "${entry.localFilename}"`,
         );
 
         if (this.handlePushAuthError(response)) {
@@ -497,7 +516,7 @@ export class SyncEngine {
             contentType = "image/jpeg";
         }
 
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 method: "PUT",
@@ -509,6 +528,7 @@ export class SyncEngine {
                 body: content,
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `pushing "${entry.localFilename}"`,
         );
 
         if (this.handlePushAuthError(response)) {
@@ -904,10 +924,14 @@ export class SyncEngine {
         const url =
             `${this.config.baseUrl}/v1/notebooks/` +
             `${this.config.notebook}/${uuid}?hash=${hash}`;
-        const response = await fetch(url, {
-            headers: { Authorization: `Token ${this.config.token}` },
-            signal: AbortSignal.timeout(this.timeoutMs),
-        });
+        const response = await fetchWithContext(
+            url,
+            {
+                headers: { Authorization: `Token ${this.config.token}` },
+                signal: AbortSignal.timeout(this.timeoutMs),
+            },
+            `fetching content by hash ${hash.slice(0, 8)}`,
+        );
 
         if (response.status === 404) {
             return null;
@@ -1005,12 +1029,13 @@ export class SyncEngine {
         localFile: string,
         hash: string,
     ): Promise<boolean> {
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `pulling "${localFile}"`,
         );
 
         if (response.status === 401) {
@@ -1022,7 +1047,7 @@ export class SyncEngine {
             return false;
         }
         if (!response.ok) {
-            throw new Error(`Failed to fetch ${localFile}: HTTP ${response.status}`);
+            throw new Error(`Failed to fetch "${localFile}": HTTP ${response.status}`);
         }
 
         this.checkAborted();
@@ -1043,12 +1068,13 @@ export class SyncEngine {
         destFile: string,
         hash: string,
     ): Promise<boolean> {
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
                 headers: { Authorization: `Token ${this.config.token}` },
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `pulling "${destFile}"`,
         );
 
         if (response.status === 401) {
@@ -1060,7 +1086,7 @@ export class SyncEngine {
             return false;
         }
         if (!response.ok) {
-            throw new Error(`Failed to fetch ${destFile}: HTTP ${response.status}`);
+            throw new Error(`Failed to pull "${destFile}": HTTP ${response.status}`);
         }
 
         this.checkAborted();
@@ -1169,7 +1195,7 @@ export class SyncEngine {
         formData.append("file", new Blob([content]), file);
         formData.append("filename", file);
 
-        const response = await fetch(
+        const response = await fetchWithContext(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/`,
             {
                 method: "POST",
@@ -1177,6 +1203,7 @@ export class SyncEngine {
                 body: formData,
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
+            `creating "${file}"`,
         );
 
         if (this.handlePushAuthError(response)) {
