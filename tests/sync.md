@@ -111,11 +111,15 @@ Test updating the state from an existing synced directory works.
 | local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
 | remote deleted | ✔️ | | | | | | ✔️ | |
 | remote deleted, local edited | ✔️ | ✔️ | | | | | ✔️ | |
-| stale file | ✔️ | | | | | | | ✔️ |
-| stale file, remote edited | ✔️ | | | | ✔️ | | | ✔️ |
-| stale file, local edited | ✔️ | ✔️ | | | | | | ✔️ |
+| stale file, incremental sync | ✔️ | | | | | | | ✔️ |
+| stale file, full sync | ✔️ | | | | | | | ✔️ |
+| stale file, remote edited, incremental sync | ✔️ | | | | ✔️ | | | ✔️ |
+| stale file, remote edited, full sync | ✔️ | | | | ✔️ | | | ✔️ |
+| stale file, local edited, incremental sync | ✔️ | ✔️ | | | | | | ✔️ |
+| stale file, local edited, full sync | ✔️ | ✔️ | | | | | | ✔️ |
 | stale file, local deleted | ✔️ | | | ✔️ | | | | ✔️ |
-| stale file, local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
+| stale file, local deleted, remote edited, incremental sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
+| stale file, local deleted, remote edited, full sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
 | local deleted | ✔️ | | | ✔️ | | | | |
 | local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | |
 | local deleted, remote renamed | ✔️ | | | ✔️ | | ✔️ | | |

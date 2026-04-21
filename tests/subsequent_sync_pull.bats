@@ -30,8 +30,8 @@ setup() {
 
 @test "no change, outdated timestamp" {
     setup_old_sync_metadata
-    fail_on_since_parameter
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
@@ -734,8 +734,8 @@ setup() {
 }
 
 @test "remote deleted, local edited" {
-    modify_file "Bestiary.md"
     server_delete "Bestiary.md"
+    modify_file "Bestiary.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
@@ -759,20 +759,33 @@ setup() {
     assert_success
 }
 
-@test "stale file" {
+@test "stale file, incremental sync" {
     add_stale_file "my-notes.md"
 
-    fail_when_results_not 0
     # incremental sync cannot detect stale files (see fetch_remote_state)
+    fail_when_results_not 0
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     diff -u <(echo "") <(echo "$output")
     assert_file_unchanged "my-notes.md"
     assert_file_in_state "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_success
+}
 
-    # full sync detects stale files by comparing against complete server state
+@test "stale file, full sync" {
+    add_stale_file "my-notes.md"
     setup_old_sync_metadata
 
+    # full sync detects stale files by comparing against complete server state
+    fail_when_results_not 0
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -794,12 +807,12 @@ setup() {
     assert_success
 }
 
-@test "stale file, remote edited" {
+@test "stale file, remote edited, incremental sync" {
     mark_file_stale "index.md"
     server_edit_content "$(uuid_for "index.md")"
 
-    fail_when_results_not 1
     # incremental sync cannot detect stale file (see fetch_remote_state)
+    fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -808,9 +821,25 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    # full sync detects stale file, removes it, downloads new file
+    assert_tracked_file_intact "index.md"
+    assert_in_state "stale-uuid"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_success
+}
+
+@test "stale file, remote edited, full sync" {
+    mark_file_stale "index.md"
+    server_edit_content "$(uuid_for "index.md")"
     setup_old_sync_metadata
 
+    # full sync detects stale file, removes it, downloads new file
+    fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -833,12 +862,38 @@ setup() {
     assert_success
 }
 
-@test "stale file, local edited" {
+@test "stale file, local edited, incremental sync" {
+    add_stale_file "my-notes.md"
+    modify_file "my-notes.md"
+
+    # pull: incremental sync cannot detect stale files (see fetch_remote_state)
+    fail_when_results_not 0
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "my-notes.md"
+    assert_file_in_state "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "stale file, local edited, full sync" {
     add_stale_file "my-notes.md"
     modify_file "my-notes.md"
     setup_old_sync_metadata
-    fail_on_since_parameter
 
+    # pull: full sync shows UUID missing, but local changes would be lost
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -866,8 +921,8 @@ setup() {
     delete_tracked_file "my-notes.md"
     assert_in_state "stale-uuid"
     setup_old_sync_metadata
-    fail_on_since_parameter
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=""
@@ -881,14 +936,14 @@ setup() {
     assert_success
 }
 
-@test "stale file, local deleted, remote edited" {
+@test "stale file, local deleted, remote edited, incremental sync" {
     mark_file_stale "index.md"
     delete_tracked_file "index.md"
     server_edit_content "$(uuid_for "index.md")"
-
-    fail_when_results_not 1
-    # incremental sync cannot detect stale entry (see fetch_remote_state)
     assert_in_state "stale-uuid"
+
+    # pull: incremental sync cannot detect stale entry (see fetch_remote_state)
+    fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -900,18 +955,25 @@ setup() {
     assert_in_state "stale-uuid"
     assert_server_edited_content "index.md"
     assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
 
-    # reset conditions
-    restore_database
-    rm -rf "$output_dir"
-    init_synced_dir
+@test "stale file, local deleted, remote edited, full sync" {
     mark_file_stale "index.md"
     delete_tracked_file "index.md"
     server_edit_content "$(uuid_for "index.md")"
-
-    # full sync detects stale entry by comparing against complete server state
     setup_old_sync_metadata
 
+    # full sync detects stale entry by comparing against complete server state
+    fail_when_results_not 1
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -923,6 +985,13 @@ setup() {
     assert_not_in_state "stale-uuid"
     assert_server_edited_content "index.md"
     assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -1363,8 +1432,8 @@ setup() {
     add_stale_file "original.md"
     rename_local_file "original.md" "my-notes.md"
     setup_old_sync_metadata
-    fail_on_since_parameter
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -1391,8 +1460,8 @@ setup() {
     rename_local_file "original.md" "my-notes.md"
     modify_file "my-notes.md"
     setup_old_sync_metadata
-    fail_on_since_parameter
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF

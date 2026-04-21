@@ -68,13 +68,13 @@ test-django: lint-django
 
 test-sync-integration:
 	shellcheck tests/*.sh
-	python tests/check-test-coverage.py
+	python tests/check-test-coverage.py bats
 	awk -f tests/check-line-length.awk tests/*.sh
 	bats tests/*.bats
 
 test-obsidian-plugin:
 	tests/check-page-size-sync.sh
-	python tests/check-test-coverage.py
+	python tests/check-test-coverage.py ts
 	awk -v max=88 -f tests/check-line-length.awk obsidian-plugin/src/**/*.ts obsidian-plugin/tests/*.ts
 	npm --prefix obsidian-plugin run lint
 	npm --prefix obsidian-plugin test

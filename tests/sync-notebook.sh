@@ -283,6 +283,12 @@ function apply_local_updates {
             fi
 
             if local_file_was_removed "$filepath"; then
+                if local_file_is_stale "$uuid"; then
+                    update_sync_state -d "$uuid"
+                    update_remote_state -d "$uuid"
+                    continue
+                fi
+
                 if has_remote_changes "$uuid"; then
                     # server has updates; if blocked, error; else let pull handle
                     if [[ -e "$output_dir/$remote_filename" ]]; then

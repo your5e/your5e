@@ -54,7 +54,6 @@ import {
     serverRename,
     setBaseHash,
     untrackAndRemoveFile,
-    untrackFile,
     uuidFor,
 } from "./helpers.js";
 
@@ -104,9 +103,7 @@ describe("subsequent sync push", () => {
     test("no change, outdated timestamp", async () => {
         const fetchSpy = vi.spyOn(global, "fetch");
 
-        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
-
-        const result = await sync.run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         // Verify full sync (no ?since= parameter)
         const firstFetch = fetchSpy.mock.calls[0][0];
@@ -121,9 +118,7 @@ describe("subsequent sync push", () => {
     test("no change, recent timestamp", async () => {
         const fetchSpy = vi.spyOn(global, "fetch");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         // Verify incremental sync (with ?since= parameter, single call)
         expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -140,9 +135,7 @@ describe("subsequent sync push", () => {
     test("untracked file", async () => {
         await createFile(outputDir, "scratchpad.txt");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual(['push: "scratchpad.txt" (v1)']);
@@ -177,9 +170,7 @@ describe("subsequent sync push", () => {
         await serverCreate(token, "Rumours.md");
         await createFile(outputDir, "Rumours.md/notes.txt");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -213,9 +204,7 @@ describe("subsequent sync push", () => {
         await serverCreate(token, "Quests.md");
         await createFile(outputDir, "Quests.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -251,9 +240,7 @@ describe("subsequent sync push", () => {
             "npcs/Major.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -296,9 +283,7 @@ describe("subsequent sync push", () => {
             "Monsters.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -330,9 +315,7 @@ describe("subsequent sync push", () => {
     test("remote edited", async () => {
         await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual(['pull: "Bestiary.md" (v3)']);
@@ -363,9 +346,7 @@ describe("subsequent sync push", () => {
             "The New Café.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -405,9 +386,7 @@ describe("subsequent sync push", () => {
         );
         await createFile(outputDir, "logs/Session 01.md/notes.txt");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -442,9 +421,7 @@ describe("subsequent sync push", () => {
         await serverEditContent(token, uuid);
         await serverRename(token, uuid, "Welcome.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -482,9 +459,7 @@ describe("subsequent sync push", () => {
         );
         await serverRename(token, npcsUuid, "sessions/session-01.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 2);
         expect(result.output).toEqual([
@@ -528,9 +503,7 @@ describe("subsequent sync push", () => {
             "sessions/session-01.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 2);
         expect(result.output).toEqual([
@@ -571,9 +544,7 @@ describe("subsequent sync push", () => {
             "characters/NPCs.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 2);
         expect(result.output).toEqual([
@@ -611,9 +582,7 @@ describe("subsequent sync push", () => {
         await serverRename(token, indexUuid, "Home.md");
         await serverRename(token, bestiaryUuid, "index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
@@ -653,9 +622,7 @@ describe("subsequent sync push", () => {
         await serverRename(token, bestiaryUuid, "index.md");
         await modifyFile(outputDir, "Home.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
@@ -699,9 +666,7 @@ describe("subsequent sync push", () => {
         await untrackAndRemoveFile(outputDir, initialState, "Home.md");
         await createFile(outputDir, "Home.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
@@ -735,9 +700,7 @@ describe("subsequent sync push", () => {
     test("local edited", async () => {
         await modifyFile(outputDir, "index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual(['push: "index.md" (v2)']);
@@ -774,10 +737,8 @@ describe("subsequent sync push", () => {
             "First line\r\nSecond line\r\nThird line",
         );
 
-        const sync1 = createSync();
-
-        // first run, sends the modification, server will normalise line endings
-        const result1 = await sync1.run();
+        // push: first run, sends the modification, server will normalise line endings
+        const result1 = await createSync().run();
 
         assertIncrementalResults(result1.incrementalResults, 0);
         expect(result1.output).toEqual(['push: "Home.md" (v3)']);
@@ -858,9 +819,7 @@ Regenerates health.
 `,
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual(['push: "Bestiary.md" (v4, merged)']);
@@ -895,7 +854,6 @@ Regenerates health.
     });
 
     test("local edited, remote edited, same content", async () => {
-        // Both local and remote have the same content
         await createFile(outputDir, "Bestiary.md", "identical content\n");
         await serverEditContent(
             token,
@@ -903,9 +861,7 @@ Regenerates health.
             "identical content\n",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([]);
@@ -938,14 +894,13 @@ Regenerates health.
 
     test("local edited, remote edited, no common ancestor", async () => {
         await modifyFile(outputDir, "index.md");
+        await serverEditContent(token, await uuidFor(initialState, "index.md"));
         setBaseHash(initialState, "index.md", "no-common-ancestor");
 
-        const sync = createSync();
+        const result = await createSync().run();
 
-        const result = await sync.run();
-
-        assertIncrementalResults(result.incrementalResults, 0);
-        expect(result.output).toEqual(['push: "index.md" (v2, replaced)']);
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual(['push: "index.md" (v3, replaced)']);
         await assertFileModified(outputDir, "index.md");
         await assertFilePushed(
             outputDir,
@@ -980,9 +935,7 @@ Regenerates health.
             "renamed-bestiary.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1018,19 +971,13 @@ Regenerates health.
     test("local edited, remote edited, remote renamed", async () => {
         await modifyFile(outputDir, "Home.md");
         await serverEditContent(token, await uuidFor(initialState, "Home.md"));
-        await serverRename(
-            token,
-            await uuidFor(initialState, "Home.md"),
-            "renamed-home.md",
-        );
+        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "renamed-home.md" to "Home.md"',
+            'push: renamed "Welcome.md" to "Home.md"',
             'push: "Home.md" (v6, replaced)',
         ]);
         await assertFileModified(outputDir, "Home.md");
@@ -1062,9 +1009,7 @@ Regenerates health.
     test("remote deleted", async () => {
         await serverDelete(token, await uuidFor(initialState, "characters/NPCs.md"));
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual(['pull: deleted "characters/NPCs.md"']);
@@ -1092,9 +1037,7 @@ Regenerates health.
         await serverDelete(token, await uuidFor(initialState, "Bestiary.md"));
         await modifyFile(outputDir, "Bestiary.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual(['push: "Bestiary.md" (v3)']);
@@ -1124,24 +1067,39 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("stale file", async () => {
+    test("stale file, incremental sync", async () => {
         await addStaleFile(outputDir, initialState, "my-notes.md");
 
         // Incremental sync cannot detect stale files
-        const incrementalSync = createSync();
-        const incrementalResult = await incrementalSync.run();
+        const result = await createSync().run();
 
-        assertIncrementalResults(incrementalResult.incrementalResults, 0);
-        expect(incrementalResult.output).toEqual([]);
+        assertIncrementalResults(result.incrementalResults, 0);
+        expect(result.output).toEqual([]);
         await assertFileUnchanged(outputDir, "my-notes.md");
-        assertFileInState("my-notes.md", incrementalResult.state);
+        assertFileInState("my-notes.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+    });
+
+    test("stale file, full sync", async () => {
+        await addStaleFile(outputDir, initialState, "my-notes.md");
 
         // Full sync detects stale files by comparing against complete server state
-        const fullSync = createSync({
-            initialState: incrementalResult.state,
-            lastFullSync: "2020-01-01T00:00:00Z",
-        });
-        const result = await fullSync.run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         expect(result.output).toEqual(['pull: deleted "my-notes.md"']);
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
@@ -1164,23 +1122,44 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("stale file, remote edited", async () => {
+    test("stale file, remote edited, incremental sync", async () => {
         const uuid = await uuidFor(initialState, "index.md");
         markFileStale(initialState, "index.md");
         await serverEditContent(token, uuid);
 
         // Incremental sync cannot detect stale file
-        const incrementalSync = createSync();
-        const incrementalResult = await incrementalSync.run();
+        const result = await createSync().run();
 
-        assertIncrementalResults(incrementalResult.incrementalResults, 1);
-        expect(incrementalResult.output).toEqual([
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
             'pull: ERROR cannot pull "index.md", blocked by local file',
         ]);
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        assertInState(result.state, "stale-uuid");
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+    });
+
+    test("stale file, remote edited, full sync", async () => {
+        const uuid = await uuidFor(initialState, "index.md");
+        markFileStale(initialState, "index.md");
+        await serverEditContent(token, uuid);
 
         // Full sync detects stale file, removes it, downloads new file
-        const fullSync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
-        const result = await fullSync.run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         expect(result.output).toEqual(['pull: "index.md" (v2)']);
         await assertServerEditedContent(outputDir, "index.md");
@@ -1203,38 +1182,42 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("stale file, local edited", async () => {
+    test("stale file, local edited, incremental sync", async () => {
         await addStaleFile(outputDir, initialState, "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        // Incremental sync learns UUID is stale from 404, creates new file
-        const incrementalSync = createSync();
-        const incrementalResult = await incrementalSync.run();
+        // push: incremental sync learns UUID is stale from 404, creates new file
+        const result = await createSync().run();
 
-        assertIncrementalResults(incrementalResult.incrementalResults, 0);
-        expect(incrementalResult.output).toEqual(['push: "my-notes.md" (v1)']);
+        assertIncrementalResults(result.incrementalResults, 0);
+        expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
         await assertFileModified(outputDir, "my-notes.md");
-        assertFileInState("my-notes.md", incrementalResult.state);
+        assertFileInState("my-notes.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "index.md");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
 
-        // Reset conditions
-        await restoreDatabase();
-        await cleanupTestDir(outputDir);
-        const freshState = await initSyncedDir(outputDir, token);
-        await addStaleFile(outputDir, freshState, "my-notes.md");
+    test("stale file, local edited, full sync", async () => {
+        await addStaleFile(outputDir, initialState, "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        // Full sync already knows UUID is stale, creates new file
-        const fullSync = new SyncEngine({
-            baseUrl: API_BASE,
-            token,
-            notebook: "norm/campaign-notes",
-            outputDir,
-            fileSystem: new NodeFileSystem(),
-            initialState: freshState,
-            lastUpdate: recentTimestamp,
-            lastFullSync: "2020-01-01T00:00:00Z",
-        });
-        const result = await fullSync.run();
+        // push: full sync already knows UUID is stale, creates new file
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
         await assertFileModified(outputDir, "my-notes.md");
@@ -1263,9 +1246,7 @@ Regenerates health.
         await deleteTrackedFile(outputDir, "my-notes.md");
         assertInState(initialState, "stale-uuid");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([]);
@@ -1276,18 +1257,48 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("stale file, local deleted, remote edited", async () => {
+    test("stale file, local deleted, remote edited, incremental sync", async () => {
         const uuid = await uuidFor(initialState, "index.md");
         markFileStale(initialState, "index.md");
         await deleteTrackedFile(outputDir, "index.md");
         await serverEditContent(token, uuid);
         assertInState(initialState, "stale-uuid");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        // push: Push discovers stale entry via 404 when attempting to delete
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual(['pull: "index.md" (v2)']);
+        assertNotInState(result.state, "stale-uuid");
+        await assertServerEditedContent(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
+        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "sessions/session-01.md",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
+        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
+        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
+        await assertTrackedFileIntact(
+            outputDir,
+            result.state,
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        );
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("stale file, local deleted, remote edited, full sync", async () => {
+        const uuid = await uuidFor(initialState, "index.md");
+        markFileStale(initialState, "index.md");
+        await deleteTrackedFile(outputDir, "index.md");
+        await serverEditContent(token, uuid);
+
+        // Full sync detects stale entry by comparing against complete server state
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
+
         expect(result.output).toEqual(['pull: "index.md" (v2)']);
         assertNotInState(result.state, "stale-uuid");
         await assertServerEditedContent(outputDir, "index.md");
@@ -1313,9 +1324,7 @@ Regenerates health.
     test("local deleted", async () => {
         await deleteTrackedFile(outputDir, "index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual(['push: deleted "index.md"']);
@@ -1342,9 +1351,7 @@ Regenerates health.
         await deleteTrackedFile(outputDir, "Bestiary.md");
         await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual(['pull: "Bestiary.md" (v3, revivified)']);
@@ -1376,9 +1383,7 @@ Regenerates health.
             "NPCs.md",
         );
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1411,12 +1416,10 @@ Regenerates health.
 
     test("local deleted, remote edited, remote renamed", async () => {
         await deleteTrackedFile(outputDir, "Home.md");
-        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
         await serverEditContent(token, await uuidFor(initialState, "Home.md"));
+        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1448,12 +1451,10 @@ Regenerates health.
     test("local deleted, local edited, remote edited, remote renamed", async () => {
         await deleteTrackedFile(outputDir, "Home.md");
         await createFile(outputDir, "Welcome.md");
-        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
         await serverEditContent(token, await uuidFor(initialState, "Home.md"));
+        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1492,9 +1493,7 @@ Regenerates health.
         await deleteTrackedFile(outputDir, "Bestiary.md");
         await serverDelete(token, await uuidFor(initialState, "Bestiary.md"));
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([]);
@@ -1520,9 +1519,7 @@ Regenerates health.
     test("local renamed", async () => {
         await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([
@@ -1553,9 +1550,7 @@ Regenerates health.
         await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([
@@ -1599,9 +1594,7 @@ Regenerates health.
         );
         await serverEditContent(token, uuid);
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1640,9 +1633,7 @@ Regenerates health.
         await modifyFile(outputDir, "renamed-bestiary.md");
         await serverEditContent(token, uuid);
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1681,9 +1672,7 @@ Regenerates health.
         await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
         await serverRename(token, uuid, "server-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1717,9 +1706,7 @@ Regenerates health.
         await modifyFile(outputDir, "my-index.md");
         await serverRename(token, uuid, "server-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1757,12 +1744,10 @@ Regenerates health.
     test("local renamed, remote edited, remote renamed", async () => {
         const uuid = await uuidFor(initialState, "index.md");
         await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
-        await serverRename(token, uuid, "server-index.md");
         await serverEditContent(token, uuid);
+        await serverRename(token, uuid, "server-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1795,12 +1780,10 @@ Regenerates health.
         const uuid = await uuidFor(initialState, "index.md");
         await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
         await modifyFile(outputDir, "my-index.md");
-        await serverRename(token, uuid, "server-index.md");
         await serverEditContent(token, uuid);
+        await serverRename(token, uuid, "server-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1840,9 +1823,7 @@ Regenerates health.
         await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
         await serverDelete(token, uuid);
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1881,9 +1862,7 @@ Regenerates health.
         await modifyFile(outputDir, "my-bestiary.md");
         await serverDelete(token, uuid);
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
@@ -1921,9 +1900,7 @@ Regenerates health.
         await addStaleFile(outputDir, initialState, "original.md");
         await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
 
-        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
-
-        const result = await sync.run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         expect(result.output).toEqual(['pull: deleted "my-notes.md"']);
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
@@ -1951,9 +1928,7 @@ Regenerates health.
         await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        const sync = createSync({ lastFullSync: "2020-01-01T00:00:00Z" });
-
-        const result = await sync.run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
         expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
         await assertFileModified(outputDir, "my-notes.md");
@@ -1986,9 +1961,7 @@ Regenerates health.
     test("local renamed untracked, hash match", async () => {
         await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([
@@ -2020,9 +1993,7 @@ Regenerates health.
         await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([
@@ -2063,9 +2034,7 @@ Regenerates health.
         await modifyFile(outputDir, "renamed-index.md");
         await serverEditContent(token, await uuidFor(initialState, "index.md"));
 
-        const sync = createSync();
-
-        const result = await sync.run();
+        const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
