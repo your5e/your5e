@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
+import DiffMatchPatch from "diff-match-patch";
 import type { FileSystem, SyncConfig, SyncResult, SyncStateEntry } from "./types.js";
 
 interface RemotePage {
@@ -274,8 +275,6 @@ export class SyncEngine {
             }
 
             const remoteRenamed = remote && remote.filename !== entry.serverFilename;
-            const remoteEdited = remote && remote.content_hash !== entry.serverHash;
-            const remoteDeleted = remote && remote.deleted_at !== null;
 
             if (localRenamed) {
                 const renameSucceeded = await this.pushLocalRename(uuid, entry, remote);
@@ -291,13 +290,7 @@ export class SyncEngine {
                         continue;
                     }
                 }
-                await this.pushLocalEdit(
-                    uuid,
-                    entry,
-                    remote,
-                    remoteEdited ?? false,
-                    remoteDeleted ?? false,
-                );
+                await this.pushLocalEdit(uuid, entry, remote);
             }
         }
 
@@ -339,6 +332,20 @@ export class SyncEngine {
             return;
         }
 
+        // server has updates we haven't seen; preserve server version
+        const remoteEdited = remote.content_hash !== entry.serverHash;
+        if (remoteEdited) {
+            // only log error if destination is blocked by local file
+            const destPath = `${this.config.outputDir}/${remote.filename}`;
+            if (await this.fs.isFile(destPath)) {
+                this.log(
+                    `push: ERROR cannot delete "${entry.localFilename}", ` +
+                        "server has updates.",
+                );
+            }
+            return;
+        }
+
         // local file was deleted but renamed remotely;
         // rename it back before deleting as local change takes precedence
         if (remote.filename !== entry.localFilename) {
@@ -371,7 +378,6 @@ export class SyncEngine {
             }
         }
 
-        const remoteEdited = remote.content_hash !== entry.serverHash;
         const response = await fetch(
             `${this.config.baseUrl}/v1/notebooks/${this.config.notebook}/${uuid}`,
             {
@@ -387,11 +393,7 @@ export class SyncEngine {
 
         this.checkAborted();
         if (response.ok) {
-            if (remoteEdited) {
-                this.log(`push: deleted "${entry.localFilename}" (had remote changes)`);
-            } else {
-                this.log(`push: deleted "${entry.localFilename}"`);
-            }
+            this.log(`push: deleted "${entry.localFilename}"`);
             this.deleteSyncState(uuid);
             this.remotePages.delete(uuid);
         } else if (response.status === 404) {
@@ -476,8 +478,6 @@ export class SyncEngine {
         uuid: string,
         entry: SyncStateEntry,
         remote: RemotePage | undefined,
-        remoteEdited: boolean,
-        _remoteDeleted: boolean,
     ): Promise<void> {
         if (this.permissionDenied) {
             return;
@@ -504,6 +504,7 @@ export class SyncEngine {
                 headers: {
                     Authorization: `Token ${this.config.token}`,
                     "Content-Type": contentType,
+                    "Previous-Hash": entry.serverHash,
                 },
                 body: content,
                 signal: AbortSignal.timeout(this.timeoutMs),
@@ -538,12 +539,11 @@ export class SyncEngine {
                 remote.deleted_at = null;
             }
 
-            if (remoteEdited) {
+            if (data.update === "merged" || data.update === "replaced") {
                 this.log(
-                    `push: "${entry.localFilename}" (v${data.version}, ` +
-                        "remote changes overwritten)",
+                    `push: "${entry.localFilename}" (v${data.version}, ${data.update})`,
                 );
-            } else {
+            } else if (data.update !== "unchanged") {
                 this.log(`push: "${entry.localFilename}" (v${data.version})`);
             }
         } else if (response.status === 404) {
@@ -748,9 +748,10 @@ export class SyncEngine {
                 );
             } else if (await this.localFileWasRemoved(actualSrcPath)) {
                 if (this.hasRemoteChanges(uuid)) {
+                    this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
-                        this.log(`pull: "${destFile}" (v${version})`);
+                        this.log(`pull: "${destFile}" (v${version}, revivified)`);
                     }
                 } else {
                     this.log(
@@ -777,10 +778,40 @@ export class SyncEngine {
                     `pull: ERROR cannot pull "${destFile}", blocked by local file`,
                 );
             } else if (this.hasRemoteChanges(uuid)) {
-                this.log(
-                    `pull: SKIPPING pull "${destFile}", ` +
-                        "local changes would be lost",
-                );
+                if (this.config.pullOnly) {
+                    const localHash = await this.fs.hash(destPath);
+                    if (localHash === hash) {
+                        // Local and remote are identical, just update state
+                        this.updateSyncState(uuid, destFile, destFile, hash, hash);
+                    } else if (
+                        await this.tryThreeWayMerge(
+                            uuid,
+                            destPath,
+                            entry.serverHash,
+                            hash,
+                        )
+                    ) {
+                        const mergedHash = await this.fs.hash(destPath);
+                        this.updateSyncState(
+                            uuid,
+                            destFile,
+                            destFile,
+                            hash,
+                            mergedHash,
+                        );
+                        this.log(`pull: "${destFile}" (v${version}, merged)`);
+                    } else {
+                        this.log(
+                            `pull: SKIPPING pull "${destFile}", ` +
+                                "local changes would be lost",
+                        );
+                    }
+                } else {
+                    this.log(
+                        `pull: SKIPPING pull "${destFile}", ` +
+                            "local changes would be lost",
+                    );
+                }
             }
         } else if (await this.deletedLocallyNoNewContent(uuid, destFile, destPath)) {
             this.log(`pull: SKIPPING pull "${destFile}", already deleted locally`);
@@ -811,6 +842,11 @@ export class SyncEngine {
         } else {
             if (await this.fileMatchesHash(destPath, hash)) {
                 this.updateSyncState(uuid, destFile, destFile, hash, hash);
+            } else if (entry && (await this.localFileWasRemoved(destPath))) {
+                const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
+                if (fetched) {
+                    this.log(`pull: "${destFile}" (v${version}, revivified)`);
+                }
             } else {
                 const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                 if (fetched) {
@@ -859,6 +895,61 @@ export class SyncEngine {
         }
         const currentHash = await this.fs.hash(filePath);
         return currentHash !== entry.serverHash;
+    }
+
+    private async fetchContentByHash(
+        uuid: string,
+        hash: string,
+    ): Promise<Buffer | null> {
+        const url =
+            `${this.config.baseUrl}/v1/notebooks/` +
+            `${this.config.notebook}/${uuid}?hash=${hash}`;
+        const response = await fetch(url, {
+            headers: { Authorization: `Token ${this.config.token}` },
+            signal: AbortSignal.timeout(this.timeoutMs),
+        });
+
+        if (response.status === 404) {
+            return null;
+        }
+        if (!response.ok) {
+            return null;
+        }
+
+        return Buffer.from(await response.arrayBuffer());
+    }
+
+    private async tryThreeWayMerge(
+        uuid: string,
+        localPath: string,
+        baseHash: string,
+        remoteHash: string,
+    ): Promise<boolean> {
+        const baseContent = await this.fetchContentByHash(uuid, baseHash);
+        if (!baseContent) {
+            return false;
+        }
+
+        const remoteContent = await this.fetchContentByHash(uuid, remoteHash);
+        if (!remoteContent) {
+            return false;
+        }
+
+        const localContent = await this.fs.read(localPath);
+
+        const dmp = new DiffMatchPatch();
+        const baseText = baseContent.toString("utf-8");
+        const localText = localContent.toString("utf-8");
+        const remoteText = remoteContent.toString("utf-8");
+        const patches = dmp.patch_make(baseText, remoteText);
+        const [merged, results] = dmp.patch_apply(patches, localText);
+
+        if (!results.every((r) => r)) {
+            return false;
+        }
+
+        await this.fs.write(localPath, Buffer.from(merged, "utf-8"));
+        return true;
     }
 
     private isCachedUuidStale(cachedUuid: string | null, uuid: string): boolean {

@@ -2,6 +2,7 @@ import hashlib
 import re
 from datetime import timedelta
 from http import HTTPStatus
+from textwrap import dedent
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -747,6 +748,38 @@ class TestPageContent(NotebookApiMixin):
         assert response.json() == {"error": "Not found."}
 
     @ApiMixin.as_api_user("wendy")
+    def test_hash_parameter(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        page = self.wendys_notebook.get_page(path="session-one")
+        first_version_hash = page.version_set.get(number=1).content.hash
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"hash": first_version_hash},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.content == b"# Session One\n\nFirst draft.\n"
+
+    @ApiMixin.as_api_user("wendy")
+    def test_hash_parameter_not_found(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"hash": "0" * 64},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_hash_and_version_mutually_exclusive(self, api_client):
+        uuid = self.get_page_uuid("session-one")
+        response = api_client.get(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            {"version": "1", "hash": "0" * 64},
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "Cannot specify both version and hash."}
+
+    @ApiMixin.as_api_user("wendy")
     def test_nonexistent_notebook(self, api_client):
         uuid = self.get_page_uuid("index")
         response = api_client.get(f"/v1/notebooks/wendy/no-such-notebook/{uuid}")
@@ -778,6 +811,20 @@ class TestPageContent(NotebookApiMixin):
 
 @pytest.mark.django_db
 class TestPageContentPut(NotebookApiMixin):
+    RESPONSE_KEYS = {
+        "uuid",
+        "url",
+        "html_url",
+        "filename",
+        "mime_type",
+        "version",
+        "created_by",
+        "updated_at",
+        "content_hash",
+        "previous_hash",
+        "update",
+    }
+
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
         uuid = self.get_page_uuid("index")
@@ -843,6 +890,7 @@ class TestPageContentPut(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
@@ -855,6 +903,7 @@ class TestPageContentPut(NotebookApiMixin):
             "updated_at": data["updated_at"],
             "content_hash": new_hash,
             "previous_hash": previous_hash,
+            "update": "replaced",
         }
         response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
@@ -873,6 +922,7 @@ class TestPageContentPut(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
@@ -885,6 +935,7 @@ class TestPageContentPut(NotebookApiMixin):
             "updated_at": data["updated_at"],
             "content_hash": new_hash,
             "previous_hash": previous_hash,
+            "update": "replaced",
         }
         response = api_client.get(f"/v1/notebooks/wendy/heros-legendes/{uuid}")
         assert response.status_code == HTTPStatus.OK
@@ -968,6 +1019,7 @@ class TestPageContentPut(NotebookApiMixin):
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
         assert TIMESTAMP_PATTERN.match(data["updated_at"])
         assert data == {
             "uuid": uuid,
@@ -980,6 +1032,7 @@ class TestPageContentPut(NotebookApiMixin):
             "updated_at": data["updated_at"],
             "content_hash": original_hash,
             "previous_hash": original_hash,
+            "update": "unchanged",
         }
 
     @ApiMixin.as_api_user("wendy")
@@ -996,6 +1049,139 @@ class TestPageContentPut(NotebookApiMixin):
             page.latest_version.content.data
             == b"First line\nSecond line\nThird line\n"
         )
+
+    @ApiMixin.as_api_user("wendy")
+    def test_update_with_matching_previous_hash_applies_directly(self, api_client):
+        uuid = self.get_page_uuid("index")
+        page = self.wendys_notebook.get_page(path="index")
+        current_hash = page.latest_version.content.hash
+        new_content = b"# Welcome\n\nUpdated content.\n"
+        new_hash = hashlib.sha256(new_content).hexdigest()
+
+        response = api_client.put(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            data=new_content,
+            content_type="text/markdown",
+            HTTP_PREVIOUS_HASH=current_hash,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 2,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": new_hash,
+            "previous_hash": current_hash,
+            "update": "applied",
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_update_with_older_previous_hash_merges_changes(self, api_client):
+        uuid = self.get_page_uuid("index")
+        page = self.wendys_notebook.get_page(path="index")
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Welcome
+
+                - Ale: 4cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.wendy,
+        )
+        base_hash = page.latest_version.content.hash
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Welcome
+
+                - Ale: 5cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.susan,
+        )
+        server_hash = page.latest_version.content.hash
+        merged_content = dedent("""\
+            # Welcome
+
+            - Ale: 5cp
+            - Bread: 3cp
+        """).encode()
+        merged_hash = hashlib.sha256(merged_content).hexdigest()
+
+        response = api_client.put(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            data=dedent("""\
+                # Welcome
+
+                - Ale: 4cp
+                - Bread: 3cp
+            """).encode(),
+            content_type="text/markdown",
+            HTTP_PREVIOUS_HASH=base_hash,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 4,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": merged_hash,
+            "previous_hash": server_hash,
+            "update": "merged",
+        }
+
+    @ApiMixin.as_api_user("wendy")
+    def test_update_with_nonexistent_previous_hash_replaces_content(self, api_client):
+        uuid = self.get_page_uuid("index")
+        page = self.wendys_notebook.get_page(path="index")
+        server_hash = page.latest_version.content.hash
+        new_content = b"# Welcome\n\nClient edit.\n"
+        new_hash = hashlib.sha256(new_content).hexdigest()
+        fake_hash = "0" * 64
+
+        response = api_client.put(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            data=new_content,
+            content_type="text/markdown",
+            HTTP_PREVIOUS_HASH=fake_hash,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data.keys() == self.RESPONSE_KEYS
+        assert TIMESTAMP_PATTERN.match(data["updated_at"])
+        assert data == {
+            "uuid": uuid,
+            "url": f"/v1/notebooks/wendy/heros-legendes/{uuid}",
+            "html_url": "http://localhost:5843/notebooks/wendy/heros-legendes/index",
+            "filename": "index.md",
+            "mime_type": "text/markdown",
+            "version": 2,
+            "created_by": "wendy",
+            "updated_at": data["updated_at"],
+            "content_hash": new_hash,
+            "previous_hash": server_hash,
+            "update": "replaced",
+        }
 
 
 @pytest.mark.django_db

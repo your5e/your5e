@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from textwrap import dedent
 
 import pytest
 
@@ -729,6 +730,98 @@ class TestNotebookPageEditView(NotebookMixin):
         })
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert Page.objects.filter(wiki=self.susans_notebook).count() == initial_count
+
+    @UserMixin.as_user("wendy")
+    def test_edit_form_includes_previous_hash(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        expected_hash = page.latest_version.content.hash
+        response = client.get("/notebooks/wendy/heros-legendes/notes?edit")
+        assert response.status_code == HTTPStatus.OK
+        content = response.content.decode()
+        assert f'name="previous_hash" value="{expected_hash}"' in content
+
+    @UserMixin.as_user("wendy")
+    def test_saving_with_matching_hash_updates_directly(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes\n\nOriginal content.\n",
+            created_by=self.wendy,
+        )
+        current_hash = page.latest_version.content.hash
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "notes",
+            "content": "# Notes\n\nUpdated content.",
+            "previous_hash": current_hash,
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.content.data == b"# Notes\n\nUpdated content.\n"
+
+    @UserMixin.as_user("wendy")
+    def test_saving_with_previous_hash_triggers_merge(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Notes
+
+                - Ale: 4cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.wendy,
+        )
+        base_hash = page.latest_version.content.hash
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Notes
+
+                - Ale: 5cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.susan,
+        )
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "notes",
+            "content": dedent("""\
+                # Notes
+
+                - Ale: 4cp
+                - Bread: 3cp
+            """),
+            "previous_hash": base_hash,
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        merged = page.latest_version.content.data.decode()
+        assert "Ale: 5cp" in merged
+        assert "Bread: 3cp" in merged
+
+    @UserMixin.as_user("wendy")
+    def test_saving_with_unknown_hash_replaces_content(self, client):
+        page = self.wendys_notebook.get_page(path="notes")
+        page.update(
+            filename="notes.md",
+            mime_type="text/markdown",
+            data=b"# Notes\n\nServer content.\n",
+            created_by=self.wendy,
+        )
+        initial_version_count = page.version_set.count()
+        response = client.post("/notebooks/wendy/heros-legendes/notes", {
+            "filename": "notes",
+            "content": "# Notes\n\nReplacement content.",
+            "previous_hash": "nonexistent-hash-abc123",
+        })
+        assert response.status_code == HTTPStatus.FOUND
+        page.refresh_from_db()
+        assert page.version_set.count() == initial_version_count + 1
+        assert page.latest_version.content.data == b"# Notes\n\nReplacement content.\n"
 
 
 @pytest.mark.django_db

@@ -18,7 +18,6 @@ setup_file() {
 
 setup() {
     restore_database
-    fail_on_since_parameter
 
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
@@ -26,6 +25,8 @@ setup() {
 
 
 @test "empty directory" {
+    fail_on_since_parameter
+
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -49,6 +50,8 @@ setup() {
 }
 
 @test "empty notebook" {
+    fail_on_since_parameter
+
     run tests/sync-notebook.sh norm/empty-notebook "$output_dir"
 
     expected_output=""
@@ -61,6 +64,7 @@ setup() {
 }
 
 @test "local files" {
+    fail_on_since_parameter
     create_file "Home.md"
     create_file "index.md"
     create_file "notes.txt"
@@ -100,6 +104,7 @@ setup() {
 }
 
 @test "local matches remote" {
+    fail_on_since_parameter
     copy_fixture "Home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -124,6 +129,7 @@ setup() {
 }
 
 @test "local file clashes" {
+    fail_on_since_parameter
     create_file "sessions"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -156,6 +162,7 @@ setup() {
 }
 
 @test "local dir clashes" {
+    fail_on_since_parameter
     create_file "Bestiary.md/notes.txt"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -188,6 +195,7 @@ setup() {
 }
 
 @test "hidden files ignored" {
+    fail_on_since_parameter
     create_file ".hidden.md"
     create_file ".obsidian/app.json"
 
@@ -215,6 +223,7 @@ setup() {
 }
 
 @test "case collision" {
+    fail_on_since_parameter
     create_file "home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -247,6 +256,7 @@ setup() {
 }
 
 @test "case collision, matches" {
+    fail_on_since_parameter
     copy_fixture "Home.md" "home.md"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"

@@ -6,9 +6,9 @@ your vault.
 It sends your changes to the site, then pulls any other changes back,
 running approximately every five minutes.
 
-In the event both you and someone else have modified a page, your local copy
-will take precedence, overwriting it. However, the site does keep copies of
-previous edits so nothing should be lost.
+In the event both you and someone else have modified a page, the changes
+are merged together where possible, preserving the local changes in the
+event they cannot. Previous versions of pages are kept.
 
 
 ## Installation
@@ -16,7 +16,7 @@ previous edits so nothing should be lost.
 This is a manual process as the plugin is still experimental, and not
 yet submitted to the plugin repository.
 
-1.  Download the [plugin zip (v0.0.3)](/static/downloads/your5e-folder-sync-0.0.3.zip)
+1.  Download the [plugin zip (v0.1.0)](/static/downloads/your5e-folder-sync-0.1.0.zip)
     and unpack it.
 2.  Copy the two files into your vault, under `.obsidian/plugins/your5e-folder-sync`.
 3.  In Obsidian Settings, under "Community plugins", turn on community plugins

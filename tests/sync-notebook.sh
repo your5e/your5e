@@ -283,6 +283,21 @@ function apply_local_updates {
             fi
 
             if local_file_was_removed "$filepath"; then
+                if local_file_is_stale "$uuid"; then
+                    update_sync_state -d "$uuid"
+                    update_remote_state -d "$uuid"
+                    continue
+                fi
+
+                if has_remote_changes "$uuid"; then
+                    # server has updates; if blocked, error; else let pull handle
+                    if [[ -e "$output_dir/$remote_filename" ]]; then
+                        printf 'push: ERROR cannot delete "%s", ' "$local_fn"
+                        printf 'server has updates.\n'
+                    fi
+                    continue
+                fi
+
                 if remote_file_was_renamed "$uuid"; then
                     # local file was deleted but renamed remotely;
                     # rename it back before deleting; local change takes precedence
@@ -498,8 +513,13 @@ function apply_remote_updates {
                 if file_matches_hash "$dest_path" "$hash"; then
                     update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
                 else
-                    fetch_remote_file "$notebook" "$output_dir" "$uuid" \
-                        "$dest_file" "$hash" "$version"
+                    fetch_remote_file \
+                        "$notebook" \
+                        "$output_dir" \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$hash" \
+                        "$version"
                 fi
 
             else
@@ -515,8 +535,16 @@ function apply_remote_updates {
 
         elif local_file_was_removed "$src_path"; then
             if has_remote_changes "$uuid"; then
+                printf 'pull: renamed "%s" to "%s"\n' "$src_file" "$dest_file"
                 fetch_remote_file \
-                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version" \
+                    "$dest_file" \
+                    ", revivified"
             else
                 printf 'pull: SKIPPING rename "%s" to "%s", ' "$src_file" "$dest_file"
                 printf '"%s" deleted locally\n' "$src_file"
@@ -530,7 +558,12 @@ function apply_remote_updates {
                 update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
             else
                 fetch_remote_file \
-                    "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version"
             fi
         fi
 
@@ -540,8 +573,37 @@ function apply_remote_updates {
                 "$dest_file"
 
         elif has_remote_changes "$uuid"; then
-            printf 'pull: SKIPPING pull "%s", local changes would be lost\n' \
-                "$dest_file"
+            local base_hash remote_hash local_hash
+            base_hash=$(get_sync_state "$uuid" hash)
+            remote_hash=$(get_remote_state "$uuid" hash)
+            local_hash=$(hash_file "$dest_path")
+
+            if [[ "$local_hash" == "$remote_hash" ]]; then
+                # local and remote are identical, just update state
+                update_sync_state \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$dest_file" \
+                    "$remote_hash" \
+                    "$remote_hash"
+            elif try_three_way_merge \
+                    "$notebook" \
+                    "$uuid" \
+                    "$dest_path" \
+                    "$base_hash" \
+                    "$remote_hash"
+            then
+                update_sync_state \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$dest_file" \
+                    "$remote_hash" \
+                    "$(hash_file "$dest_path")"
+                printf 'pull: "%s" (v%s, merged)\n' "$dest_file" "$version"
+            else
+                printf 'pull: SKIPPING pull "%s", local changes would be lost\n' \
+                    "$dest_file"
+            fi
         fi
 
     elif deleted_locally_no_new_content "$uuid" "$dest_file" "$dest_path"; then
@@ -567,9 +629,24 @@ function apply_remote_updates {
     else
         if file_matches_hash "$dest_path" "$hash"; then
             update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
+        elif ! is_untracked "$uuid" && local_file_was_removed "$dest_path"; then
+            fetch_remote_file \
+                "$notebook" \
+                "$output_dir" \
+                "$uuid" \
+                "$dest_file" \
+                "$hash" \
+                "$version" \
+                "$dest_file" \
+                ", revivified"
         else
             fetch_remote_file \
-                "$notebook" "$output_dir" "$uuid" "$dest_file" "$hash" "$version"
+                "$notebook" \
+                "$output_dir" \
+                "$uuid" \
+                "$dest_file" \
+                "$hash" \
+                "$version"
         fi
     fi
 }
@@ -1017,7 +1094,7 @@ function update_remote_file {
     local uuid="$2"
     local file="$3"
     local filepath="$4"
-    local body cached_hash http_code mime_type new_hash previous_hash response version
+    local body cached_hash http_code mime_type new_hash response update version
 
     cached_hash=$(get_sync_state "$uuid" hash)
     mime_type=$(file --mime-type -b "$filepath")
@@ -1027,6 +1104,7 @@ function update_remote_file {
         do_curl \
             --request PUT \
             --header "Content-Type: $mime_type" \
+            --header "Previous-Hash: $cached_hash" \
             --data-binary "@$filepath" \
             "${base_url}/v1/notebooks/${notebook}/${uuid}"
     )
@@ -1057,9 +1135,9 @@ function update_remote_file {
         exit 1
     fi
 
-    previous_hash=$(echo "$body" | jq -r '.previous_hash')
     new_hash=$(echo "$body" | jq -r '.content_hash')
     version=$(echo "$body" | jq -r '.version')
+    update=$(echo "$body" | jq -r '.update')
 
     local actual_hash
     actual_hash=$(sha256sum "$filepath" | awk '{print $1}')
@@ -1067,17 +1145,30 @@ function update_remote_file {
     if [[ "$new_hash" != "$actual_hash" ]]; then
         # the server normalised the line endings
         fetch_remote_file \
-            "$notebook" "$(dirname "$filepath")" "$uuid" "$file" "$new_hash"
+            "$notebook" \
+            "$(dirname "$filepath")" \
+            "$uuid" \
+            "$file" \
+            "$new_hash"
     fi
 
     update_remote_state "$uuid" "$file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
-    if [[ "$previous_hash" != "$cached_hash" ]]; then
-        printf "push: \"%s\" (v%s, remote changes overwritten)\n" "$file" "$version"
-    else
-        printf "push: \"%s\" (v%s)\n" "$file" "$version"
-    fi
+    case "$update" in
+        unchanged)
+            ;;
+        applied)
+            printf "push: \"%s\" (v%s)\n" "$file" "$version"
+            ;;
+        merged|replaced)
+            printf "push: \"%s\" (v%s, %s)\n" "$file" "$version" "$update"
+            ;;
+        *)
+            printf 'push: WARNING unexpected update type "%s" for "%s"\n' \
+                "$update" "$file"
+            ;;
+    esac
 }
 
 function fetch_remote_file {
@@ -1088,6 +1179,7 @@ function fetch_remote_file {
     local hash="$5"
     local version="${6:-}"
     local local_file="${7:-$remote_file}"
+    local suffix="${8:-}"
     local filepath="${output_dir}/${local_file}"
     local tmp http_code
 
@@ -1133,11 +1225,68 @@ function fetch_remote_file {
     if [[ "$local_file" == "$remote_file" ]]; then
         update_sync_state "$uuid" "$remote_file" "$remote_file" "$hash" "$hash"
         [[ -n "$version" ]] \
-            && printf 'pull: "%s" (v%s)\n' "$remote_file" "$version"
+            && printf 'pull: "%s" (v%s%s)\n' "$remote_file" "$version" "$suffix"
     else
         update_sync_state "$uuid" "" "" "$hash" "$hash"
-        printf 'pull: "%s" to "%s" (v%s)\n' "$remote_file" "$local_file" "$version"
+        printf 'pull: "%s" to "%s" (v%s%s)\n' \
+            "$remote_file" "$local_file" "$version" "$suffix"
     fi
+}
+
+function fetch_content_by_hash {
+    local notebook="$1"
+    local uuid="$2"
+    local hash="$3"
+    local output_file="$4"
+    local http_code response
+
+    response=$(
+        do_curl \
+            --output "$output_file" \
+            "${base_url}/v1/notebooks/${notebook}/${uuid}?hash=${hash}"
+    )
+    http_code=$(echo "$response" | tail -1)
+
+    [[ "$http_code" == "200" ]]
+}
+
+function try_three_way_merge {
+    local notebook="$1"
+    local uuid="$2"
+    local local_file="$3"
+    local base_hash="$4"
+    local remote_hash="$5"
+    local base_tmp remote_tmp merged_tmp
+
+    if ! command -v git >/dev/null 2>&1; then
+        return 1
+    fi
+
+    base_tmp=$(mktemp)
+    remote_tmp=$(mktemp)
+    merged_tmp=$(mktemp)
+
+    if ! fetch_content_by_hash "$notebook" "$uuid" "$base_hash" "$base_tmp"; then
+        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        return 1
+    fi
+    if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$remote_tmp"; then
+        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        return 1
+    fi
+
+    cp "$local_file" "$merged_tmp"
+    git merge-file -q --union "$merged_tmp" "$base_tmp" "$remote_tmp" 2>/dev/null
+    local merge_status=$?
+
+    if [[ $merge_status -eq 0 ]]; then
+        mv "$merged_tmp" "$local_file"
+        rm -f "$base_tmp" "$remote_tmp"
+        return 0
+    fi
+
+    rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+    return 1
 }
 
 function local_file_was_removed {

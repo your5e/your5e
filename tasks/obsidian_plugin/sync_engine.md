@@ -24,3 +24,7 @@ Using Node or Electron APIs means the plugin can't work on mobile.
 - [ ] update the sync engine to debounce local changes and then push after
       timeout
 - [ ] successful push also triggers pull
+
+And let's neaten things while we're at it.
+
+- [ ] decide if sync messages end in period or not, stick to one style

@@ -528,7 +528,7 @@ setup() {
 @test "local edited, CRLF line endings" {
     printf "First line\r\nSecond line\r\nThird line" > "$output_dir/Home.md"
 
-    # first run, sends the modification, server will normalise line endings
+    # push: first run, sends the modification, server will normalise line endings
     fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -564,24 +564,119 @@ setup() {
 }
 
 @test "local edited, remote edited" {
-    modify_file "Bestiary.md"
-    server_edit_content "$(uuid_for "Bestiary.md")"
+    modify_file "Bestiary.md" "$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+	EOF
+    )"
+
+    server_edit_content "$(uuid_for "Bestiary.md")" "$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+    )"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: "Bestiary.md" (v4, remote changes overwritten)
+        push: "Bestiary.md" (v4, merged)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_modified "Bestiary.md"
+    expected_content=$(sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+    )
+    diff -u <(echo "$expected_content") "$output_dir/Bestiary.md"
+
     assert_file_pushed "Bestiary.md" "text/markdown"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, same content" {
+    modify_file "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")" "modified local content"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_pushed "Bestiary.md" "text/markdown"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, no common ancestor" {
+    modify_file "index.md"
+    server_edit_content "$(uuid_for "index.md")"
+    set_base_hash "index.md" "no-common-ancestor"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: "index.md" (v3, replaced)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "index.md"
+    assert_file_pushed "index.md" "text/markdown"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
     assert_tracked_file_intact "characters/NPCs.md"
     assert_tracked_file_intact "The Old Café.md"
     assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
@@ -621,14 +716,14 @@ setup() {
 @test "local edited, remote edited, remote renamed" {
     modify_file "Home.md"
     server_edit_content "$(uuid_for "Home.md")"
-    server_rename "$(uuid_for "Home.md")" "renamed-home.md"
+    server_rename "$(uuid_for "Home.md")" "Welcome.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: renamed "renamed-home.md" to "Home.md"
-        push: "Home.md" (v6, remote changes overwritten)
+        push: renamed "Welcome.md" to "Home.md"
+        push: "Home.md" (v6, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -636,7 +731,7 @@ setup() {
     assert_file_modified "Home.md"
     assert_file_pushed "Home.md" "text/markdown"
     assert_file_in_state "Home.md"
-    assert_file_not_in_state "renamed-home.md"
+    assert_file_not_in_state "Welcome.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -699,7 +794,7 @@ setup() {
     assert_success
 }
 
-@test "stale file" {
+@test "stale file, incremental sync" {
     add_stale_file "my-notes.md"
 
     # incremental sync cannot detect stale files (see fetch_remote_state)
@@ -709,10 +804,24 @@ setup() {
     diff -u <(echo "") <(echo "$output")
     assert_file_unchanged "my-notes.md"
     assert_file_in_state "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_last_updated_exists
+    assert_success
+}
 
-    # full sync detects stale files by comparing against complete server state
+@test "stale file, full sync" {
+    add_stale_file "my-notes.md"
     setup_old_sync_metadata
 
+    # full sync detects stale files by comparing against complete server state
+    fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -734,7 +843,7 @@ setup() {
     assert_success
 }
 
-@test "stale file, remote edited" {
+@test "stale file, remote edited, incremental sync" {
     mark_file_stale "index.md"
     server_edit_content "$(uuid_for "index.md")"
 
@@ -748,9 +857,25 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    # full sync detects stale file, removes it, downloads new file
+    assert_tracked_file_intact "index.md"
+    assert_in_state "stale-uuid"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_success
+}
+
+@test "stale file, remote edited, full sync" {
+    mark_file_stale "index.md"
+    server_edit_content "$(uuid_for "index.md")"
     setup_old_sync_metadata
 
+    # full sync detects stale file, removes it, downloads new file
+    fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -773,11 +898,11 @@ setup() {
     assert_success
 }
 
-@test "stale file, local edited" {
+@test "stale file, local edited, incremental sync" {
     add_stale_file "my-notes.md"
     modify_file "my-notes.md"
 
-    # incremental sync learns UUID is stale from 404, creates new file
+    # push: incremental sync learns UUID is stale update is 404, pushes new file
     fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -789,19 +914,27 @@ setup() {
 
     assert_file_modified "my-notes.md"
     assert_file_in_state "my-notes.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
 
-    # reset conditions
-    restore_database
-    rm -rf "$output_dir"
-    init_synced_dir
+@test "stale file, local edited, full sync" {
     add_stale_file "my-notes.md"
     modify_file "my-notes.md"
-
-    # full sync already knows UUID is stale, creates new file
     setup_old_sync_metadata
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
+    # push: full sync knows UUID is stale
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: "my-notes.md" (v1)
 	EOF
@@ -811,6 +944,7 @@ setup() {
     assert_file_modified "my-notes.md"
     assert_file_in_state "my-notes.md"
     assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"
     assert_tracked_file_intact "Bestiary.md"
@@ -825,8 +959,9 @@ setup() {
     add_stale_file "my-notes.md"
     delete_tracked_file "my-notes.md"
     assert_in_state "stale-uuid"
+    setup_old_sync_metadata
 
-    fail_when_results_not 0
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=""
@@ -840,12 +975,13 @@ setup() {
     assert_success
 }
 
-@test "stale file, local deleted, remote edited" {
+@test "stale file, local deleted, remote edited, incremental sync" {
     mark_file_stale "index.md"
     delete_tracked_file "index.md"
     server_edit_content "$(uuid_for "index.md")"
     assert_in_state "stale-uuid"
 
+    # push: discovers stale entry via 404 when attempting to delete
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
@@ -858,6 +994,43 @@ setup() {
     assert_not_in_state "stale-uuid"
     assert_server_edited_content "index.md"
     assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "stale file, local deleted, remote edited, full sync" {
+    mark_file_stale "index.md"
+    delete_tracked_file "index.md"
+    server_edit_content "$(uuid_for "index.md")"
+    setup_old_sync_metadata
+
+    # full sync detects stale entry by comparing against complete server state
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        pull: "index.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_not_in_state "stale-uuid"
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -894,12 +1067,13 @@ setup() {
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: deleted "Bestiary.md" (had remote changes)
+        pull: "Bestiary.md" (v3, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_deleted_on_server "Bestiary.md"
+    assert_server_edited_content "Bestiary.md"
+    assert_file_in_state "Bestiary.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "Home.md"
@@ -939,20 +1113,23 @@ setup() {
 
 @test "local deleted, remote edited, remote renamed" {
     delete_tracked_file "Home.md"
-    server_rename "$(uuid_for "Home.md")" "Welcome.md"
     server_edit_content "$(uuid_for "Home.md")"
+    server_rename "$(uuid_for "Home.md")" "Welcome.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: renamed "Welcome.md" to "Home.md"
-        push: deleted "Home.md" (had remote changes)
+        pull: renamed "Home.md" to "Welcome.md"
+        pull: "Welcome.md" (v4, revivified)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_deleted_on_server "Home.md"
+    assert_server_edited_content "Welcome.md"
+    assert_file_not_downloaded "Home.md"
+    assert_file_in_state "Welcome.md"
+    assert_file_not_in_state "Home.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -967,22 +1144,23 @@ setup() {
 @test "local deleted, local edited, remote edited, remote renamed" {
     delete_tracked_file "Home.md"
     create_file "Welcome.md"
-    server_rename "$(uuid_for "Home.md")" "Welcome.md"
     server_edit_content "$(uuid_for "Home.md")"
+    server_rename "$(uuid_for "Home.md")" "Welcome.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: renamed "Welcome.md" to "Home.md"
-        push: deleted "Home.md" (had remote changes)
-        push: "Welcome.md" (v1)
+        push: ERROR cannot delete "Home.md", server has updates.
+        push: ERROR cannot push "Welcome.md": Path 'welcome' already exists.
+        pull: ERROR cannot rename "Home.md" to "Welcome.md", blocked by local file
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_server_file_deleted "Home.md"
-    assert_file_pushed "Welcome.md" "text/markdown"
+    assert_file_unchanged "Welcome.md"
+    assert_tracked_file_not_restored "Home.md"
+    assert_file_not_in_state "Welcome.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "index.md"
     assert_tracked_file_intact "sessions/session-01.md"
@@ -1108,7 +1286,7 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: renamed "Bestiary.md" to "renamed-bestiary.md"
-        push: "renamed-bestiary.md" (v5, remote changes overwritten)
+        push: "renamed-bestiary.md" (v5, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1187,8 +1365,8 @@ setup() {
 
 @test "local renamed, remote edited, remote renamed" {
     rename_local_file "index.md" "my-index.md"
-    server_rename "$(uuid_for "index.md")" "server-index.md"
     server_edit_content "$(uuid_for "index.md")"
+    server_rename "$(uuid_for "index.md")" "server-index.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -1218,15 +1396,15 @@ setup() {
 @test "local renamed, local edited, remote edited, remote renamed" {
     rename_local_file "index.md" "my-index.md"
     modify_file "my-index.md"
-    server_rename "$(uuid_for "index.md")" "server-index.md"
     server_edit_content "$(uuid_for "index.md")"
+    server_rename "$(uuid_for "index.md")" "server-index.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         push: renamed "server-index.md" to "my-index.md"
-        push: "my-index.md" (v5, remote changes overwritten)
+        push: "my-index.md" (v5, replaced)
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1404,6 +1582,37 @@ setup() {
     assert_file_deleted_on_server "index.md"
     assert_file_in_state "renamed-index.md"
     assert_file_not_in_state "index.md"
+    assert_tracked_file_intact "random-hexmap-7.png"
+    assert_tracked_file_intact "Home.md"
+    assert_tracked_file_intact "sessions/session-01.md"
+    assert_tracked_file_intact "Bestiary.md"
+    assert_tracked_file_intact "characters/NPCs.md"
+    assert_tracked_file_intact "The Old Café.md"
+    assert_tracked_file_intact "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local renamed untracked, hash mismatch, remote edited" {
+    rename_local_file_untracked "index.md" "renamed-index.md"
+    modify_file "renamed-index.md"
+    server_edit_content "$(uuid_for "index.md")"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        push: "renamed-index.md" (v1)
+        pull: "index.md" (v2, revivified)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
+    assert_file_modified "renamed-index.md"
+    assert_file_pushed "renamed-index.md" "text/markdown"
+    assert_file_in_state "renamed-index.md"
     assert_tracked_file_intact "random-hexmap-7.png"
     assert_tracked_file_intact "Home.md"
     assert_tracked_file_intact "sessions/session-01.md"

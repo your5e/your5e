@@ -866,6 +866,7 @@ class NotebookPageEditView(NotebookEditMixin, NotebookPageMixin, FormView):
     def save_page(self, form, filename, content):
         data = content.encode("utf-8")
         page = self.page
+        base_hash = self.request.POST.get("previous_hash") or None
 
         if page is None:
             page = Page.objects.create(wiki=self.object)
@@ -876,6 +877,7 @@ class NotebookPageEditView(NotebookEditMixin, NotebookPageMixin, FormView):
                 mime_type=self.mime_type,
                 data=data,
                 created_by=self.request.user,
+                base_hash=base_hash,
             )
         except ValidationError as e:
             return self.handle_validation_error(e, form, page)

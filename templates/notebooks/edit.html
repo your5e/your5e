@@ -58,6 +58,9 @@
 
   <form method="post"{% if form_action %} action="{{ form_action }}"{% endif %} class="edit-form">
     {% csrf_token %}
+    {% if version %}
+      <input type="hidden" name="previous_hash" value="{{ version.content.hash }}">
+    {% endif %}
     <p>
       {{ form.filename.label_tag }}<br>
       {{ form.filename }}

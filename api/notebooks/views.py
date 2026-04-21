@@ -390,8 +390,16 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             raise Http404
 
         version_number = request.query_params.get("version")
+        content_hash = request.query_params.get("hash")
+
+        if version_number and content_hash:
+            raise ValidationError("Cannot specify both version and hash.")
+
         try:
-            version = page.get_version(version_number)
+            if content_hash:
+                version = page.get_version_by_hash(content_hash)
+            else:
+                version = page.get_version(version_number)
         except page.DoesNotExist:
             raise Http404 from None
 
@@ -417,6 +425,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             raise Http404
 
         previous_hash = page.latest_version.content.hash
+        base_hash = request.META.get("HTTP_PREVIOUS_HASH")
 
         if page.deleted_at:
             try:
@@ -429,6 +438,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             mime_type=request.content_type,
             data=request.body,
             created_by=request.user,
+            base_hash=base_hash,
         )
 
         return self.version_response(request, notebook, page, version, previous_hash)
@@ -546,4 +556,5 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
         }
         if previous_hash is not None:
             data["previous_hash"] = previous_hash
+            data["update"] = getattr(version, "update_type", "replaced")
         return Response(data)
