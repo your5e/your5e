@@ -62,6 +62,7 @@ CORS_ALLOW_HEADERS = [
     "accept",
     "authorization",
     "content-type",
+    "previous-hash",
 ]
 
 STATIC_URL = "static/"
