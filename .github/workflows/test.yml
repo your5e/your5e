@@ -21,16 +21,40 @@ jobs:
       - name: Run Python tests
         run: make test-django EXEC_FLAGS=-T
 
-      - name: Install bats
+      - name: Install bats and kcov dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bats
+          sudo apt-get install -y bats libcurl4 libdw1
+
+      - name: Cache kcov
+        id: cache-kcov
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/kcov
+          key: kcov-v43
+
+      - name: Build kcov
+        if: steps.cache-kcov.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y binutils-dev libcurl4-openssl-dev libdw-dev libiberty-dev cmake
+          curl -sL https://github.com/SimonKagstrom/kcov/archive/refs/tags/v43.tar.gz | tar xz
+          cd kcov-43
+          mkdir build && cd build
+          cmake ..
+          make -j$(nproc)
+          sudo make install
 
       - name: Start test server
         run: make server-tests
 
       - name: Run integration tests
         run: make test-sync-integration
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bats-coverage
+          path: coverage/
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

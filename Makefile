@@ -70,7 +70,11 @@ test-sync-integration:
 	shellcheck tests/*.sh
 	python tests/check-test-coverage.py bats
 	awk -f tests/check-line-length.awk tests/*.sh
+ifdef CI
+	kcov --include-path=$$PWD/tests coverage bats tests/*.bats
+else
 	bats tests/*.bats
+endif
 
 test-obsidian-plugin:
 	tests/check-page-size-sync.sh
