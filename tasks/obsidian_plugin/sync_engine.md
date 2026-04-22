@@ -14,6 +14,25 @@ independently.
 - [X] reimplement the pagination tests
 - [X] pull using updates-since
 
+
+# Error reporting @phase
+
+When sync fails due to network or API errors (5xx), the plugin should
+notify the user via Obsidian's notification system.
+
+- [ ] sync engine reports failure to the plugin when network/API errors occur
+- [ ] plugin displays notification bubble on sync failure
+
+Unresolvable conflicts (hidden files, missing extension) should be reported
+once per session, not every sync cycle. Track reported paths in a plugin
+instance variable (cleared on restart).
+
+- [ ] track reported unresolvable conflicts in plugin instance variable
+- [ ] report unresolvable conflict only once per plugin lifetime
+
+
+# Obsidian API @phase
+
 Using Node or Electron APIs means the plugin can't work on mobile.
 
 - [ ] refactor to use Obsidian APIs instead of Node.js
