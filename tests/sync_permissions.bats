@@ -220,13 +220,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "newfile.md"
-    assert_tracked_file_matches_fixture "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixture_files_downloaded
     assert_state_matches_fixture
     assert_last_updated_unchanged
     assert_failure
@@ -247,13 +241,8 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_unchanged "newfile.md"
-    assert_tracked_file_matches_fixture "index.md"
     assert_server_edited_content "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "Bestiary.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -271,12 +260,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_file_modified "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md"
     assert_state_matches_fixture
     assert_last_updated_unchanged
     assert_failure
@@ -298,11 +282,7 @@ setup() {
 
     assert_file_modified "index.md"
     assert_server_edited_content "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md" "Bestiary.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -321,12 +301,7 @@ setup() {
 
     assert_tracked_file_matches_fixture "index.md" "renamed.md"
     assert_file_not_downloaded "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md"
     assert_last_updated_unchanged
     assert_failure
 }
@@ -348,11 +323,7 @@ setup() {
     assert_tracked_file_matches_fixture "index.md" "renamed.md"
     assert_file_not_downloaded "index.md"
     assert_server_edited_content "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md" "Bestiary.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -370,12 +341,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_not_restored "index.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md"
     assert_last_updated_unchanged
     assert_failure
 }
@@ -389,7 +355,6 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         sync: NOTE permission denied, switching to pull-only mode
-        pull: SKIPPING pull "index.md", already deleted locally
         pull: "Bestiary.md" (v3)
 	EOF
     )
@@ -397,11 +362,7 @@ setup() {
 
     assert_tracked_file_not_restored "index.md"
     assert_server_edited_content "Bestiary.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "index.md" "Bestiary.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -419,12 +380,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_intact "Bestiary.md"
-    assert_tracked_file_matches_fixture "index.md"
-    assert_tracked_file_matches_fixture "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "Bestiary.md"
     assert_last_updated_unchanged
     assert_failure
 }
@@ -445,12 +401,8 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_intact "Bestiary.md"
-    assert_tracked_file_matches_fixture "index.md"
     assert_server_edited_content "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
+    assert_fixtures_intact_except "Bestiary.md" "Home.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -471,14 +423,8 @@ setup() {
 
     assert_file_not_downloaded "Rumours.md"
     assert_file_not_in_state "Rumours.md"
-    assert_tracked_file_matches_fixture "index.md"
     assert_server_edited_content "Home.md"
-    assert_tracked_file_matches_fixture "characters/NPCs.md"
-    assert_tracked_file_matches_fixture "sessions/session-01.md"
-    assert_tracked_file_matches_fixture "Bestiary.md"
-    assert_tracked_file_matches_fixture "The Old Café.md"
-    assert_tracked_file_matches_fixture "random-hexmap-7.png"
-    assert_tracked_file_matches_fixture "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_fixtures_intact_except "Home.md"
     assert_sync_metadata_updated
     assert_success
 }

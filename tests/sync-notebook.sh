@@ -14,6 +14,9 @@ verbose=0
 watch=0
 state_file=""
 last_update=""
+incremental_sync=0
+deferred_uuids=()
+
 remote_state_file="$(mktemp)"
 trap 'rm -f "$remote_state_file"' EXIT
 
@@ -102,9 +105,15 @@ function sync_notebook {
     # shellcheck disable=SC2046
     apply_remote_deletions "$output_dir" $(get_remote_state "" deleted_uuids)
 
+    deferred_uuids=()
     # shellcheck disable=SC2046
     apply_remote_updates "$notebook" "$output_dir" "" \
         $(get_remote_state "" active_uuids)
+
+    # process any UUIDs that were deferred due to rename cycles
+    if [[ ${#deferred_uuids[@]} -gt 0 ]]; then
+        apply_remote_updates "$notebook" "$output_dir" "" "${deferred_uuids[@]}"
+    fi
 
     [[ $incremental_sync -eq 0 ]] \
         && check_for_stale_files "$output_dir"
@@ -290,11 +299,7 @@ function apply_local_updates {
                 fi
 
                 if has_remote_changes "$uuid"; then
-                    # server has updates; if blocked, error; else let pull handle
-                    if [[ -e "$output_dir/$remote_filename" ]]; then
-                        printf 'push: ERROR cannot delete "%s", ' "$local_fn"
-                        printf 'server has updates.\n'
-                    fi
+                    # edited further, so pull will revivify
                     continue
                 fi
 
@@ -375,14 +380,9 @@ function apply_remote_deletions {
         local filepath="${output_dir}/${cached_local_file}"
 
         if has_local_changes "$uuid" "$filepath"; then
-            if [[ "$cached_local_file" != "$cached_remote_file" ]]; then
-                printf 'pull: SKIPPING delete "%s" (at "%s"), ' \
-                    "$cached_remote_file" "$cached_local_file"
-                printf 'local changes would be lost\n'
-            else
-                printf 'pull: SKIPPING delete "%s", local changes would be lost\n' \
-                    "$cached_local_file"
-            fi
+            rename_blocking_path "$output_dir" "$filepath" "pull"
+            update_sync_state -d "$uuid"
+            printf "pull: deleted \"%s\"\n" "$cached_remote_file"
         else
             remove_file "$uuid" "$filepath"
             if [[ "$cached_local_file" != "$cached_remote_file" ]]; then
@@ -429,10 +429,14 @@ function apply_remote_updates {
     # of the cycle produces a complication, a would not be in $vacating,
     # and the rename is therefore blocked.
     local new_vacating="$vacating"
-    is_being_renamed "$uuid" "$dest_file" \
-        && ! local_file_was_removed "$src_path" \
-        && ! has_local_changes "$uuid" "$src_path" \
-        && new_vacating="${vacating:+$vacating:}$src_file"
+    if is_being_renamed "$uuid" "$dest_file" \
+            && ! local_file_was_removed "$src_path"; then
+        if ! has_local_changes "$uuid" "$src_path"; then
+            new_vacating="${vacating:+$vacating:}$src_file"
+        elif has_remote_changes "$uuid"; then
+            new_vacating="${vacating:+$vacating:}$src_file"
+        fi
+    fi
 
     # Deal with any remaining arguments.
     apply_remote_updates "$notebook" "$output_dir" "$new_vacating" "$@"
@@ -440,32 +444,54 @@ function apply_remote_updates {
     # Now everything else has been dealt with, we can process the current update.
     local dest_path="${output_dir}/${dest_file}"
 
-    # [[ -t 1 ]] \
-    #     && printf "\e[2K%s\r" "$dest_file"
-
     local cached_uuid
     cached_uuid=$(get_sync_state "$dest_file" uuid)
 
     if is_cached_uuid_stale "$cached_uuid" "$uuid"; then
-        if [[ -f "$dest_path" ]] && has_local_changes "$cached_uuid" "$dest_path"; then
-            printf 'pull: SKIPPING delete "%s", local changes would be lost\n' \
-                "$dest_file"
-            return 0
+        if [[ -f "$dest_path" ]]; then
+            if has_local_changes "$cached_uuid" "$dest_path"; then
+                rename_blocking_path "$output_dir" "$dest_path" "pull" "silent"
+            else
+                rm "$dest_path"
+            fi
         fi
-
-        remove_file "$cached_uuid" "$dest_path"
+        update_sync_state -d "$cached_uuid"
     fi
 
-    if file_blocked_by_directory "$dest_path" "$uuid" "$dest_file"; then
-        printf "pull: ERROR cannot pull \"%s\", blocked by local directory\n" \
-            "$dest_file"
+    local blocking_path
+    blocking_path=$(find_blocking_parent_path "$output_dir" "$dest_file")
 
-    elif parent_blocked_by_file "$output_dir" "$dest_file"; then
-        printf "pull: ERROR cannot pull \"%s\", blocked by local file\n" "$dest_file"
+    if file_blocked_by_directory "$dest_path" "$uuid" "$dest_file"; then
+        rename_blocking_path "$output_dir" "$dest_path"
+        fetch_remote_file \
+            "$notebook" \
+            "$output_dir" \
+            "$uuid" \
+            "$dest_file" \
+            "$hash" \
+            "$version"
+
+    elif [[ -n "$blocking_path" ]]; then
+        rename_blocking_path "$output_dir" "$blocking_path"
+        fetch_remote_file \
+            "$notebook" \
+            "$output_dir" \
+            "$uuid" \
+            "$dest_file" \
+            "$hash" \
+            "$version"
 
     elif file_exists_with_different_case "$dest_path" "$dest_file"; then
-        printf 'pull: ERROR cannot pull "%s", ' "$dest_file"
-        printf "blocked by local file with different case\n"
+        local collision_path
+        collision_path=$(find_case_collision_path "$dest_path" "$dest_file")
+        rename_blocking_path "$output_dir" "$collision_path"
+        fetch_remote_file \
+            "$notebook" \
+            "$output_dir" \
+            "$uuid" \
+            "$dest_file" \
+            "$hash" \
+            "$version"
 
     elif file_matches_hash "$dest_path" "$hash" && is_untracked "$uuid"; then
         printf "pull: tracking \"%s\" (v%s)\n" "$dest_file" "$version"
@@ -477,15 +503,41 @@ function apply_remote_updates {
             && src_path="${src_path}.vacated"
 
         if is_locally_renamed "$uuid"; then
-            local cached_remote_fn
-            cached_remote_fn=$(get_sync_state "$uuid" server_filename)
-            printf 'pull: SKIPPING rename "%s" to "%s", already "%s" locally\n' \
-                "$cached_remote_fn" "$dest_file" "$src_file"
-
             if has_remote_changes "$uuid" \
                     && has_local_changes "$uuid" "$src_path"; then
-                printf 'pull: SKIPPING pull "%s" to "%s", ' "$dest_file" "$src_file"
-                printf 'local changes would be lost\n'
+                local base_hash remote_hash
+                base_hash=$(get_sync_state "$uuid" hash)
+                remote_hash=$(get_remote_state "$uuid" hash)
+
+                if try_three_way_merge \
+                        "$notebook" \
+                        "$uuid" \
+                        "$src_path" \
+                        "$base_hash" \
+                        "$remote_hash"
+                then
+                    update_sync_state \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$src_file" \
+                        "$remote_hash" \
+                        "$(hash_file "$src_path")"
+                    printf 'pull: "%s" to "%s" (v%s, merged)\n' \
+                        "$dest_file" "$src_file" "$version"
+                else
+                    local conflict_path="${src_path%.vacated}"
+                    [[ "$src_path" != "$conflict_path" ]] \
+                        && mv "$src_path" "$conflict_path"
+                    rename_blocking_path "$output_dir" "$conflict_path" "pull"
+                    fetch_remote_file \
+                        "$notebook" \
+                        "$output_dir" \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$hash" \
+                        "$version" \
+                        "$src_file"
+                fi
             elif has_remote_changes "$uuid"; then
                 fetch_remote_file \
                     "$notebook" \
@@ -495,11 +547,55 @@ function apply_remote_updates {
                     "$hash" \
                     "$version" \
                     "$src_file"
+            else
+                update_sync_state "$uuid" "$dest_file" "$src_file" "$hash" "$hash"
             fi
 
         elif has_local_changes "$uuid" "$src_path"; then
-            printf 'pull: SKIPPING rename "%s" to "%s", ' "$src_file" "$dest_file"
-            printf "local changes would be lost\n"
+            if has_remote_changes "$uuid"; then
+                local base_hash remote_hash
+                base_hash=$(get_sync_state "$uuid" hash)
+                remote_hash=$(get_remote_state "$uuid" hash)
+
+                if try_three_way_merge \
+                        "$notebook" \
+                        "$uuid" \
+                        "$src_path" \
+                        "$base_hash" \
+                        "$remote_hash"
+                then
+                    rename_file "$src_path" "$dest_path"
+                    printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
+                    update_sync_state \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$dest_file" \
+                        "$remote_hash" \
+                        "$(hash_file "$dest_path")"
+                    printf 'pull: "%s" (v%s, merged)\n' "$dest_file" "$version"
+                else
+                    local conflict_path="${src_path%.vacated}"
+                    [[ "$src_path" != "$conflict_path" ]] \
+                        && mv "$src_path" "$conflict_path"
+                    rename_blocking_path "$output_dir" "$conflict_path" "pull"
+                    fetch_remote_file \
+                        "$notebook" \
+                        "$output_dir" \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$hash" \
+                        "$version"
+                fi
+            else
+                rename_file "$src_path" "$dest_path"
+                printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
+                update_sync_state \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$(hash_file "$dest_path")"
+            fi
 
         elif destination_occupied "$dest_path"; then
             if [[ ":$vacating:" == *":$dest_file:"* ]]; then
@@ -522,20 +618,57 @@ function apply_remote_updates {
                         "$version"
                 fi
 
+            elif local_file_was_removed "$src_path" && has_remote_changes "$uuid"; then
+                rename_blocking_path "$output_dir" "$dest_path" "pull"
+                fetch_remote_file \
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version" \
+                    "$dest_file" \
+                    ", revivified"
+
             else
-                printf 'pull: ERROR cannot rename "%s" to "%s", ' \
-                    "$src_file" "$dest_file"
-                printf "blocked by local file\n"
+                rename_blocking_path "$output_dir" "$dest_path" "pull"
+                rename_file "$src_path" "$dest_path"
+                printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
+
+                if file_matches_hash "$dest_path" "$hash"; then
+                    update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
+                else
+                    fetch_remote_file \
+                        "$notebook" \
+                        "$output_dir" \
+                        "$uuid" \
+                        "$dest_file" \
+                        "$hash" \
+                        "$version"
+                fi
             fi
 
         elif [[ -d "$dest_path" ]]; then
-            printf 'pull: ERROR cannot rename "%s" to "%s", ' \
-                "$src_file" "$dest_file"
-            printf "blocked by local directory\n"
+            rename_blocking_path "$output_dir" "$dest_path" "pull"
+            rename_file "$src_path" "$dest_path"
+            printf "pull: renamed \"%s\" to \"%s\"\n" "$src_file" "$dest_file"
+
+            if file_matches_hash "$dest_path" "$hash"; then
+                update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
+            else
+                fetch_remote_file \
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version"
+            fi
 
         elif local_file_was_removed "$src_path"; then
             if has_remote_changes "$uuid"; then
-                printf 'pull: renamed "%s" to "%s"\n' "$src_file" "$dest_file"
+                [[ -e "$dest_path" ]] \
+                    && rename_blocking_path "$output_dir" "$dest_path" "pull"
                 fetch_remote_file \
                     "$notebook" \
                     "$output_dir" \
@@ -546,8 +679,7 @@ function apply_remote_updates {
                     "$dest_file" \
                     ", revivified"
             else
-                printf 'pull: SKIPPING rename "%s" to "%s", ' "$src_file" "$dest_file"
-                printf '"%s" deleted locally\n' "$src_file"
+                update_sync_state "$uuid" "$dest_file" "$dest_file" "$hash" "$hash"
             fi
 
         else
@@ -568,9 +700,19 @@ function apply_remote_updates {
         fi
 
     elif has_local_changes "$uuid" "$dest_path"; then
-        if is_untracked "$uuid"; then
-            printf "pull: ERROR cannot pull \"%s\", blocked by local file\n" \
-                "$dest_file"
+        if is_untracked "$uuid" && [[ ":$vacating:" == *":$dest_file:"* ]]; then
+            # dest_file will be vacated by rename cycle; defer this fetch
+            deferred_uuids+=("$uuid")
+
+        elif is_untracked "$uuid"; then
+            rename_blocking_path "$output_dir" "$dest_path"
+            fetch_remote_file \
+                "$notebook" \
+                "$output_dir" \
+                "$uuid" \
+                "$dest_file" \
+                "$hash" \
+                "$version"
 
         elif has_remote_changes "$uuid"; then
             local base_hash remote_hash local_hash
@@ -601,20 +743,54 @@ function apply_remote_updates {
                     "$(hash_file "$dest_path")"
                 printf 'pull: "%s" (v%s, merged)\n' "$dest_file" "$version"
             else
-                printf 'pull: SKIPPING pull "%s", local changes would be lost\n' \
-                    "$dest_file"
+                rename_blocking_path "$output_dir" "$dest_path" "pull"
+                fetch_remote_file \
+                    "$notebook" \
+                    "$output_dir" \
+                    "$uuid" \
+                    "$dest_file" \
+                    "$hash" \
+                    "$version"
             fi
         fi
 
     elif deleted_locally_no_new_content "$uuid" "$dest_file" "$dest_path"; then
-        printf 'pull: SKIPPING pull "%s", already deleted locally\n' "$dest_file"
+        :
 
     elif is_locally_renamed "$uuid" && ! has_remote_changes "$uuid"; then
-        :  # local rename, no remote changes - nothing to do
+        :
 
     elif is_locally_renamed "$uuid" && has_local_changes "$uuid" "$src_path"; then
-        printf 'pull: SKIPPING pull "%s" to "%s", local changes would be lost\n' \
-            "$dest_file" "$src_file"
+        local base_hash remote_hash
+        base_hash=$(get_sync_state "$uuid" hash)
+        remote_hash=$(get_remote_state "$uuid" hash)
+
+        if try_three_way_merge \
+                "$notebook" \
+                "$uuid" \
+                "$src_path" \
+                "$base_hash" \
+                "$remote_hash"
+        then
+            update_sync_state \
+                "$uuid" \
+                "$dest_file" \
+                "$src_file" \
+                "$remote_hash" \
+                "$(hash_file "$src_path")"
+            printf 'pull: "%s" to "%s" (v%s, merged)\n' \
+                "$dest_file" "$src_file" "$version"
+        else
+            rename_blocking_path "$output_dir" "$src_path" "pull"
+            fetch_remote_file \
+                "$notebook" \
+                "$output_dir" \
+                "$uuid" \
+                "$dest_file" \
+                "$hash" \
+                "$version" \
+                "$src_file"
+        fi
 
     elif is_locally_renamed "$uuid" && has_remote_changes "$uuid"; then
         fetch_remote_file \
@@ -657,25 +833,24 @@ function check_for_stale_files {
     [[ ! -f "$state_file" ]] \
         && return 0
 
-    while IFS=$'\t' read -r uuid _ local_fn hash _; do
+    while IFS=$'\t' read -r uuid server_fn local_fn hash _; do
         is_uuid_on_remote "$uuid" && continue
 
-        # Skip if filename now belongs to a different UUID on remote
-        # (we already handled this in apply_remote_updates_impl)
+        # skip if filename now belongs to a different UUID on remote
         local remote_uuid
         remote_uuid=$(get_remote_state "$local_fn" uuid)
         [[ -n "$remote_uuid" ]] && continue
 
         local filepath="$output_dir/$local_fn"
-
         if [[ ! -f "$filepath" ]]; then
             update_sync_state -d "$uuid"
             continue
         fi
 
         if has_local_changes "$uuid" "$filepath"; then
-            printf 'pull: SKIPPING delete "%s", local changes would be lost\n' \
-                "$local_fn"
+            rename_blocking_path "$output_dir" "$filepath" "pull"
+            update_sync_state -d "$uuid"
+            printf "pull: deleted \"%s\"\n" "$server_fn"
         else
             remove_file "$uuid" "$filepath"
             printf "pull: deleted \"%s\"\n" "$local_fn"
@@ -800,6 +975,9 @@ function update_remote_state {
                 [[ -n "$hash" ]] && h="$hash"
                 [[ -n "$version" ]] && v="$version"
                 [[ $deleted_at_provided -eq 1 ]] && d="$deleted_at"
+            elif [[ -n "$filename" && "$f" == "$filename" ]]; then
+                # different uuid claims filename, probable stale file
+                continue
             fi
             printf '%s\t%s\t%s\t%s\t%s\n' "$u" "$f" "$h" "$v" "$d" >> "$tmp"
         done < "$remote_state_file"
@@ -948,8 +1126,11 @@ function rename_remote_file {
     local new_file="$4"
 
     local payload="{\"filename\": \"$new_file\"}"
-    is_remote_deleted "$uuid" \
-        && payload="{\"filename\": \"$new_file\", \"restore\": true}"
+    local is_revivify=0
+    if is_remote_deleted "$uuid"; then
+        payload="{\"filename\": \"$new_file\", \"restore\": true}"
+        is_revivify=1
+    fi
 
     local response
     response=$(
@@ -995,7 +1176,11 @@ function rename_remote_file {
     update_remote_state "$uuid" "$new_file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$new_file" "$new_file"
 
-    printf 'push: renamed "%s" to "%s"\n' "$old_file" "$new_file"
+    if [[ $is_revivify -eq 1 ]]; then
+        printf 'push: renamed "%s" to "%s" (revivified)\n' "$old_file" "$new_file"
+    else
+        printf 'push: renamed "%s" to "%s"\n' "$old_file" "$new_file"
+    fi
 }
 
 function delete_remote_file {
@@ -1069,7 +1254,50 @@ function create_remote_file {
         return 1
     fi
 
-    if [[ "$http_code" == "400" || "$http_code" == "409" ]]; then
+    if [[ "$http_code" == "409" ]]; then
+        error_msg=$(echo "$body" | jq -r '.error')
+        if [[ "$error_msg" == *"already exists"* ]]; then
+            local output_dir="${filepath%"$file"}"
+            output_dir="${output_dir%/}"
+
+            local conflicting_path
+            conflicting_path=$(
+                echo "$error_msg" | sed "s/Path '//; s/' already exists.*//"
+            )
+
+            # check for conflicts in parent directories
+            local num_parts parent_dir parent_slug
+            num_parts=$(echo "$conflicting_path" | tr '/' '\n' | wc -l | tr -d ' ')
+            parent_dir=$(echo "$file" | cut -d'/' -f1-"$num_parts")
+            parent_slug=$(
+                echo "$parent_dir" \
+                    | tr '[:upper:]' '[:lower:]' \
+                    | tr ' ' '-' \
+                    | sed "s/'//g; s/\.md$//"
+            )
+
+            if [[ "$file" == *"/"* && "$parent_slug" == "$conflicting_path" ]]; then
+                # Rename the parent directory, not the file
+                local new_dir_name
+                new_dir_name=$(generate_conflict_name "$parent_dir" 1)
+                rename_blocking_path "$output_dir" "$output_dir/$parent_dir" "push"
+                local new_file="${new_dir_name}${file#"$parent_dir"}"
+                create_remote_file "$notebook" "$new_file" "$output_dir/$new_file"
+                return $?
+            else
+                # Rename the file itself
+                local new_name
+                new_name=$(generate_conflict_name "$file")
+                rename_blocking_path "$output_dir" "$filepath" "push"
+                create_remote_file "$notebook" "$new_name" "$output_dir/$new_name"
+                return $?
+            fi
+        fi
+        printf "push: ERROR cannot push \"%s\": %s\n" "$file" "$error_msg"
+        return 2
+    fi
+
+    if [[ "$http_code" == "400" ]]; then
         error_msg=$(echo "$body" | jq -r '.error')
         printf "push: ERROR cannot push \"%s\": %s\n" "$file" "$error_msg"
         return 2
@@ -1152,6 +1380,9 @@ function update_remote_file {
             "$new_hash"
     fi
 
+    local is_revivify=0
+    is_remote_deleted "$uuid" && is_revivify=1
+
     update_remote_state "$uuid" "$file" "$new_hash" "$version" ""
     update_sync_state "$uuid" "$file" "$file" "$new_hash" "$new_hash"
 
@@ -1159,7 +1390,11 @@ function update_remote_file {
         unchanged)
             ;;
         applied)
-            printf "push: \"%s\" (v%s)\n" "$file" "$version"
+            if [[ $is_revivify -eq 1 ]]; then
+                printf "push: \"%s\" (v%s, revivified)\n" "$file" "$version"
+            else
+                printf "push: \"%s\" (v%s)\n" "$file" "$version"
+            fi
             ;;
         merged|replaced)
             printf "push: \"%s\" (v%s, %s)\n" "$file" "$version" "$update"
@@ -1227,7 +1462,7 @@ function fetch_remote_file {
         [[ -n "$version" ]] \
             && printf 'pull: "%s" (v%s%s)\n' "$remote_file" "$version" "$suffix"
     else
-        update_sync_state "$uuid" "" "" "$hash" "$hash"
+        update_sync_state "$uuid" "$remote_file" "$local_file" "$hash" "$hash"
         printf 'pull: "%s" to "%s" (v%s%s)\n' \
             "$remote_file" "$local_file" "$version" "$suffix"
     fi
@@ -1256,7 +1491,7 @@ function try_three_way_merge {
     local local_file="$3"
     local base_hash="$4"
     local remote_hash="$5"
-    local base_tmp remote_tmp merged_tmp
+    local base_tmp remote_tmp
 
     if ! command -v git >/dev/null 2>&1; then
         return 1
@@ -1264,22 +1499,59 @@ function try_three_way_merge {
 
     base_tmp=$(mktemp)
     remote_tmp=$(mktemp)
-    merged_tmp=$(mktemp)
 
     if ! fetch_content_by_hash "$notebook" "$uuid" "$base_hash" "$base_tmp"; then
-        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        rm -f "$base_tmp" "$remote_tmp"
         return 1
     fi
     if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$remote_tmp"; then
-        rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+        rm -f "$base_tmp" "$remote_tmp"
         return 1
     fi
 
-    cp "$local_file" "$merged_tmp"
-    git merge-file -q --union "$merged_tmp" "$base_tmp" "$remote_tmp" 2>/dev/null
-    local merge_status=$?
+    # git merge-file will see two additions to a file at the top/bottom as conflicting
+    # amendments, even though they are not actually editing the "same line" -- when that
+    # is the case, make both additions
+    if    is_pure_addition "$base_tmp" "$local_file" \
+       && is_pure_addition "$base_tmp" "$remote_tmp"
+    then
+        if    is_bottom_addition "$base_tmp" "$local_file" \
+           && is_bottom_addition "$base_tmp" "$remote_tmp"
+        then
+            local local_add remote_add
+            local_add=$(get_addition "$base_tmp" "$local_file")
+            remote_add=$(get_addition "$base_tmp" "$remote_tmp")
+            {
+                cat "$base_tmp"
+                echo "$local_add"
+                echo "$remote_add"
+            } > "$local_file"
+            rm -f "$base_tmp" "$remote_tmp"
+            return 0
+        fi
 
-    if [[ $merge_status -eq 0 ]]; then
+        if    is_top_addition "$base_tmp" "$local_file" \
+           && is_top_addition "$base_tmp" "$remote_tmp"
+        then
+            local local_add remote_add
+            local_add=$(get_addition "$base_tmp" "$local_file")
+            remote_add=$(get_addition "$base_tmp" "$remote_tmp")
+            {
+                printf '%s' "$local_add"
+                printf '%s' "$remote_add"
+                cat "$base_tmp"
+            } > "$local_file"
+            rm -f "$base_tmp" "$remote_tmp"
+            return 0
+        fi
+    fi
+
+    # Fall back to git merge-file without --union
+    local merged_tmp
+    merged_tmp=$(mktemp)
+    cp "$local_file" "$merged_tmp"
+
+    if git merge-file -q "$merged_tmp" "$base_tmp" "$remote_tmp" 2>/dev/null; then
         mv "$merged_tmp" "$local_file"
         rm -f "$base_tmp" "$remote_tmp"
         return 0
@@ -1287,6 +1559,44 @@ function try_three_way_merge {
 
     rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
     return 1
+}
+
+function is_pure_addition {
+    local base="$1"
+    local modified="$2"
+    local diff_output
+
+    diff_output=$(/usr/bin/diff "$base" "$modified") || true
+    if echo "$diff_output" | grep -qE '^[0-9]+(c|d)'; then
+        return 1
+    fi
+    return 0
+}
+
+function is_top_addition {
+    local base="$1"
+    local modified="$2"
+    local first_diff_line
+
+    first_diff_line=$(/usr/bin/diff "$base" "$modified" 2>/dev/null | head -1)
+    echo "$first_diff_line" | grep -q '^0a'
+}
+
+function is_bottom_addition {
+    local base="$1"
+    local modified="$2"
+    local last_line first_diff_line
+
+    last_line=$(wc -l < "$base" | tr -d ' ')
+    first_diff_line=$(/usr/bin/diff "$base" "$modified" 2>/dev/null | head -1)
+    echo "$first_diff_line" | grep -q "^${last_line}a"
+}
+
+function get_addition {
+    local base="$1"
+    local modified="$2"
+
+    /usr/bin/diff "$base" "$modified" | sed -n '/^> /s/^> //p'
 }
 
 function local_file_was_removed {
@@ -1408,28 +1718,6 @@ function file_blocked_by_directory {
         &&  ! is_being_renamed "$uuid" "$dest_file"
 }
 
-function parent_blocked_by_file {
-    local output_dir="$1"
-    local file="$2"
-    local check_path="$output_dir"
-    local dir_part
-
-    dir_part=$(dirname "$file")
-
-    [[ "$dir_part" == "." ]] \
-        && return 1
-
-    IFS='/' read -ra path_parts <<< "$dir_part"
-    for part in "${path_parts[@]}"; do
-        check_path="${check_path}/${part}"
-        if [[ -f "$check_path" ]]; then
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 function file_exists_with_different_case {
     local filepath="$1"
     local file="$2"
@@ -1447,6 +1735,109 @@ function file_exists_with_different_case {
     [[ "$(basename "$actual_file")" == "$base_name" ]] \
         && return 1
     return 0
+}
+
+function find_case_collision_path {
+    local filepath="$1"
+    local file="$2"
+
+    local dir_path base_name
+    dir_path=$(dirname "$filepath")
+    base_name=$(basename "$file")
+
+    find "$dir_path" -maxdepth 1 -iname "$base_name" -print -quit 2>/dev/null
+}
+
+function find_blocking_parent_path {
+    local output_dir="$1"
+    local file="$2"
+    local check_path="$output_dir"
+    local dir_part
+
+    dir_part=$(dirname "$file")
+
+    [[ "$dir_part" == "." ]] \
+        && return
+
+    IFS='/' read -ra path_parts <<< "$dir_part"
+    for part in "${path_parts[@]}"; do
+        check_path="${check_path}/${part}"
+        if [[ -f "$check_path" ]]; then
+            echo "$check_path"
+            return
+        fi
+    done
+}
+
+function slugify_path {
+    local part="$1"
+    local name ext slug
+
+    # Remove apostrophes
+    part="${part//\'/}"
+
+    # Extract name and extension
+    if [[ "$part" == *.* ]]; then
+        ext="${part##*.}"
+        name="${part%.*}"
+        # Slugify: lowercase, spaces/underscores to hyphens, remove non-alphanumeric
+        slug=$(echo "${name,,}" | tr ' _' '-' | tr -cd 'a-z0-9-')
+        # Strip .md extension from path
+        if [[ "${ext,,}" == "md" ]]; then
+            echo "$slug"
+        else
+            echo "${slug}.${ext,,}"
+        fi
+    else
+        echo "$part" | tr '[:upper:]' '[:lower:]' | tr ' _' '-' | tr -cd 'a-z0-9-'
+    fi
+}
+
+function generate_conflict_name {
+    local file="$1"
+    local is_dir="${2:-0}"
+    local hostname
+    hostname=$(hostname -s)
+
+    local dir base ext
+    dir=$(dirname "$file")
+    base=$(basename "$file")
+
+    if [[ "$base" == *.* ]]; then
+        ext=".${base##*.}"
+        base="${base%.*}"
+    else
+        ext=""
+    fi
+
+    if [[ "$dir" == "." ]]; then
+        echo "${base} (conflict ${hostname})${ext}"
+    else
+        echo "${dir}/${base} (conflict ${hostname})${ext}"
+    fi
+}
+
+function rename_blocking_path {
+    local output_dir="$1"
+    local blocking_path="$2"
+    local phase="${3:-pull}"
+    local silent="${4:-}"
+    local relative_path="${blocking_path#"$output_dir"/}"
+    local is_dir=0
+    local conflict_name conflict_path
+
+    [[ -d "$blocking_path" ]] \
+        && is_dir=1
+
+    conflict_name=$(generate_conflict_name "$relative_path" "$is_dir")
+    conflict_path="${output_dir}/${conflict_name}"
+
+    mkdir -p "$(dirname "$conflict_path")"
+    mv "$blocking_path" "$conflict_path"
+
+    if [[ -z "$silent" ]]; then
+        printf '%s: renamed "%s" to "%s"\n' "$phase" "$relative_path" "$conflict_name"
+    fi
 }
 
 function is_being_renamed {

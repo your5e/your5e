@@ -14,6 +14,7 @@ load 'setup_helpers.sh'
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
     export YOUR5E_API_BASE="http://localhost:5854"
+    export SHORT_HOST="$(hostname -s)"
 }
 
 setup() {
@@ -26,7 +27,6 @@ setup() {
 
 @test "empty directory" {
     fail_on_since_parameter
-
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -51,7 +51,6 @@ setup() {
 
 @test "empty notebook" {
     fail_on_since_parameter
-
     run tests/sync-notebook.sh norm/empty-notebook "$output_dir"
 
     expected_output=""
@@ -64,22 +63,24 @@ setup() {
 }
 
 @test "local files" {
-    fail_on_since_parameter
     create_file "Home.md"
     create_file "index.md"
     create_file "notes.txt"
     create_file "sessions/notes.txt"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: ERROR cannot push "Home.md": Path 'home' already exists.
-        push: ERROR cannot push "index.md": Path 'index' already exists.
+        push: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
+        push: "Home (conflict ${SHORT_HOST}).md" (v1)
+        push: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        push: "index (conflict ${SHORT_HOST}).md" (v1)
         push: "notes.txt" (v1)
         push: "sessions/notes.txt" (v1)
         pull: "random-hexmap-7.png" (v1)
-        pull: ERROR cannot pull "index.md", blocked by local file
-        pull: ERROR cannot pull "Home.md", blocked by local file
+        pull: "index.md" (v1)
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -89,24 +90,22 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_ignored "Home.md"
-    assert_file_ignored "index.md"
+    assert_file_unchanged "Home (conflict ${SHORT_HOST}).md"
+    assert_file_pushed "Home (conflict ${SHORT_HOST}).md" "text/markdown"
+    assert_file_unchanged "index (conflict ${SHORT_HOST}).md"
+    assert_file_pushed "index (conflict ${SHORT_HOST}).md" "text/markdown"
     assert_file_pushed "notes.txt" "text/plain"
     assert_file_pushed "sessions/notes.txt" "text/plain"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local matches remote" {
-    fail_on_since_parameter
     copy_fixture "Home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -129,9 +128,9 @@ setup() {
 }
 
 @test "local file clashes" {
-    fail_on_since_parameter
     create_file "sessions"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -139,7 +138,8 @@ setup() {
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
-        pull: ERROR cannot pull "sessions/session-01.md", blocked by local file
+        pull: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"
+        pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
@@ -148,32 +148,28 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_unchanged "sessions"
-    assert_file_not_downloaded "sessions/session-01.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "Home.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "sessions (conflict ${SHORT_HOST})"
+    assert_file_not_in_state "sessions (conflict ${SHORT_HOST})"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local dir clashes" {
-    fail_on_since_parameter
     create_file "Bestiary.md/notes.txt"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: ERROR cannot push "Bestiary.md/notes.txt": Path 'bestiary' already exists.
+        push: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        push: "Bestiary (conflict ${SHORT_HOST}).md/notes.txt" (v1)
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
-        pull: ERROR cannot pull "Bestiary.md", blocked by local directory
+        pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
         pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
@@ -181,24 +177,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_unchanged "Bestiary.md/notes.txt"
-    assert_file_not_downloaded "Bestiary.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "Home.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "Bestiary (conflict ${SHORT_HOST}).md/notes.txt"
+    assert_file_pushed "Bestiary (conflict ${SHORT_HOST}).md/notes.txt" "text/plain"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "hidden files ignored" {
-    fail_on_since_parameter
     create_file ".hidden.md"
     create_file ".obsidian/app.json"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -218,21 +209,24 @@ setup() {
 
     assert_file_unchanged ".hidden.md"
     assert_file_unchanged ".obsidian/app.json"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision" {
-    fail_on_since_parameter
     create_file "home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: ERROR cannot push "home.md": Path 'home' already exists.
+        push: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        push: "home (conflict ${SHORT_HOST}).md" (v1)
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: ERROR cannot pull "Home.md", blocked by local file with different case
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -242,30 +236,26 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_unchanged "home.md"
-    assert_file_not_in_state "Home.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "home (conflict ${SHORT_HOST}).md"
+    assert_file_pushed "home (conflict ${SHORT_HOST}).md" "text/markdown"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision, matches" {
-    fail_on_since_parameter
     copy_fixture "Home.md" "home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        push: ERROR cannot push "home.md": Path 'home' already exists.
+        push: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        push: "home (conflict ${SHORT_HOST}).md" (v1)
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: ERROR cannot pull "Home.md", blocked by local file with different case
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -275,15 +265,10 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_matches_fixture "Home.md" "home.md"
-    assert_file_not_in_state "Home.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_matches_fixture "Home.md" "home (conflict ${SHORT_HOST}).md"
+    assert_file_pushed "home (conflict ${SHORT_HOST}).md" "text/markdown"
+    assert_fixture_files_downloaded
+    assert_fixture_files_in_state
     assert_last_updated_matches_expected
     assert_success
 }

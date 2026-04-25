@@ -100,7 +100,8 @@ Test updating the state from an existing synced directory works.
 | remote renamed, chain | ✔️ | | | | | ✔️ | | |
 | remote renamed, chain reversed | ✔️ | | | | | ✔️ | | |
 | remote renamed, cycle | ✔️ | | | | | ✔️ | | |
-| remote renamed, cycle, local edited | ✔️ | ✔️ | | | | ✔️ | | |
+| remote renamed, cycle, local edited, mergeable | ✔️ | ✔️ | | | | ✔️ | | |
+| remote renamed, cycle, local edited, unmergeable | ✔️ | ✔️ | | | | ✔️ | | |
 | remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | |
 | local edited | ✔️ | ✔️ | | | | | | |
 | local edited, CRLF line endings | ✔️ | ✔️ | | | | | | |
@@ -108,7 +109,8 @@ Test updating the state from an existing synced directory works.
 | local edited, remote edited, same content | ✔️ | ✔️ | | | ✔️ | | | |
 | local edited, remote edited, no common ancestor | ✔️ | ✔️ | | | ✔️ | | | |
 | local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
-| local edited, remote edited, remote renamed | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
+| local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
+| local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
 | remote deleted | ✔️ | | | | | | ✔️ | |
 | remote deleted, local edited | ✔️ | ✔️ | | | | | ✔️ | |
 | stale file, incremental sync | ✔️ | | | | | | | ✔️ |
@@ -129,11 +131,13 @@ Test updating the state from an existing synced directory works.
 | local renamed | ✔️ | | ✔️ | | | | | |
 | local renamed, local edited | ✔️ | ✔️ | ✔️ | | | | | |
 | local renamed, remote edited | ✔️ | | ✔️ | | ✔️ | | | |
-| local renamed, local edited, remote edited | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
+| local renamed, local edited, remote edited, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
+| local renamed, local edited, remote edited, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
 | local renamed, remote renamed | ✔️ | | ✔️ | | | ✔️ | | |
 | local renamed, local edited, remote renamed | ✔️ | ✔️ | ✔️ | | | ✔️ | | |
 | local renamed, remote edited, remote renamed | ✔️ | | ✔️ | | ✔️ | ✔️ | | |
-| local renamed, local edited, remote edited, remote renamed | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | |
+| local renamed, local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | |
+| local renamed, local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | |
 | local renamed, remote deleted | ✔️ | | ✔️ | | | | ✔️ | |
 | local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | |
 | local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ |

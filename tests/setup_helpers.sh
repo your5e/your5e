@@ -107,6 +107,57 @@ function modify_file {
     printf '%s\n' "$content" > "$output_dir/$1"
 }
 
+function mergeable_orc {
+    sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+	EOF
+}
+
+function mergeable_troll {
+    sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+}
+
+function merged_orc_troll {
+    sed -e 's/^        //' <<-'EOF'
+        # Bestiary
+
+        Creatures encountered.
+
+        ## Goblin
+
+        Small and cunning.
+
+        ## Orc
+
+        Large and aggressive.
+
+        ## Troll
+
+        Regenerates health.
+	EOF
+}
 
 function mark_file_stale {
     local filename="$1"
@@ -181,6 +232,26 @@ function assert_file_not_in_state {
     local filename="$1"
     ! awk -F'\t' -v f="$filename" '$3 == f {found=1; exit} END {exit !found}' \
         "$output_dir/.sync-state"
+}
+
+function assert_uuid_local_filename {
+    local uuid="$1"
+    local expected_filename="$2"
+    local state_file="$output_dir/.sync-state"
+    local actual_filename
+
+    actual_filename=$(awk -F'\t' -v u="$uuid" '$1 == u {print $3; exit}' "$state_file")
+    [[ "$actual_filename" == "$expected_filename" ]]
+}
+
+function assert_uuid_remote_filename {
+    local uuid="$1"
+    local expected_filename="$2"
+    local state_file="$output_dir/.sync-state"
+    local actual_filename
+
+    actual_filename=$(awk -F'\t' -v u="$uuid" '$1 == u {print $2; exit}' "$state_file")
+    [[ "$actual_filename" == "$expected_filename" ]]
 }
 
 function assert_tracked_file_intact {
@@ -274,10 +345,51 @@ function assert_state_matches_fixture {
     )
 }
 
+function assert_fixture_files_in_state {
+    while IFS= read -r -d '' file; do
+        local relative="${file#"$fixtures"/campaign-notes/}"
+        local expected_hash
+        expected_hash=$(shasum -a 256 "$file" | cut -d' ' -f1)
+        local actual_hash
+        actual_hash=$(
+            awk \
+                -F'\t' \
+                -v f="$relative" \
+                '
+                    $3 == f {print $4; exit}
+                ' \
+                    "$output_dir/.sync-state"
+        )
+        [[ "$actual_hash" == "$expected_hash" ]]
+    done < <(find "$fixtures/campaign-notes" -type f -print0)
+}
+
 function assert_dir_matches_fixture {
     diff -ru \
         --exclude=".sync-state" \
         "$output_dir" "$fixtures/campaign-notes"
+}
+
+# shellcheck disable=SC2119
+function assert_fixture_files_downloaded {
+    assert_fixtures_intact_except
+}
+
+# shellcheck disable=SC2119
+function assert_fixtures_intact {
+    assert_fixtures_intact_except
+}
+
+# shellcheck disable=SC2120
+function assert_fixtures_intact_except {
+    local -a excluded=("$@")
+    while IFS= read -r -d '' file; do
+        local rel="${file#"$fixtures"/campaign-notes/}"
+        for exc in "${excluded[@]}"; do
+            [[ "$rel" == "$exc" ]] && continue 2
+        done
+        assert_tracked_file_matches_fixture "$rel"
+    done < <(find "$fixtures/campaign-notes" -type f -print0)
 }
 
 function assert_success {

@@ -50,7 +50,7 @@ than in a log they are unlikely to ever look at.
 Plus, at least some of the point is to have your notes on at least other
 computer in case of data loss. That doesn't help if they never leave.
 
-- [ ] resolve blocked syncing by renaming the local file (bash script)
+- [X] resolve blocked syncing by renaming the local file (bash script)
 - [ ] resolve blocked syncing by renaming the local file (obsidian engine)
 - [ ] add "local deleted, local edited, remote edited" scenario
 - [ ] add scenario for unmergeable server and local modifications
