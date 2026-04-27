@@ -34,6 +34,7 @@ export interface SyncConfig {
     afterFetchHook?: () => Promise<void>;
     onOutput?: (line: string) => void;
     abortSignal?: AbortSignal;
+    hostname?: string;
 }
 
 export interface SyncResult {

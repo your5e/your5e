@@ -101,13 +101,14 @@ def compare(label, expected, actual):
         print(f"✓ {label}")
         return True
     print(f"✗ {label}")
-    for i, (e, a) in enumerate(zip(expected, actual, strict=False)):
-        if e != a:
-            print(f"  line {i + 1}: expected '{e}', got '{a}'")
-    if len(expected) > len(actual):
-        print(f"  missing {len(expected) - len(actual)} tests")
-    elif len(actual) > len(expected):
-        print(f"  extra {len(actual) - len(expected)} tests")
+    expected_set = set(expected)
+    actual_set = set(actual)
+    for name in expected:
+        if name not in actual_set:
+            print(f"  missing: {name}")
+    for name in actual:
+        if name not in expected_set:
+            print(f"  extra: {name}")
     return False
 
 
@@ -140,6 +141,15 @@ def check_suite_parity(suite_pattern):
     passed = True
 
     for name in expected:
+        if name not in pull_tests:
+            print(f"\u2717 setup: {name} (missing from pull)")
+            passed = False
+            continue
+        if name not in push_tests:
+            print(f"\u2717 setup: {name} (missing from push)")
+            passed = False
+            continue
+
         pull_setup = pull_tests[name]
         push_setup = push_tests[name]
 
@@ -216,6 +226,15 @@ def check_ts_suite_parity(suite_pattern):
     passed = True
 
     for name in expected:
+        if name not in pull_tests:
+            print(f"\u2717 ts setup: {name} (missing from pull)")
+            passed = False
+            continue
+        if name not in push_tests:
+            print(f"\u2717 ts setup: {name} (missing from push)")
+            passed = False
+            continue
+
         pull_setup = pull_tests[name]
         push_setup = push_tests[name]
 

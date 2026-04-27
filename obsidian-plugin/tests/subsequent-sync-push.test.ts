@@ -18,6 +18,7 @@ import {
     addStaleFile,
     assertDirMatchesFixture,
     assertEmptyDirRemoved,
+    assertFileContent,
     assertFileDeletedOnServer,
     assertFileInState,
     assertFileMatchesFixture,
@@ -26,6 +27,8 @@ import {
     assertFileNotInState,
     assertFilePushed,
     assertFileUnchanged,
+    assertFixturesIntact,
+    assertFixturesIntactExcept,
     assertInState,
     assertIncrementalResults,
     assertNotInState,
@@ -35,6 +38,8 @@ import {
     assertSyncMetadataUpdated,
     assertTrackedFileDeleted,
     assertTrackedFileIntact,
+    assertUuidLocalFilename,
+    assertUuidRemoteFilename,
     cleanupTestDir,
     clearPagesCache,
     createFile,
@@ -44,7 +49,11 @@ import {
     getToken,
     initSyncedDir,
     markFileStale,
+    mergeableOrc,
+    mergeableTroll,
+    mergedOrcTroll,
     modifyFile,
+    modifyFileWithContent,
     renameLocalFile,
     renameLocalFileUntracked,
     restoreDatabase,
@@ -53,6 +62,7 @@ import {
     serverEditContent,
     serverRename,
     setBaseHash,
+    shortHostname,
     untrackAndRemoveFile,
     uuidFor,
 } from "./helpers.js";
@@ -64,9 +74,11 @@ describe("subsequent sync push", () => {
     let initialState: Map<string, SyncStateEntry>;
     let recentTimestamp: string;
     let lastUpdate: string;
+    let SHORT_HOST: string;
 
     beforeAll(async () => {
         token = await getToken();
+        SHORT_HOST = shortHostname();
     });
 
     beforeEach(async () => {
@@ -147,22 +159,7 @@ describe("subsequent sync push", () => {
             token,
             "text/plain",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -174,29 +171,23 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "Rumours.md/notes.txt": ` +
-                `Path 'rumours' already exists.`,
-            'pull: ERROR cannot pull "Rumours.md", blocked by local directory',
+            `push: renamed "Rumours.md" to "Rumours (conflict ${SHORT_HOST}).md"`,
+            `push: "Rumours (conflict ${SHORT_HOST}).md/notes.txt" (v1)`,
+            'pull: "Rumours.md" (v1)',
         ]);
-        await assertFileUnchanged(outputDir, "Rumours.md/notes.txt");
-        assertFileNotInState("Rumours.md/notes.txt", result.state);
-        await assertFileNotDownloaded(outputDir, "Rumours.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(
             outputDir,
-            result.state,
-            "sessions/session-01.md",
+            `Rumours (conflict ${SHORT_HOST}).md/notes.txt`,
         );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        await assertFilePushed(
             outputDir,
+            `Rumours (conflict ${SHORT_HOST}).md/notes.txt`,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            token,
+            "text/plain",
         );
+        await assertTrackedFileIntact(outputDir, result.state, "Rumours.md");
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -208,107 +199,78 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "Quests.md": Path 'quests' already exists.`,
-            'pull: ERROR cannot pull "Quests.md", blocked by local file',
+            `push: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST}).md"`,
+            `push: "Quests (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: "Quests.md" (v1)',
         ]);
-        await assertFileUnchanged(outputDir, "Quests.md");
-        assertFileNotInState("Quests.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(outputDir, `Quests (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
             outputDir,
+            `Quests (conflict ${SHORT_HOST}).md`,
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertTrackedFileIntact(outputDir, result.state, "Quests.md");
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, remote renamed", async () => {
+        const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
         await createFile(outputDir, "npcs/Major.md");
-        await serverRename(
-            token,
-            await uuidFor(initialState, "characters/NPCs.md"),
-            "npcs/Major.md",
-        );
+        await serverRename(token, npcsUuid, "npcs/Major.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "npcs/Major.md": ` +
-                `Path 'npcs/major' already exists.`,
-            'pull: ERROR cannot rename "characters/NPCs.md" to "npcs/Major.md", ' +
-                "blocked by local file",
+            `push: renamed "npcs/Major.md" to "npcs/Major (conflict ${SHORT_HOST}).md"`,
+            `push: "npcs/Major (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: renamed "characters/NPCs.md" to "npcs/Major.md"',
         ]);
-        await assertFileUnchanged(outputDir, "npcs/Major.md");
-        assertFileNotInState("npcs/Major.md", result.state);
+        await assertFileUnchanged(outputDir, `npcs/Major (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
+            outputDir,
+            `npcs/Major (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        assertUuidLocalFilename(result.state, npcsUuid, "npcs/Major.md");
         await assertFileMatchesFixture(
             outputDir,
             "characters/NPCs.md",
-            "characters/NPCs.md",
+            "npcs/Major.md",
         );
-        assertFileInState("characters/NPCs.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "characters/NPCs.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("untracked file, local edited, remote renamed", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
         await createFile(outputDir, "Monsters.md");
-        await serverRename(
-            token,
-            await uuidFor(initialState, "Bestiary.md"),
-            "Monsters.md",
-        );
+        await serverRename(token, bestiaryUuid, "Monsters.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "Monsters.md": Path 'monsters' already exists.`,
-            'pull: ERROR cannot rename "Bestiary.md" to "Monsters.md", ' +
-                "blocked by local file",
+            `push: renamed "Monsters.md" to "Monsters (conflict ${SHORT_HOST}).md"`,
+            `push: "Monsters (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: renamed "Bestiary.md" to "Monsters.md"',
         ]);
-        await assertFileUnchanged(outputDir, "Monsters.md");
-        assertFileNotInState("Monsters.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(outputDir, `Monsters (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
             outputDir,
+            `Monsters (conflict ${SHORT_HOST}).md`,
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        assertUuidLocalFilename(result.state, bestiaryUuid, "Monsters.md");
+        await assertFileMatchesFixture(outputDir, "Bestiary.md", "Monsters.md");
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -321,30 +283,13 @@ describe("subsequent sync push", () => {
         expect(result.output).toEqual(['pull: "Bestiary.md" (v3)']);
         await assertServerEditedContent(outputDir, "Bestiary.md");
         assertFileInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed", async () => {
-        await serverRename(
-            token,
-            await uuidFor(initialState, "The Old Café.md"),
-            "The New Café.md",
-        );
+        const cafeUuid = await uuidFor(initialState, "The Old Café.md");
+        await serverRename(token, cafeUuid, "The New Café.md");
 
         const result = await createSync().run();
 
@@ -352,66 +297,49 @@ describe("subsequent sync push", () => {
         expect(result.output).toEqual([
             'pull: renamed "The Old Café.md" to "The New Café.md"',
         ]);
-        // biome-ignore format: line length
-        await assertFileMatchesFixture(
-            outputDir,
-            "The Old Café.md",
-            "The New Café.md",
-        );
+        // noqa
+        await assertFileMatchesFixture(outputDir, "The Old Café.md", "The New Café.md");
         assertFileInState("The New Café.md", result.state);
         assertFileNotInState("The Old Café.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "The Old Café.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, local edited, directory", async () => {
-        await serverRename(
-            token,
-            await uuidFor(initialState, "sessions/session-01.md"),
-            "logs/Session 01.md",
-        );
+        const sessionUuid = await uuidFor(initialState, "sessions/session-01.md");
+        await serverRename(token, sessionUuid, "logs/Session 01.md");
         await createFile(outputDir, "logs/Session 01.md/notes.txt");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "logs/Session 01.md/notes.txt": ` +
-                `Path 'logs/session-01' already exists.`,
-            'pull: ERROR cannot rename "sessions/session-01.md" to ' +
-                '"logs/Session 01.md", blocked by local directory',
+            `push: renamed "logs/Session 01.md" to ` +
+                `"logs/Session 01 (conflict ${SHORT_HOST}).md"`,
+            `push: "logs/Session 01 (conflict ${SHORT_HOST}).md/notes.txt" (v1)`,
+            'pull: renamed "sessions/session-01.md" to "logs/Session 01.md"',
         ]);
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(
+            outputDir,
+            `logs/Session 01 (conflict ${SHORT_HOST}).md/notes.txt`,
+        );
+        await assertFilePushed(
+            outputDir,
+            `logs/Session 01 (conflict ${SHORT_HOST}).md/notes.txt`,
+            result.state,
+            token,
+            "text/plain",
+        );
+        assertUuidLocalFilename(result.state, sessionUuid, "logs/Session 01.md");
+        await assertFileMatchesFixture(
+            outputDir,
+            "sessions/session-01.md",
+            "logs/Session 01.md",
+        );
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
             "sessions/session-01.md",
-        );
-        await assertFileUnchanged(outputDir, "logs/Session 01.md/notes.txt");
-        assertFileNotInState("logs/Session 01.md/notes.txt", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -429,34 +357,17 @@ describe("subsequent sync push", () => {
             'pull: "Welcome.md" (v4)',
         ]);
         await assertServerEditedContent(outputDir, "Welcome.md");
+        await assertFileNotDownloaded(outputDir, "Home.md", result.state);
         assertFileInState("Welcome.md", result.state);
-        assertFileNotInState("Home.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Home.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, swapped", async () => {
         const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
+        const sessionUuid = await uuidFor(initialState, "sessions/session-01.md");
         await serverRename(token, npcsUuid, "temp.md");
-        await serverRename(
-            token,
-            await uuidFor(initialState, "sessions/session-01.md"),
-            "characters/NPCs.md",
-        );
+        await serverRename(token, sessionUuid, "characters/NPCs.md");
         await serverRename(token, npcsUuid, "sessions/session-01.md");
 
         const result = await createSync().run();
@@ -478,30 +389,20 @@ describe("subsequent sync push", () => {
         );
         assertFileInState("sessions/session-01.md", result.state);
         assertFileInState("characters/NPCs.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "sessions/session-01.md",
+            "characters/NPCs.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, chain", async () => {
-        await serverRename(
-            token,
-            await uuidFor(initialState, "sessions/session-01.md"),
-            "old.md",
-        );
-        await serverRename(
-            token,
-            await uuidFor(initialState, "characters/NPCs.md"),
-            "sessions/session-01.md",
-        );
+        const sessionUuid = await uuidFor(initialState, "sessions/session-01.md");
+        const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
+        await serverRename(token, sessionUuid, "old.md");
+        await serverRename(token, npcsUuid, "sessions/session-01.md");
 
         const result = await createSync().run();
 
@@ -516,40 +417,30 @@ describe("subsequent sync push", () => {
             "characters/NPCs.md",
             "sessions/session-01.md",
         );
+        await assertFileNotDownloaded(outputDir, "characters/NPCs.md", result.state);
         assertFileInState("old.md", result.state);
         assertFileInState("sessions/session-01.md", result.state);
-        assertFileNotInState("characters/NPCs.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "sessions/session-01.md",
+            "characters/NPCs.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("remote renamed, chain reversed", async () => {
-        await serverRename(
-            token,
-            await uuidFor(initialState, "characters/NPCs.md"),
-            "old.md",
-        );
-        await serverRename(
-            token,
-            await uuidFor(initialState, "sessions/session-01.md"),
-            "characters/NPCs.md",
-        );
+        const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
+        const sessionUuid = await uuidFor(initialState, "sessions/session-01.md");
+        await serverRename(token, npcsUuid, "old.md");
+        await serverRename(token, sessionUuid, "characters/NPCs.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 2);
         expect(result.output).toEqual([
-            'pull: renamed "sessions/session-01.md" to "characters/NPCs.md"',
             'pull: renamed "characters/NPCs.md" to "old.md"',
+            'pull: renamed "sessions/session-01.md" to "characters/NPCs.md"',
         ]);
         await assertFileMatchesFixture(outputDir, "characters/NPCs.md", "old.md");
         await assertFileMatchesFixture(
@@ -557,18 +448,18 @@ describe("subsequent sync push", () => {
             "sessions/session-01.md",
             "characters/NPCs.md",
         );
+        await assertFileNotDownloaded(
+            outputDir,
+            "sessions/session-01.md",
+            result.state,
+        );
         assertFileInState("old.md", result.state);
         assertFileInState("characters/NPCs.md", result.state);
-        assertFileNotInState("sessions/session-01.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "sessions/session-01.md",
+            "characters/NPCs.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -586,33 +477,27 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
-            'pull: renamed "index.md" to "Home.md"',
             'pull: renamed "Home.md" to "Bestiary.md"',
+            'pull: renamed "index.md" to "Home.md"',
             'pull: renamed "Bestiary.md" to "index.md"',
         ]);
         await assertFileMatchesFixture(outputDir, "Bestiary.md", "index.md");
         await assertFileMatchesFixture(outputDir, "Home.md", "Bestiary.md");
         await assertFileMatchesFixture(outputDir, "index.md", "Home.md");
         assertFileInState("index.md", result.state);
-        assertFileInState("Home.md", result.state);
         assertFileInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(
+        assertFileInState("Home.md", result.state);
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "index.md",
+            "Home.md",
+            "Bestiary.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("remote renamed, cycle, local edited", async () => {
+    test("remote renamed, cycle, local edited, mergeable", async () => {
         const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
         const homeUuid = await uuidFor(initialState, "Home.md");
         const indexUuid = await uuidFor(initialState, "index.md");
@@ -620,37 +505,68 @@ describe("subsequent sync push", () => {
         await serverRename(token, homeUuid, "Bestiary.md");
         await serverRename(token, indexUuid, "Home.md");
         await serverRename(token, bestiaryUuid, "index.md");
-        await modifyFile(outputDir, "Home.md");
+        await modifyFileWithContent(outputDir, "Bestiary.md", mergeableOrc());
+        await serverEditContent(token, bestiaryUuid, mergeableTroll());
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
-            'push: ERROR cannot rename "Bestiary.md" to "Home.md": ' +
-                "Path 'home' already exists.",
-            'pull: ERROR cannot rename "index.md" to "Home.md", ' +
-                "blocked by local file",
-            'pull: SKIPPING rename "Home.md" to "Bestiary.md", ' +
-                "local changes would be lost",
-            'pull: ERROR cannot rename "Bestiary.md" to "index.md", ' +
-                "blocked by local file",
+            'push: ERROR cannot rename "index.md" to "Bestiary.md": ' +
+                "Path 'bestiary' already exists.",
+            'pull: renamed "Home.md" to "Bestiary.md"',
+            'pull: renamed "index.md" to "Home.md"',
+            'pull: renamed "Bestiary.md" to "index.md"',
+            'pull: "index.md" (v5, merged)',
         ]);
-        await assertFileModified(outputDir, "Home.md");
-        assertFileInState("Home.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(
+        await assertFileContent(outputDir, "index.md", mergedOrcTroll());
+        assertUuidLocalFilename(result.state, bestiaryUuid, "index.md");
+        assertUuidLocalFilename(result.state, homeUuid, "Bestiary.md");
+        assertUuidLocalFilename(result.state, indexUuid, "Home.md");
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "sessions/session-01.md",
+            "Bestiary.md",
+            "Home.md",
+            "index.md",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("remote renamed, cycle, local edited, unmergeable", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        const homeUuid = await uuidFor(initialState, "Home.md");
+        const indexUuid = await uuidFor(initialState, "index.md");
+        await serverRename(token, bestiaryUuid, "temp.md");
+        await serverRename(token, homeUuid, "Bestiary.md");
+        await serverRename(token, indexUuid, "Home.md");
+        await serverRename(token, bestiaryUuid, "index.md");
+        await modifyFile(outputDir, "Bestiary.md");
+        await serverEditContent(token, bestiaryUuid);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 3);
+        expect(result.output).toEqual([
+            'push: ERROR cannot rename "index.md" to "Bestiary.md": ' +
+                "Path 'bestiary' already exists.",
+            'pull: renamed "Home.md" to "Bestiary.md"',
+            'pull: renamed "index.md" to "Home.md"',
+            `pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
+            'pull: "index.md" (v5)',
+        ]);
+        await assertFileModified(outputDir, `Bestiary (conflict ${SHORT_HOST}).md`);
+        assertFileNotInState(`Bestiary (conflict ${SHORT_HOST}).md`, result.state);
+        await assertServerEditedContent(outputDir, "index.md");
+        assertUuidLocalFilename(result.state, bestiaryUuid, "index.md");
+        assertUuidLocalFilename(result.state, homeUuid, "Bestiary.md");
+        assertUuidLocalFilename(result.state, indexUuid, "Home.md");
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "Bestiary.md",
+            "Home.md",
+            "index.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -670,29 +586,29 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
-            `push: ERROR cannot push "Home.md": Path 'home' already exists.`,
-            'pull: ERROR cannot pull "Bestiary.md", blocked by local file',
-            'pull: ERROR cannot rename "index.md" to "Home.md", ' +
-                "blocked by local file",
-            'pull: ERROR cannot rename "Bestiary.md" to "index.md", ' +
-                "blocked by local file",
+            `push: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
+            `push: "Home (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: renamed "index.md" to "Home.md"',
+            'pull: renamed "Bestiary.md" to "index.md"',
+            'pull: "Bestiary.md" (v3)',
         ]);
-        await assertFileUnchanged(outputDir, "Home.md");
-        assertFileNotInState("Home.md", result.state);
-        assertFileInState("Bestiary.md", result.state);
-        assertFileInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(outputDir, `Home (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
             outputDir,
+            `Home (conflict ${SHORT_HOST}).md`,
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
+        assertUuidLocalFilename(result.state, indexUuid, "Home.md");
+        assertUuidLocalFilename(result.state, bestiaryUuid, "index.md");
+        assertUuidLocalFilename(result.state, homeUuid, "Bestiary.md");
+        await assertFixturesIntactExcept(
             outputDir,
             result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            "Bestiary.md",
+            "Home.md",
+            "index.md",
         );
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -712,21 +628,7 @@ describe("subsequent sync push", () => {
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -764,22 +666,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result2.incrementalResults, 1);
         expect(result2.output).toEqual([]);
-        await assertTrackedFileIntact(outputDir, result2.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result2.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result2.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result2.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result2.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result2.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result2.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result2.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result2.state, "Home.md");
         assertSyncMetadataUpdated(result2.lastUpdate, result2.lastFullSync);
     });
 
@@ -835,21 +722,7 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -874,27 +747,14 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited, remote edited, no common ancestor", async () => {
+        const indexUuid = await uuidFor(initialState, "index.md");
         await modifyFile(outputDir, "index.md");
-        await serverEditContent(token, await uuidFor(initialState, "index.md"));
+        await serverEditContent(token, indexUuid);
         setBaseHash(initialState, "index.md", "no-common-ancestor");
 
         const result = await createSync().run();
@@ -909,31 +769,14 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local edited, remote renamed", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
         await modifyFile(outputDir, "Bestiary.md");
-        await serverRename(
-            token,
-            await uuidFor(initialState, "Bestiary.md"),
-            "renamed-bestiary.md",
-        );
+        await serverRename(token, bestiaryUuid, "renamed-bestiary.md");
 
         const result = await createSync().run();
 
@@ -950,59 +793,59 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local edited, remote edited, remote renamed", async () => {
-        await modifyFile(outputDir, "Home.md");
-        await serverEditContent(token, await uuidFor(initialState, "Home.md"));
-        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
+    test("local edited, remote edited, remote renamed, mergeable", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await modifyFileWithContent(outputDir, "Bestiary.md", mergeableOrc());
+        await serverEditContent(token, bestiaryUuid, mergeableTroll());
+        await serverRename(token, bestiaryUuid, "renamed-bestiary.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "Welcome.md" to "Home.md"',
-            'push: "Home.md" (v6, replaced)',
+            'push: renamed "renamed-bestiary.md" to "Bestiary.md"',
+            'push: "Bestiary.md" (v6, merged)',
         ]);
-        await assertFileModified(outputDir, "Home.md");
+        await assertFileContent(outputDir, "Bestiary.md", mergedOrcTroll());
         await assertFilePushed(
             outputDir,
-            "Home.md",
+            "Bestiary.md",
             result.state,
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(
+        assertFileNotInState("renamed-bestiary.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, remote renamed, unmergeable", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await modifyFile(outputDir, "Bestiary.md");
+        await serverEditContent(token, bestiaryUuid);
+        await serverRename(token, bestiaryUuid, "renamed-bestiary.md");
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'push: renamed "renamed-bestiary.md" to "Bestiary.md"',
+            'push: "Bestiary.md" (v6, replaced)',
+        ]);
+        await assertFileModified(outputDir, "Bestiary.md");
+        await assertFilePushed(
             outputDir,
+            "Bestiary.md",
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        assertFileNotInState("renamed-bestiary.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1015,21 +858,7 @@ Regenerates health.
         expect(result.output).toEqual(['pull: deleted "characters/NPCs.md"']);
         await assertTrackedFileDeleted(outputDir, result.state, "characters/NPCs.md");
         await assertEmptyDirRemoved(outputDir, "characters");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "characters/NPCs.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1040,7 +869,7 @@ Regenerates health.
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual(['push: "Bestiary.md" (v3)']);
+        expect(result.output).toEqual(['push: "Bestiary.md" (v3, revivified)']);
         await assertFileModified(outputDir, "Bestiary.md");
         await assertFilePushed(
             outputDir,
@@ -1049,21 +878,7 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1077,22 +892,7 @@ Regenerates health.
         expect(result.output).toEqual([]);
         await assertFileUnchanged(outputDir, "my-notes.md");
         assertFileInState("my-notes.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
     });
 
     test("stale file, full sync", async () => {
@@ -1103,22 +903,7 @@ Regenerates health.
 
         expect(result.output).toEqual(['pull: deleted "my-notes.md"']);
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1127,30 +912,16 @@ Regenerates health.
         markFileStale(initialState, "index.md");
         await serverEditContent(token, uuid);
 
-        // Incremental sync cannot detect stale file
+        // Incremental sync can deduce file is stale: another uuid claims the filename
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'pull: ERROR cannot pull "index.md", blocked by local file',
-        ]);
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        assertInState(result.state, "stale-uuid");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        expect(result.output).toEqual(['pull: "index.md" (v2)']);
+        await assertServerEditedContent(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        assertNotInState(result.state, "stale-uuid");
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("stale file, remote edited, full sync", async () => {
@@ -1164,21 +935,7 @@ Regenerates health.
         expect(result.output).toEqual(['pull: "index.md" (v2)']);
         await assertServerEditedContent(outputDir, "index.md");
         assertFileInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1193,22 +950,7 @@ Regenerates health.
         expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
         await assertFileModified(outputDir, "my-notes.md");
         assertFileInState("my-notes.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1222,22 +964,7 @@ Regenerates health.
         expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
         await assertFileModified(outputDir, "my-notes.md");
         assertFileInState("my-notes.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1246,9 +973,8 @@ Regenerates health.
         await deleteTrackedFile(outputDir, "my-notes.md");
         assertInState(initialState, "stale-uuid");
 
-        const result = await createSync().run();
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
-        assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual([]);
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
         assertNotInState(result.state, "stale-uuid");
@@ -1272,21 +998,7 @@ Regenerates health.
         assertNotInState(result.state, "stale-uuid");
         await assertServerEditedContent(outputDir, "index.md");
         assertFileInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1303,21 +1015,7 @@ Regenerates health.
         assertNotInState(result.state, "stale-uuid");
         await assertServerEditedContent(outputDir, "index.md");
         assertFileInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1329,21 +1027,7 @@ Regenerates health.
         assertIncrementalResults(result.incrementalResults, 0);
         expect(result.output).toEqual(['push: deleted "index.md"']);
         await assertFileDeletedOnServer(outputDir, result.state, "index.md", token);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1357,31 +1041,14 @@ Regenerates health.
         expect(result.output).toEqual(['pull: "Bestiary.md" (v3, revivified)']);
         await assertServerEditedContent(outputDir, "Bestiary.md");
         assertFileInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote renamed", async () => {
+        const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
         await deleteTrackedFile(outputDir, "characters/NPCs.md");
-        await serverRename(
-            token,
-            await uuidFor(initialState, "characters/NPCs.md"),
-            "NPCs.md",
-        );
+        await serverRename(token, npcsUuid, "NPCs.md");
 
         const result = await createSync().run();
 
@@ -1396,96 +1063,54 @@ Regenerates health.
             "characters/NPCs.md",
             token,
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "characters/NPCs.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, remote edited, remote renamed", async () => {
+        const homeUuid = await uuidFor(initialState, "Home.md");
         await deleteTrackedFile(outputDir, "Home.md");
-        await serverEditContent(token, await uuidFor(initialState, "Home.md"));
-        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
+        await serverEditContent(token, homeUuid);
+        await serverRename(token, homeUuid, "Welcome.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
-        expect(result.output).toEqual([
-            'pull: renamed "Home.md" to "Welcome.md"',
-            'pull: "Welcome.md" (v4, revivified)',
-        ]);
+        expect(result.output).toEqual(['pull: "Welcome.md" (v4, revivified)']);
         await assertServerEditedContent(outputDir, "Welcome.md");
         await assertFileNotDownloaded(outputDir, "Home.md", result.state);
         assertFileInState("Welcome.md", result.state);
         assertFileNotInState("Home.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Home.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
     test("local deleted, local edited, remote edited, remote renamed", async () => {
+        const homeUuid = await uuidFor(initialState, "Home.md");
         await deleteTrackedFile(outputDir, "Home.md");
         await createFile(outputDir, "Welcome.md");
-        await serverEditContent(token, await uuidFor(initialState, "Home.md"));
-        await serverRename(token, await uuidFor(initialState, "Home.md"), "Welcome.md");
+        await serverEditContent(token, homeUuid);
+        await serverRename(token, homeUuid, "Welcome.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: ERROR cannot delete "Home.md", server has updates.',
-            "push: ERROR cannot push \"Welcome.md\": Path 'welcome' already exists.",
-            'pull: ERROR cannot rename "Home.md" to "Welcome.md", ' +
-                "blocked by local file",
+            `push: renamed "Welcome.md" to "Welcome (conflict ${SHORT_HOST}).md"`,
+            `push: "Welcome (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: "Welcome.md" (v4, revivified)',
         ]);
-        await assertFileUnchanged(outputDir, "Welcome.md");
-        const homeExists = await fs
-            .stat(path.join(outputDir, "Home.md"))
-            .then((stat) => stat.isFile())
-            .catch(() => false);
-        expect(homeExists).toBe(false);
-        assertFileInState("Home.md", result.state);
-        assertFileNotInState("Welcome.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(
+        await assertFileUnchanged(outputDir, `Welcome (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
             outputDir,
+            `Welcome (conflict ${SHORT_HOST}).md`,
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertServerEditedContent(outputDir, "Welcome.md");
+        assertUuidLocalFilename(result.state, homeUuid, "Welcome.md");
+        await assertFixturesIntactExcept(outputDir, result.state, "Home.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1498,21 +1123,7 @@ Regenerates health.
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([]);
         await assertTrackedFileDeleted(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1528,21 +1139,7 @@ Regenerates health.
         await assertFileMatchesFixture(outputDir, "index.md", "renamed-index.md");
         assertFileInState("renamed-index.md", result.state);
         assertFileNotInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1566,21 +1163,7 @@ Regenerates health.
             "text/markdown",
         );
         assertFileNotInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1604,25 +1187,42 @@ Regenerates health.
         await assertServerEditedContent(outputDir, "renamed-bestiary.md");
         assertFileInState("renamed-bestiary.md", result.state);
         assertFileNotInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote edited", async () => {
+    test("local renamed, local edited, remote edited, mergeable", async () => {
+        const uuid = await uuidFor(initialState, "Bestiary.md");
+        await renameLocalFile(
+            outputDir,
+            initialState,
+            "Bestiary.md",
+            "renamed-bestiary.md",
+        );
+        await modifyFileWithContent(outputDir, "renamed-bestiary.md", mergeableOrc());
+        await serverEditContent(token, uuid, mergeableTroll());
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'push: renamed "Bestiary.md" to "renamed-bestiary.md"',
+            'push: "renamed-bestiary.md" (v5, merged)',
+        ]);
+        await assertFileContent(outputDir, "renamed-bestiary.md", mergedOrcTroll());
+        await assertFilePushed(
+            outputDir,
+            "renamed-bestiary.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        assertFileNotInState("Bestiary.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local renamed, local edited, remote edited, unmergeable", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
         await renameLocalFile(
             outputDir,
@@ -1649,21 +1249,7 @@ Regenerates health.
             "text/markdown",
         );
         assertFileNotInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1682,21 +1268,7 @@ Regenerates health.
         assertFileInState("my-index.md", result.state);
         assertFileNotInState("index.md", result.state);
         assertFileNotInState("server-index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1723,21 +1295,7 @@ Regenerates health.
         );
         assertFileNotInState("index.md", result.state);
         assertFileNotInState("server-index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1758,63 +1316,65 @@ Regenerates health.
         assertFileInState("my-index.md", result.state);
         assertFileNotInState("index.md", result.state);
         assertFileNotInState("server-index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote edited, remote renamed", async () => {
-        const uuid = await uuidFor(initialState, "index.md");
-        await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
-        await modifyFile(outputDir, "my-index.md");
-        await serverEditContent(token, uuid);
-        await serverRename(token, uuid, "server-index.md");
+    // noqa
+    test("local renamed, local edited, remote edited, remote renamed, mergeable", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await modifyFileWithContent(outputDir, "my-bestiary.md", mergeableOrc());
+        await serverEditContent(token, bestiaryUuid, mergeableTroll());
+        await serverRename(token, bestiaryUuid, "server-bestiary.md");
 
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "server-index.md" to "my-index.md"',
-            'push: "my-index.md" (v5, replaced)',
+            'push: renamed "server-bestiary.md" to "my-bestiary.md"',
+            'push: "my-bestiary.md" (v6, merged)',
         ]);
-        await assertFileModified(outputDir, "my-index.md");
+        await assertFileContent(outputDir, "my-bestiary.md", mergedOrcTroll());
         await assertFilePushed(
             outputDir,
-            "my-index.md",
+            "my-bestiary.md",
             result.state,
             token,
             "text/markdown",
         );
-        assertFileNotInState("index.md", result.state);
-        assertFileNotInState("server-index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
+        assertFileNotInState("Bestiary.md", result.state);
+        assertFileNotInState("server-bestiary.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    // noqa
+    test("local renamed, local edited, remote edited, remote renamed, unmergeable", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await modifyFile(outputDir, "my-bestiary.md");
+        await serverEditContent(token, bestiaryUuid);
+        await serverRename(token, bestiaryUuid, "server-bestiary.md");
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'push: renamed "server-bestiary.md" to "my-bestiary.md"',
+            'push: "my-bestiary.md" (v6, replaced)',
+        ]);
+        await assertFileModified(outputDir, "my-bestiary.md");
+        await assertFilePushed(
             outputDir,
+            "my-bestiary.md",
             result.state,
-            "sessions/session-01.md",
+            token,
+            "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        assertFileNotInState("Bestiary.md", result.state);
+        assertFileNotInState("server-bestiary.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1827,7 +1387,7 @@ Regenerates health.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "Bestiary.md" to "my-bestiary.md"',
+            'push: renamed "Bestiary.md" to "my-bestiary.md" (revivified)',
         ]);
         await assertTrackedFileIntact(outputDir, result.state, "my-bestiary.md");
         await assertFilePushed(
@@ -1838,21 +1398,7 @@ Regenerates health.
             "text/markdown",
         );
         assertFileNotInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1866,7 +1412,7 @@ Regenerates health.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            'push: renamed "Bestiary.md" to "my-bestiary.md"',
+            'push: renamed "Bestiary.md" to "my-bestiary.md" (revivified)',
             'push: "my-bestiary.md" (v4)',
         ]);
         await assertFileModified(outputDir, "my-bestiary.md");
@@ -1878,21 +1424,7 @@ Regenerates health.
             "text/markdown",
         );
         assertFileNotInState("Bestiary.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1904,22 +1436,7 @@ Regenerates health.
 
         expect(result.output).toEqual(['pull: deleted "my-notes.md"']);
         await assertTrackedFileDeleted(outputDir, result.state, "my-notes.md");
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1939,22 +1456,7 @@ Regenerates health.
             token,
             "text/markdown",
         );
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "index.md");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1971,21 +1473,7 @@ Regenerates health.
         await assertFileMatchesFixture(outputDir, "index.md", "renamed-index.md");
         assertFileInState("renamed-index.md", result.state);
         assertFileNotInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -2011,21 +1499,7 @@ Regenerates health.
         await assertFileDeletedOnServer(outputDir, result.state, "index.md", token);
         assertFileInState("renamed-index.md", result.state);
         assertFileNotInState("index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -2052,21 +1526,7 @@ Regenerates health.
             "text/markdown",
         );
         assertFileInState("renamed-index.md", result.state);
-        await assertTrackedFileIntact(outputDir, result.state, "random-hexmap-7.png");
-        await assertTrackedFileIntact(outputDir, result.state, "Home.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "sessions/session-01.md",
-        );
-        await assertTrackedFileIntact(outputDir, result.state, "Bestiary.md");
-        await assertTrackedFileIntact(outputDir, result.state, "characters/NPCs.md");
-        await assertTrackedFileIntact(outputDir, result.state, "The Old Café.md");
-        await assertTrackedFileIntact(
-            outputDir,
-            result.state,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-        );
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 });

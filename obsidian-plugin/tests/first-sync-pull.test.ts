@@ -14,11 +14,11 @@ import {
     API_BASE,
     assertDirMatchesFixture,
     assertFileDownloaded,
-    assertFileIgnored,
     assertFileMatchesFixture,
     assertFileNotDownloaded,
     assertFileNotInState,
     assertFileUnchanged,
+    assertFixtureFilesDownloaded,
     assertLastUpdateIsEpoch,
     assertLastUpdateMatchesExpected,
     assertOutputDirExists,
@@ -30,15 +30,18 @@ import {
     createTestDir,
     getToken,
     restoreDatabase,
+    shortHostname,
 } from "./helpers.js";
 
 describe("first sync pull", () => {
     let token: string;
     let testDir: string;
     let outputDir: string;
+    let SHORT_HOST: string;
 
     beforeAll(async () => {
         token = await getToken();
+        SHORT_HOST = shortHostname();
     });
 
     beforeEach(async () => {
@@ -121,8 +124,10 @@ describe("first sync pull", () => {
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
-            'pull: ERROR cannot pull "index.md", blocked by local file',
-            'pull: ERROR cannot pull "Home.md", blocked by local file',
+            `pull: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"`,
+            'pull: "index.md" (v1)',
+            `pull: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
+            'pull: "Home.md" (v2)',
             'pull: "sessions/session-01.md" (v1)',
             'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
@@ -131,20 +136,14 @@ describe("first sync pull", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileIgnored(outputDir, "Home.md", result.state);
-        await assertFileIgnored(outputDir, "index.md", result.state);
-        await assertFileIgnored(outputDir, "notes.txt", result.state);
-        await assertFileIgnored(outputDir, "sessions/notes.txt", result.state);
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
-        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
-        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
-        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
-        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
-        await assertFileDownloaded(
-            outputDir,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-            result.state,
-        );
+        await assertFileUnchanged(outputDir, `Home (conflict ${SHORT_HOST}).md`);
+        assertFileNotInState(`Home (conflict ${SHORT_HOST}).md`, result.state);
+        await assertFileUnchanged(outputDir, `index (conflict ${SHORT_HOST}).md`);
+        assertFileNotInState(`index (conflict ${SHORT_HOST}).md`, result.state);
+        await assertFileUnchanged(outputDir, "notes.txt");
+        await assertFileUnchanged(outputDir, "sessions/notes.txt");
+        await assertFixtureFilesDownloaded(outputDir);
+        await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
@@ -183,7 +182,8 @@ describe("first sync pull", () => {
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
             'pull: "Home.md" (v2)',
-            'pull: ERROR cannot pull "sessions/session-01.md", blocked by local file',
+            `pull: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"`,
+            'pull: "sessions/session-01.md" (v1)',
             'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
             'pull: "The Old Café.md" (v1)',
@@ -191,23 +191,10 @@ describe("first sync pull", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileIgnored(outputDir, "sessions", result.state);
-        await assertFileNotDownloaded(
-            outputDir,
-            "sessions/session-01.md",
-            result.state,
-        );
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
-        await assertFileDownloaded(outputDir, "index.md", result.state);
-        await assertFileDownloaded(outputDir, "Home.md", result.state);
-        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
-        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
-        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
-        await assertFileDownloaded(
-            outputDir,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-            result.state,
-        );
+        await assertFileUnchanged(outputDir, `sessions (conflict ${SHORT_HOST})`);
+        assertFileNotInState(`sessions (conflict ${SHORT_HOST})`, result.state);
+        await assertFixtureFilesDownloaded(outputDir);
+        await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
@@ -223,26 +210,24 @@ describe("first sync pull", () => {
             'pull: "index.md" (v1)',
             'pull: "Home.md" (v2)',
             'pull: "sessions/session-01.md" (v1)',
-            'pull: ERROR cannot pull "Bestiary.md", blocked by local directory',
+            `pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
+            'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
             'pull: "The Old Café.md" (v1)',
             'pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)',
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileIgnored(outputDir, "Bestiary.md/notes.txt", result.state);
-        await assertFileNotDownloaded(outputDir, "Bestiary.md", result.state);
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
-        await assertFileDownloaded(outputDir, "index.md", result.state);
-        await assertFileDownloaded(outputDir, "Home.md", result.state);
-        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
-        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
-        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
-        await assertFileDownloaded(
+        await assertFileUnchanged(
             outputDir,
-            "World Regions/Northern Kingdoms/Frosthold.md",
+            `Bestiary (conflict ${SHORT_HOST}).md/notes.txt`,
+        );
+        assertFileNotInState(
+            `Bestiary (conflict ${SHORT_HOST}).md/notes.txt`,
             result.state,
         );
+        await assertFixtureFilesDownloaded(outputDir);
+        await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
@@ -268,6 +253,7 @@ describe("first sync pull", () => {
 
         await assertFileUnchanged(outputDir, ".hidden.md");
         await assertFileUnchanged(outputDir, ".obsidian/app.json");
+        await assertFixtureFilesDownloaded(outputDir);
         await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
@@ -282,8 +268,8 @@ describe("first sync pull", () => {
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
-            'pull: ERROR cannot pull "Home.md", ' +
-                "blocked by local file with different case",
+            `pull: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
+            'pull: "Home.md" (v2)',
             'pull: "sessions/session-01.md" (v1)',
             'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
@@ -292,19 +278,10 @@ describe("first sync pull", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileIgnored(outputDir, "home.md", result.state);
-        assertFileNotInState("Home.md", result.state);
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
-        await assertFileDownloaded(outputDir, "index.md", result.state);
-        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
-        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
-        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
-        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
-        await assertFileDownloaded(
-            outputDir,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-            result.state,
-        );
+        await assertFileUnchanged(outputDir, `home (conflict ${SHORT_HOST}).md`);
+        assertFileNotInState(`home (conflict ${SHORT_HOST}).md`, result.state);
+        await assertFixtureFilesDownloaded(outputDir);
+        await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 
@@ -318,8 +295,8 @@ describe("first sync pull", () => {
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
-            'pull: ERROR cannot pull "Home.md", ' +
-                "blocked by local file with different case",
+            `pull: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
+            'pull: "Home.md" (v2)',
             'pull: "sessions/session-01.md" (v1)',
             'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
@@ -328,19 +305,14 @@ describe("first sync pull", () => {
         ];
         expect(result.output).toEqual(expectedOutput);
 
-        await assertFileMatchesFixture(outputDir, "Home.md", "home.md");
-        assertFileNotInState("Home.md", result.state);
-        await assertFileDownloaded(outputDir, "random-hexmap-7.png", result.state);
-        await assertFileDownloaded(outputDir, "index.md", result.state);
-        await assertFileDownloaded(outputDir, "sessions/session-01.md", result.state);
-        await assertFileDownloaded(outputDir, "Bestiary.md", result.state);
-        await assertFileDownloaded(outputDir, "characters/NPCs.md", result.state);
-        await assertFileDownloaded(outputDir, "The Old Café.md", result.state);
-        await assertFileDownloaded(
+        await assertFileMatchesFixture(
             outputDir,
-            "World Regions/Northern Kingdoms/Frosthold.md",
-            result.state,
+            "Home.md",
+            `home (conflict ${SHORT_HOST}).md`,
         );
+        assertFileNotInState(`home (conflict ${SHORT_HOST}).md`, result.state);
+        await assertFixtureFilesDownloaded(outputDir);
+        await assertStateMatchesFixture(result.state);
         await assertLastUpdateMatchesExpected(result.lastUpdate);
     });
 });

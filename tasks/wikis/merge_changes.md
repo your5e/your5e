@@ -51,7 +51,7 @@ Plus, at least some of the point is to have your notes on at least other
 computer in case of data loss. That doesn't help if they never leave.
 
 - [X] resolve blocked syncing by renaming the local file (bash script)
-- [ ] resolve blocked syncing by renaming the local file (obsidian engine)
+- [X] resolve blocked syncing by renaming the local file (obsidian engine)
 - [ ] add "local deleted, local edited, remote edited" scenario
 - [ ] add scenario for unmergeable server and local modifications
 - [ ] update the sync doc to clarify that preserving content is the #1 goal

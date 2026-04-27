@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import * as path from "node:path";
 import { expect } from "vitest";
 import type { SyncStateEntry } from "../src/sync/types.js";
@@ -240,6 +240,21 @@ export async function assertStateMatchesFixture(
     }
 
     expect(actual).toEqual(expected);
+}
+
+export async function assertFixtureFilesInState(
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+
+    await walkDir(fixtureDir, fixtureDir, async (relativePath, fullPath) => {
+        const expectedHash = await hashFile(fullPath);
+        const entry = findByLocalFilename(state, relativePath);
+        if (!entry) {
+            throw new Error(`Fixture file ${relativePath} not found in sync state`);
+        }
+        expect(entry.serverHash).toBe(expectedHash);
+    });
 }
 
 export async function assertFilePushed(
@@ -807,4 +822,158 @@ export function assertIncrementalResults(
     expected: number,
 ): void {
     expect(incrementalResults).toBe(expected);
+}
+
+export function shortHostname(): string {
+    return hostname().split(".")[0];
+}
+
+export function mergeableOrc(): string {
+    return `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Orc
+
+Large and aggressive.
+`;
+}
+
+export function mergeableTroll(): string {
+    return `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Troll
+
+Regenerates health.
+`;
+}
+
+export function mergedOrcTroll(): string {
+    return `# Bestiary
+
+Creatures encountered.
+
+## Goblin
+
+Small and cunning.
+
+## Orc
+
+Large and aggressive.
+
+## Troll
+
+Regenerates health.
+`;
+}
+
+export async function modifyFileWithContent(
+    outputDir: string,
+    filename: string,
+    content: string,
+): Promise<void> {
+    await fs.writeFile(path.join(outputDir, filename), content);
+}
+
+export async function assertFileContent(
+    outputDir: string,
+    filename: string,
+    expectedContent: string,
+): Promise<void> {
+    const filePath = path.join(outputDir, filename);
+    const content = await fs.readFile(filePath, "utf-8");
+    expect(content).toBe(expectedContent);
+}
+
+export async function assertFixtureFilesDownloaded(outputDir: string): Promise<void> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+
+    async function checkFixtures(dir: string): Promise<void> {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                await checkFixtures(fullPath);
+            } else {
+                const relativePath = path.relative(fixtureDir, fullPath);
+                const outputPath = path.join(outputDir, relativePath);
+                const fixtureContent = await fs.readFile(fullPath);
+                const outputContent = await fs.readFile(outputPath);
+                expect(outputContent.equals(fixtureContent)).toBe(true);
+            }
+        }
+    }
+
+    await checkFixtures(fixtureDir);
+}
+
+export function assertUuidLocalFilename(
+    state: Map<string, SyncStateEntry>,
+    uuid: string,
+    expectedFilename: string,
+): void {
+    const entry = state.get(uuid);
+    expect(entry).toBeDefined();
+    expect(entry?.localFilename).toBe(expectedFilename);
+}
+
+export function assertUuidRemoteFilename(
+    state: Map<string, SyncStateEntry>,
+    uuid: string,
+    expectedFilename: string,
+): void {
+    const entry = state.get(uuid);
+    expect(entry).toBeDefined();
+    expect(entry?.serverFilename).toBe(expectedFilename);
+}
+
+async function getFixtureFiles(): Promise<string[]> {
+    const fixtureDir = path.join(FIXTURES_DIR, "campaign-notes");
+    const files: string[] = [];
+
+    async function walk(dir: string): Promise<void> {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                await walk(fullPath);
+            } else {
+                files.push(path.relative(fixtureDir, fullPath));
+            }
+        }
+    }
+
+    await walk(fixtureDir);
+    return files;
+}
+
+export async function assertFixturesIntact(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+): Promise<void> {
+    await assertFixturesIntactExcept(outputDir, state);
+}
+
+export async function assertFixturesIntactExcept(
+    outputDir: string,
+    state: Map<string, SyncStateEntry>,
+    ...excluded: string[]
+): Promise<void> {
+    const fixtureFiles = await getFixtureFiles();
+    for (const file of fixtureFiles) {
+        if (excluded.includes(file)) {
+            continue;
+        }
+        await assertTrackedFileMatchesFixture(outputDir, state, file);
+    }
 }

@@ -481,9 +481,8 @@ function apply_remote_updates {
             "$hash" \
             "$version"
 
-    elif file_exists_with_different_case "$dest_path" "$dest_file"; then
-        local collision_path
-        collision_path=$(find_case_collision_path "$dest_path" "$dest_file")
+    elif collision_path=$(find_case_collision_path "$dest_path" "$dest_file"); \
+            [[ -n "$collision_path" ]]; then
         rename_blocking_path "$output_dir" "$collision_path"
         fetch_remote_file \
             "$notebook" \
@@ -1718,7 +1717,7 @@ function file_blocked_by_directory {
         &&  ! is_being_renamed "$uuid" "$dest_file"
 }
 
-function file_exists_with_different_case {
+function find_case_collision_path {
     local filepath="$1"
     local file="$2"
 
@@ -1730,22 +1729,10 @@ function file_exists_with_different_case {
         find "$dir_path" -maxdepth 1 -iname "$base_name" -print -quit 2>/dev/null
     )
 
-    [[ -z "$actual_file" ]] \
-        && return 1
-    [[ "$(basename "$actual_file")" == "$base_name" ]] \
-        && return 1
-    return 0
-}
+    [[ -z "$actual_file" ]] && return
+    [[ "$(basename "$actual_file")" == "$base_name" ]] && return
 
-function find_case_collision_path {
-    local filepath="$1"
-    local file="$2"
-
-    local dir_path base_name
-    dir_path=$(dirname "$filepath")
-    base_name=$(basename "$file")
-
-    find "$dir_path" -maxdepth 1 -iname "$base_name" -print -quit 2>/dev/null
+    echo "$actual_file"
 }
 
 function find_blocking_parent_path {
