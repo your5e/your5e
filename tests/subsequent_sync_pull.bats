@@ -82,7 +82,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Rumours.md" to "Rumours (conflict ${SHORT_HOST}).md"
+        info: renamed "Rumours.md" to "Rumours (conflict ${SHORT_HOST}).md"
         pull: "Rumours.md" (v1)
 	EOF
     )
@@ -104,7 +104,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST}).md"
+        info: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST}).md"
         pull: "Quests.md" (v1)
 	EOF
     )
@@ -127,7 +127,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "npcs/Major.md" to "npcs/Major (conflict ${SHORT_HOST}).md"
+        info: renamed "npcs/Major.md" to "npcs/Major (conflict ${SHORT_HOST}).md"
         pull: renamed "characters/NPCs.md" to "npcs/Major.md"
 	EOF
     )
@@ -151,7 +151,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Monsters.md" to "Monsters (conflict ${SHORT_HOST}).md"
+        info: renamed "Monsters.md" to "Monsters (conflict ${SHORT_HOST}).md"
         pull: renamed "Bestiary.md" to "Monsters.md"
 	EOF
     )
@@ -214,7 +214,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "logs/Session 01.md" to "logs/Session 01 (conflict ${SHORT_HOST}).md"
+        info: renamed "logs/Session 01.md" to "logs/Session 01 (conflict ${SHORT_HOST}).md"
         pull: renamed "sessions/session-01.md" to "logs/Session 01.md"
 	EOF
     )
@@ -407,7 +407,7 @@ setup() {
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: renamed "Home.md" to "Bestiary.md"
         pull: renamed "index.md" to "Home.md"
-        pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
         pull: "index.md" (v5)
 	EOF
     )
@@ -439,7 +439,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
+        info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
         pull: renamed "index.md" to "Home.md"
         pull: renamed "Bestiary.md" to "index.md"
         pull: "Bestiary.md" (v3)
@@ -493,7 +493,7 @@ setup() {
     assert_success
 }
 
-@test "local edited, remote edited" {
+@test "local edited, remote edited, mergeable" {
     modify_file "Bestiary.md" "$(mergeable_orc)"
     server_edit_content "$(uuid_for "Bestiary.md")" "$(mergeable_troll)"
 
@@ -507,6 +507,29 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     diff -u <(merged_orc_troll) "$output_dir/Bestiary.md"
+    assert_file_in_state "Bestiary.md"
+    assert_fixtures_intact_except "Bestiary.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local edited, remote edited, unmergeable" {
+    modify_file "Bestiary.md"
+    server_edit_content "$(uuid_for "Bestiary.md")"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        pull: "Bestiary.md" (v3)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_modified "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "Bestiary.md"
     assert_file_in_state "Bestiary.md"
     assert_fixtures_intact_except "Bestiary.md"
     assert_sync_metadata_updated
@@ -540,7 +563,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
         pull: "index.md" (v2)
 	EOF
     )
@@ -611,7 +634,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
         pull: "renamed-bestiary.md" (v4)
 	EOF
     )
@@ -655,7 +678,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
         pull: deleted "Bestiary.md"
 	EOF
     )
@@ -777,8 +800,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"
-        pull: deleted "my-notes.md"
+        info: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -787,6 +809,59 @@ setup() {
     assert_file_not_in_state "my-notes (conflict ${SHORT_HOST}).md"
     assert_file_not_in_state "my-notes.md"
     assert_fixtures_intact
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "stale file, local edited, remote edited, incremental sync" {
+    mark_file_stale "index.md"
+    modify_file "index.md"
+    server_edit_content "$(uuid_for "index.md")"
+
+    # pull: incremental sync learns of updated index.md with different UUID
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        pull: "index.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_not_in_state "stale-uuid"
+    assert_file_modified "index (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "index (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
+    assert_fixtures_intact_except "index.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "stale file, local edited, remote edited, full sync" {
+    mark_file_stale "index.md"
+    modify_file "index.md"
+    server_edit_content "$(uuid_for "index.md")"
+    setup_old_sync_metadata
+
+    # pull: full sync detects stale file, local edit conflicts, rename to conflict
+    fail_on_since_parameter
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        pull: "index.md" (v2)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_not_in_state "stale-uuid"
+    assert_file_modified "index (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "index (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "index.md"
+    assert_file_in_state "index.md"
+    assert_fixtures_intact_except "index.md"
     assert_sync_metadata_updated
     assert_success
 }
@@ -859,7 +934,8 @@ setup() {
     assert_success
 }
 
-@test "local deleted" {
+@test "local deleted, aware" {
+    index_uuid=$(uuid_for "index.md")
     delete_tracked_file "index.md"
 
     fail_when_results_not 0
@@ -868,7 +944,23 @@ setup() {
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_not_restored "$index_uuid" "index.md"
+    assert_fixtures_intact_except "index.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local deleted, unaware" {
+    index_uuid=$(uuid_for "index.md")
+    remove_file "index.md"
+
+    fail_when_results_not 0
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=""
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_tracked_file_not_restored "$index_uuid" "index.md"
     assert_fixtures_intact_except "index.md"
     assert_sync_metadata_updated
     assert_success
@@ -906,7 +998,7 @@ setup() {
     diff -u <(echo "$expected_output") <(echo "$output")
 
     assert_tracked_file_deleted "characters/NPCs.md"
-    assert_tracked_file_not_restored "NPCs.md"
+    assert_tracked_file_not_restored "$npcs_uuid" "NPCs.md"
     assert_uuid_local_filename "$npcs_uuid" "NPCs.md"
     assert_uuid_remote_filename "$npcs_uuid" "NPCs.md"
     assert_fixtures_intact_except "characters/NPCs.md"
@@ -936,7 +1028,59 @@ setup() {
     assert_success
 }
 
-@test "local deleted, local edited, remote edited, remote renamed" {
+@test "local deleted, aware, local edited, remote edited" {
+    bestiary_uuid=$(uuid_for "Bestiary.md")
+    delete_tracked_file "Bestiary.md"
+    create_file "Bestiary.md"
+    server_edit_content "$bestiary_uuid"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        pull: "Bestiary.md" (v3, revivified)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "Bestiary.md"
+    assert_uuid_local_filename "$bestiary_uuid" "Bestiary.md"
+    assert_fixtures_intact_except "Bestiary.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local deleted, unaware, local edited, remote edited" {
+    bestiary_uuid=$(uuid_for "Bestiary.md")
+    remove_file "Bestiary.md"
+    create_file "Bestiary.md"
+    server_edit_content "$bestiary_uuid"
+
+    # there is no way to differentiate file deleted/recreated vs edited,
+    # so we do not create a conflict file, just replace the content
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        pull: "Bestiary.md" (v3)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Bestiary (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "Bestiary.md"
+    assert_uuid_local_filename "$bestiary_uuid" "Bestiary.md"
+    assert_fixtures_intact_except "Bestiary.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local deleted, aware, local edited, remote edited, remote renamed" {
     home_uuid=$(uuid_for "Home.md")
     delete_tracked_file "Home.md"
     create_file "Welcome.md"
@@ -947,7 +1091,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "Welcome.md" to "Welcome (conflict ${SHORT_HOST}).md"
+        info: renamed "Welcome.md" to "Welcome (conflict ${SHORT_HOST}).md"
         pull: "Welcome.md" (v4, revivified)
 	EOF
     )
@@ -955,6 +1099,34 @@ setup() {
 
     assert_file_unchanged "Welcome (conflict ${SHORT_HOST}).md"
     assert_file_not_in_state "Welcome (conflict ${SHORT_HOST}).md"
+    assert_server_edited_content "Welcome.md"
+    assert_uuid_local_filename "$home_uuid" "Welcome.md"
+    assert_fixtures_intact_except "Home.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "local deleted, unaware, local edited, remote edited, remote renamed" {
+    home_uuid=$(uuid_for "Home.md")
+    remove_file "Home.md"
+    create_file "Home.md"
+    server_edit_content "$home_uuid"
+    server_rename "$home_uuid" "Welcome.md"
+
+    # there is no way to differentiate file deleted/recreated vs edited,
+    # so we do not create a conflict file, just replace the content
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
+        pull: "Welcome.md" (v4)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "Home (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Home (conflict ${SHORT_HOST}).md"
     assert_server_edited_content "Welcome.md"
     assert_uuid_local_filename "$home_uuid" "Welcome.md"
     assert_fixtures_intact_except "Home.md"
@@ -1068,7 +1240,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "renamed-bestiary.md" to "renamed-bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "renamed-bestiary.md" to "renamed-bestiary (conflict ${SHORT_HOST}).md"
         pull: "Bestiary.md" to "renamed-bestiary.md" (v3)
 	EOF
     )
@@ -1183,7 +1355,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "my-bestiary.md" to "my-bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "my-bestiary.md" to "my-bestiary (conflict ${SHORT_HOST}).md"
         pull: "server-bestiary.md" to "my-bestiary.md" (v4)
 	EOF
     )
@@ -1209,7 +1381,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: deleted "Bestiary.md" (was "my-bestiary.md")
+        pull: deleted "Bestiary.md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1230,7 +1402,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "my-bestiary.md" to "my-bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "my-bestiary.md" to "my-bestiary (conflict ${SHORT_HOST}).md"
         pull: deleted "Bestiary.md"
 	EOF
     )
@@ -1275,8 +1447,7 @@ setup() {
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
-        pull: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"
-        pull: deleted "original.md"
+        info: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"
 	EOF
     )
     diff -u <(echo "$expected_output") <(echo "$output")
@@ -1311,6 +1482,7 @@ setup() {
 }
 
 @test "local renamed untracked, hash mismatch" {
+    index_uuid=$(uuid_for "index.md")
     rename_local_file_untracked "index.md" "renamed-index.md"
     modify_file "renamed-index.md"
 
@@ -1320,7 +1492,7 @@ setup() {
     expected_output=""
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_not_restored "$index_uuid" "index.md"
     assert_file_modified "renamed-index.md"
     assert_file_not_in_state "renamed-index.md"
     assert_fixtures_intact_except "index.md"
@@ -1347,6 +1519,72 @@ setup() {
     assert_file_modified "renamed-index.md"
     assert_file_not_in_state "renamed-index.md"
     assert_fixtures_intact_except "index.md"
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "conflict hostname exists" {
+    server_create "Quests.md"
+    create_file "Quests.md"
+    create_file "Quests (conflict ${SHORT_HOST}).md"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    today=$(date +%Y%m%d)
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST} ${today}).md"
+        pull: "Quests.md" (v1)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    assert_file_unchanged "Quests (conflict ${SHORT_HOST}).md"
+    assert_file_unchanged "Quests (conflict ${SHORT_HOST} ${today}).md"
+    assert_file_not_in_state "Quests (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Quests (conflict ${SHORT_HOST} ${today}).md"
+    assert_tracked_file_intact "Quests.md"
+    assert_fixtures_intact
+    assert_sync_metadata_updated
+    assert_success
+}
+
+@test "conflict hostname exists, conflict date exists" {
+    today=$(date +%Y%m%d)
+    before=$(date +%Y%m%d%H%M%S)
+    server_create "Quests.md"
+    create_file "Quests.md"
+    create_file "Quests (conflict ${SHORT_HOST}).md"
+    create_file "Quests (conflict ${SHORT_HOST} ${today}).md"
+
+    fail_when_results_not 1
+    run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
+
+    timestamp_file=$(
+        echo "$output" \
+            | grep -o "Quests (conflict ${SHORT_HOST} [0-9]\{14\}).md" \
+            | head -1
+    )
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: renamed "Quests.md" to "${timestamp_file}"
+        pull: "Quests.md" (v1)
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+
+    # this will obviously fail if the day ticks over during the test,
+    # so don't run the tests at almost-midnight
+    after=$(date +%Y%m%d%H%M%S)
+    timestamp=$(echo "$timestamp_file" | grep -o '[0-9]\{14\}')
+    assert_timestamp_in_range "$timestamp" "$before" "$after"
+    assert_file_unchanged "Quests (conflict ${SHORT_HOST}).md"
+    assert_file_unchanged "Quests (conflict ${SHORT_HOST} ${today}).md"
+    assert_file_unchanged "${timestamp_file}"
+    assert_file_not_in_state "Quests (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Quests (conflict ${SHORT_HOST} ${today}).md"
+    assert_file_not_in_state "${timestamp_file}"
+    assert_tracked_file_intact "Quests.md"
+    assert_fixtures_intact
     assert_sync_metadata_updated
     assert_success
 }

@@ -523,8 +523,18 @@ export async function renameLocalFileUntracked(
 export async function deleteTrackedFile(
     outputDir: string,
     filename: string,
+    state?: Map<string, SyncStateEntry>,
 ): Promise<void> {
     await fs.unlink(path.join(outputDir, filename));
+    // Mark as aware deletion
+    if (state) {
+        for (const entry of state.values()) {
+            if (entry.localFilename === filename) {
+                entry.localDeleted = true;
+                return;
+            }
+        }
+    }
 }
 
 export function untrackFile(
@@ -976,4 +986,32 @@ export async function assertFixturesIntactExcept(
         }
         await assertTrackedFileMatchesFixture(outputDir, state, file);
     }
+}
+
+export function todayDate(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}${month}${day}`;
+}
+
+export function assertTimestampInRange(
+    timestamp: string,
+    before: string,
+    after: string,
+): void {
+    expect(timestamp >= before).toBe(true);
+    expect(timestamp <= after).toBe(true);
+}
+
+export function nowTimestamp(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }

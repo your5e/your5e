@@ -69,6 +69,7 @@ test-django: lint-django
 test-sync-integration:
 	shellcheck tests/*.sh
 	python tests/check-test-coverage.py bats
+	bash tests/extract-state-helpers.sh
 	awk -f tests/check-line-length.awk tests/*.sh
 ifdef CI
 	kcov --include-path=$$PWD/tests coverage bats tests/*.bats

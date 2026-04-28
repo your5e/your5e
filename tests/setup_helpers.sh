@@ -6,6 +6,9 @@
 # shellcheck shell=bash
 declare fixtures output_dir BATS_FILE_TMPDIR
 
+# shellcheck source=/dev/null
+source tests/state-helpers.sh
+
 function restore_database {
     COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
     docker compose -p your5e-test exec -T db \
@@ -38,17 +41,17 @@ function init_synced_dir {
     # after a sync, both filenames are the same, both hashes are the same
     awk -F'\t' '$4 == "" {print $2"\t"$1"\t"$1"\t"$3"\t"$3}' "$BATS_FILE_TMPDIR/pages" \
         > "$output_dir/.sync-state"
+    state_file="$output_dir/.sync-state"
 }
 
 function set_cached_state {
     local uuid="$1" filename="$2" content="$3"
     local hash
     hash=$(printf '%s\n' "$content" | shasum -a 256 | cut -d' ' -f1)
-    local state_file="$output_dir/.sync-state"
 
     # remove existing file for this UUID if different
     local old_file
-    old_file=$(grep "^$uuid"$'\t' "$state_file" | cut -f3)
+    old_file=$(get_sync_state "$uuid" local_filename)
     [[ -n "$old_file" && "$old_file" != "$filename" ]] && rm -f "$output_dir/$old_file"
 
     # create file with content
@@ -56,18 +59,14 @@ function set_cached_state {
     printf "%s\n" "$content" > "$output_dir/$filename"
 
     # update cache (both filenames same, both hashes same after reconciliation)
-    grep -v "^$uuid"$'\t' "$state_file" > "$state_file.new"
-    printf "%s\t%s\t%s\t%s\t%s\n" \
-        "$uuid" "$filename" "$filename" "$hash" "$hash" >> "$state_file.new"
-    mv "$state_file.new" "$state_file"
+    update_sync_state "$uuid" "$filename" "$filename" "$hash" "$hash"
 }
 
 function untrack_file {
     local filename="$1"
-    local state_file="$output_dir/.sync-state"
-
-    awk -F'\t' -v f="$filename" '$3 != f' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
+    local uuid
+    uuid=$(get_sync_state "$filename" uuid)
+    [[ -n "$uuid" ]] && update_sync_state -d "$uuid"
 }
 
 function untrack_and_remove_file {
@@ -77,21 +76,26 @@ function untrack_and_remove_file {
 }
 
 function delete_tracked_file {
-    rm "$output_dir/$1"
+    local filename="$1"
+    rm "$output_dir/$filename"
+
+    # set local_filename to '.' to mark as aware deletion
+    local uuid
+    uuid=$(get_sync_state "$filename" uuid)
+    update_sync_state "$uuid" "" "."
 }
 
 function rename_local_file {
     local from="$1" to="$2"
-    local state_file="$output_dir/.sync-state"
 
     mkdir -p "$(dirname "$output_dir/$to")"
     mv "$output_dir/$from" "$output_dir/$to"
     rmdir -p "$(dirname "$output_dir/$from")" 2>/dev/null || true
 
-    # update only local_filename (col 3), server_filename (col 2) stays unchanged
-    awk -F'\t' -v old="$from" -v new="$to" -v OFS='\t' \
-        '$3 == old {$3 = new} {print}' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
+    # update only local_filename, server_filename stays unchanged
+    local uuid
+    uuid=$(get_sync_state "$from" uuid)
+    update_sync_state "$uuid" "" "$to"
 }
 
 function rename_local_file_untracked {
@@ -161,13 +165,17 @@ function merged_orc_troll {
 
 function mark_file_stale {
     local filename="$1"
-    local state_file="$output_dir/.sync-state"
-    local old_uuid
-    old_uuid=$(awk -F'\t' -v f="$filename" '$3 == f {print $1; exit}' "$state_file")
+    local old_uuid server_fn local_fn hash local_hash
 
-    awk -F'\t' -v u="$old_uuid" -v new="stale-uuid-$RANDOM" -v OFS='\t' \
-        '$1 == u {$1 = new} {print}' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
+    old_uuid=$(get_sync_state "$filename" uuid)
+    server_fn=$(get_sync_state "$old_uuid" server_filename)
+    local_fn=$(get_sync_state "$old_uuid" local_filename)
+    hash=$(get_sync_state "$old_uuid" hash)
+    local_hash=$(get_sync_state "$old_uuid" local_hash)
+
+    update_sync_state -d "$old_uuid"
+    update_sync_state \
+        "stale-uuid-$RANDOM" "$server_fn" "$local_fn" "$hash" "$local_hash"
 }
 
 function create_file {
@@ -190,11 +198,9 @@ function add_stale_file {
 function set_base_hash {
     local filename="$1"
     local hash="$2"
-    local state_file="$output_dir/.sync-state"
-
-    awk -F'\t' -v f="$filename" -v h="$hash" -v OFS='\t' \
-        '$3 == f {$4 = h} {print}' "$state_file" > "$state_file.new"
-    mv "$state_file.new" "$state_file"
+    local uuid
+    uuid=$(get_sync_state "$filename" uuid)
+    update_sync_state "$uuid" "" "" "$hash"
 }
 
 function assert_not_in_state {
@@ -218,9 +224,19 @@ function assert_tracked_file_deleted {
 }
 
 function assert_tracked_file_not_restored {
-    local filename="$1"
+    local uuid="$1"
+    local filename="$2"
+    local state_file="$output_dir/.sync-state"
+
     [[ ! -f "$output_dir/$filename" ]]
-    assert_file_in_state "$filename"
+    awk \
+        -F'\t' \
+        -v u="$uuid" \
+        '
+            $1 == u {found=1; exit}
+            END {exit !found}
+        ' \
+            "$state_file"
 }
 
 function assert_empty_dir_removed {
@@ -237,31 +253,29 @@ function assert_file_not_in_state {
 function assert_uuid_local_filename {
     local uuid="$1"
     local expected_filename="$2"
-    local state_file="$output_dir/.sync-state"
     local actual_filename
 
-    actual_filename=$(awk -F'\t' -v u="$uuid" '$1 == u {print $3; exit}' "$state_file")
+    actual_filename=$(get_sync_state "$uuid" local_filename)
     [[ "$actual_filename" == "$expected_filename" ]]
 }
 
 function assert_uuid_remote_filename {
     local uuid="$1"
     local expected_filename="$2"
-    local state_file="$output_dir/.sync-state"
     local actual_filename
 
-    actual_filename=$(awk -F'\t' -v u="$uuid" '$1 == u {print $2; exit}' "$state_file")
+    actual_filename=$(get_sync_state "$uuid" server_filename)
     [[ "$actual_filename" == "$expected_filename" ]]
 }
 
 function assert_tracked_file_intact {
     local filename="$1"
-    local state_file="$output_dir/.sync-state"
 
     [[ -f "$output_dir/$filename" ]]
 
-    local cached_hash
-    cached_hash=$(awk -F'\t' -v f="$filename" '$3 == f {print $4; exit}' "$state_file")
+    local uuid cached_hash
+    uuid=$(get_sync_state "$filename" uuid)
+    cached_hash=$(get_sync_state "$uuid" hash)
     [[ -n "$cached_hash" ]]
 
     local actual_hash
@@ -317,6 +331,14 @@ function assert_file_ignored {
     local filename="$1"
     assert_file_unchanged "$filename"
     assert_file_not_in_state "$filename"
+}
+
+function assert_timestamp_in_range {
+    local timestamp="$1"
+    local before="$2"
+    local after="$3"
+
+    [[ $timestamp -ge $before && $timestamp -le $after ]]
 }
 
 function assert_file_downloaded {
@@ -569,13 +591,12 @@ function assert_last_updated_unchanged {
 function assert_file_pushed {
     local filename="$1"
     local expected_content_type="$2"
-    local state_file="$output_dir/.sync-state"
     local actual_hash body cached_hash headers response uuid
 
-    uuid=$(awk -F'\t' -v f="$filename" '$3 == f {print $1; exit}' "$state_file")
+    uuid=$(get_sync_state "$filename" uuid)
     [[ -n "$uuid" ]]
 
-    cached_hash=$(awk -F'\t' -v f="$filename" '$3 == f {print $4; exit}' "$state_file")
+    cached_hash=$(get_sync_state "$uuid" hash)
     actual_hash=$(shasum -a 256 "$output_dir/$filename" | cut -d' ' -f1)
     [[ "$actual_hash" == "$cached_hash" ]]
 

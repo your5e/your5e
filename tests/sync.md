@@ -4,35 +4,37 @@ This document specifies the sync algorithm. The reference implementation is in
 `sync-notebook.sh`. The BATS test files contain scenarios that any sync
 client should handle — use them to verify your implementation.
 
-The one-line summary: concurrent edits are merged automatically when possible,
-but local changes always take precedence when merging is impossible.
+The one-line summary: aim to preserve content at all times, ideally on the
+server, locally if there is no ability to write to the notebook.
 
 The server both keeps deleted files for a while and keeps previous versions of
 files, so pushing old changes is never wholly destructive.
+
+Concurrent edits should be merged into the file when possible, and secondary
+files created when changes conflict. This means the user needs to reconcile,
+but nothing should be thrown away. Local changes are never deleted.
 
 Broadly, the algorithm to sync the local directory is:
 
 1.  _GET_ remote state of the notebook.
 2.  Scan for untracked renames (files moved locally outside of sync)
     by matching missing tracked files to untracked files by content hash.
-3.  _PATCH_ locally renamed files (cached filename differs from server filename).
-4.  _DELETE_ any deleted files (in the cache, no longer in the directory).
-5.  _POST_ new local files (not in the cache).
-6.  _PUT_ changed local files (differ from the cache). The server will merge
+3.  Check for stale files (UUIDs in cache but not on remote). If a stale
+    file has local changes, preserve it in a conflict file.
+4.  _PATCH_ locally renamed files (cached filename differs from server filename).
+5.  _DELETE_ any deleted files (in the cache, no longer in the directory).
+6.  _POST_ new local files (not in the cache).
+7.  _PUT_ changed local files (differ from the cache). The server will merge
     or replace if the previous version differs from the cached hash. If the
     returned hash differs from the local file (server merged or normalised
     line endings), _GET_ the updated content.
-7.  _rm_ any files deleted remotely (any local edits will have already
-    un-deleted them in step 6).
-8.  _mv_ any files where the remote UUID now has a different filename.
-9.  _GET_ any files where the local hash matches, but the server's hash
-    has changed (remote updates). This includes files deleted locally but
-    updated remotely, restoring them with the new remote content.
-10. If both local and remote have changed, _GET_ the common ancestor by
-    hash and attempt a three-way merge. If merging fails, keep the local
-    version and warn the user.
-11. Check for stale files (UUIDs in cache but not on remote) and warn
-    the user.
+8.  _rm_ any files deleted remotely. If the file has local changes, rename
+    it to a conflict file first.
+9.  _mv_ any files where the remote UUID now has a different filename.
+10. _GET_ any files where the local hash differs from the server's hash
+    (remote updates). If a local file at this path has changes, attempt a
+    three-way merge; if merging fails, rename the local file to a conflict
+    file and fetch the remote content.
 
 Update the local cache after each successful operation.
 
@@ -74,7 +76,7 @@ Test the initial sync completes correctly.
 
 Test updating the state from an existing synced directory works.
 
-- **Tracked** — file is in ``.sync-state` from previous sync
+- **Tracked** — file is in the local state from previous sync
 - **Local Edited** — local content differs from cached hash
 - **Local Renamed** — local file has been moved to a different path
 - **Local Deleted** — local file no longer exists
@@ -82,69 +84,80 @@ Test updating the state from an existing synced directory works.
 - **Remote Renamed** — server filename differs from cached
 - **Remote Deleted** — server has soft-deleted the file
 - **Stale** — tracked UUID no longer exists on server
+- **Aware** — sync state knows about local deletion
+- **Mergeable** — concurrent edits can be three-way merged
 
-| Test | Tracked | Local Edited | Local Renamed | Local Deleted | Remote Edited | Remote Renamed | Remote Deleted | Stale |
-|------|---------|--------------|---------------|---------------|---------------|----------------|----------------|--------|
-| no change, outdated timestamp | ✔️ | | | | | | | |
-| no change, recent timestamp | ✔️ | | | | | | | |
-| untracked file | | | | | | | | |
-| untracked file, local edited, directory | | ✔️ | | | | | | |
-| untracked file, local edited | | ✔️ | | | | | | |
-| untracked file, remote renamed | | | | | | ✔️ | | |
-| untracked file, local edited, remote renamed | | ✔️ | | | | ✔️ | | |
-| remote edited | ✔️ | | | | ✔️ | | | |
-| remote renamed | ✔️ | | | | | ✔️ | | |
-| remote renamed, local edited, directory | ✔️ | ✔️ | | | | ✔️ | | |
-| remote edited, remote renamed | ✔️ | | | | ✔️ | ✔️ | | |
-| remote renamed, swapped | ✔️ | | | | | ✔️ | | |
-| remote renamed, chain | ✔️ | | | | | ✔️ | | |
-| remote renamed, chain reversed | ✔️ | | | | | ✔️ | | |
-| remote renamed, cycle | ✔️ | | | | | ✔️ | | |
-| remote renamed, cycle, local edited, mergeable | ✔️ | ✔️ | | | | ✔️ | | |
-| remote renamed, cycle, local edited, unmergeable | ✔️ | ✔️ | | | | ✔️ | | |
-| remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | |
-| local edited | ✔️ | ✔️ | | | | | | |
-| local edited, CRLF line endings | ✔️ | ✔️ | | | | | | |
-| local edited, remote edited | ✔️ | ✔️ | | | ✔️ | | | |
-| local edited, remote edited, same content | ✔️ | ✔️ | | | ✔️ | | | |
-| local edited, remote edited, no common ancestor | ✔️ | ✔️ | | | ✔️ | | | |
-| local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | |
-| local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
-| local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | |
-| remote deleted | ✔️ | | | | | | ✔️ | |
-| remote deleted, local edited | ✔️ | ✔️ | | | | | ✔️ | |
-| stale file, incremental sync | ✔️ | | | | | | | ✔️ |
-| stale file, full sync | ✔️ | | | | | | | ✔️ |
-| stale file, remote edited, incremental sync | ✔️ | | | | ✔️ | | | ✔️ |
-| stale file, remote edited, full sync | ✔️ | | | | ✔️ | | | ✔️ |
-| stale file, local edited, incremental sync | ✔️ | ✔️ | | | | | | ✔️ |
-| stale file, local edited, full sync | ✔️ | ✔️ | | | | | | ✔️ |
-| stale file, local deleted | ✔️ | | | ✔️ | | | | ✔️ |
-| stale file, local deleted, remote edited, incremental sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
-| stale file, local deleted, remote edited, full sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ |
-| local deleted | ✔️ | | | ✔️ | | | | |
-| local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | |
-| local deleted, remote renamed | ✔️ | | | ✔️ | | ✔️ | | |
-| local deleted, remote edited, remote renamed | ✔️ | | | ✔️ | ✔️ | ✔️ | | |
-| local deleted, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | |
-| local deleted, remote deleted | ✔️ | | | ✔️ | | | ✔️ | |
-| local renamed | ✔️ | | ✔️ | | | | | |
-| local renamed, local edited | ✔️ | ✔️ | ✔️ | | | | | |
-| local renamed, remote edited | ✔️ | | ✔️ | | ✔️ | | | |
-| local renamed, local edited, remote edited, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
-| local renamed, local edited, remote edited, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
-| local renamed, remote renamed | ✔️ | | ✔️ | | | ✔️ | | |
-| local renamed, local edited, remote renamed | ✔️ | ✔️ | ✔️ | | | ✔️ | | |
-| local renamed, remote edited, remote renamed | ✔️ | | ✔️ | | ✔️ | ✔️ | | |
-| local renamed, local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | |
-| local renamed, local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | |
-| local renamed, remote deleted | ✔️ | | ✔️ | | | | ✔️ | |
-| local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | |
-| local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ |
-| local renamed, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ |
-| local renamed untracked, hash match | ✔️ | | ✔️ | | | | | |
-| local renamed untracked, hash mismatch | ✔️ | ✔️ | ✔️ | | | | | |
-| local renamed untracked, hash mismatch, remote edited | ✔️ | ✔️ | ✔️ | | ✔️ | | | |
+| Test | Tracked | Local Edited | Local Renamed | Local Deleted | Remote Edited | Remote Renamed | Remote Deleted | Stale | Aware | Mergeable |
+|------|---------|--------------|---------------|---------------|---------------|----------------|----------------|-------|-------|-----------|
+| no change, outdated timestamp | ✔️ | | | | | | | | | |
+| no change, recent timestamp | ✔️ | | | | | | | | | |
+| untracked file | | | | | | | | | | |
+| untracked file, local edited, directory | | ✔️ | | | | | | | | |
+| untracked file, local edited | | ✔️ | | | | | | | | |
+| untracked file, remote renamed | | | | | | ✔️ | | | | |
+| untracked file, local edited, remote renamed | | ✔️ | | | | ✔️ | | | | |
+| remote edited | ✔️ | | | | ✔️ | | | | | |
+| remote renamed | ✔️ | | | | | ✔️ | | | | |
+| remote renamed, local edited, directory | ✔️ | ✔️ | | | | ✔️ | | | | |
+| remote edited, remote renamed | ✔️ | | | | ✔️ | ✔️ | | | | |
+| remote renamed, swapped | ✔️ | | | | | ✔️ | | | | |
+| remote renamed, chain | ✔️ | | | | | ✔️ | | | | |
+| remote renamed, chain reversed | ✔️ | | | | | ✔️ | | | | |
+| remote renamed, cycle | ✔️ | | | | | ✔️ | | | | |
+| remote renamed, cycle, local edited, mergeable | ✔️ | ✔️ | | | | ✔️ | | | | ✔️ |
+| remote renamed, cycle, local edited, unmergeable | ✔️ | ✔️ | | | | ✔️ | | | | ❌ |
+| remote renamed, cycle, untracked file | ✔️ | | | | | ✔️ | | | | |
+| local edited | ✔️ | ✔️ | | | | | | | | |
+| local edited, CRLF line endings | ✔️ | ✔️ | | | | | | | | |
+| local edited, remote edited, mergeable | ✔️ | ✔️ | | | ✔️ | | | | | ✔️ |
+| local edited, remote edited, unmergeable | ✔️ | ✔️ | | | ✔️ | | | | | ❌ |
+| local edited, remote edited, same content | ✔️ | ✔️ | | | ✔️ | | | | | |
+| local edited, remote edited, no common ancestor | ✔️ | ✔️ | | | ✔️ | | | | | |
+| local edited, remote renamed | ✔️ | ✔️ | | | | ✔️ | | | | |
+| local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | | | ✔️ |
+| local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | | | ✔️ | ✔️ | | | | ❌ |
+| remote deleted | ✔️ | | | | | | ✔️ | | | |
+| remote deleted, local edited | ✔️ | ✔️ | | | | | ✔️ | | | |
+| stale file, incremental sync | ✔️ | | | | | | | ✔️ | | |
+| stale file, full sync | ✔️ | | | | | | | ✔️ | | |
+| stale file, remote edited, incremental sync | ✔️ | | | | ✔️ | | | ✔️ | | |
+| stale file, remote edited, full sync | ✔️ | | | | ✔️ | | | ✔️ | | |
+| stale file, local edited, incremental sync | ✔️ | ✔️ | | | | | | ✔️ | | |
+| stale file, local edited, full sync | ✔️ | ✔️ | | | | | | ✔️ | | |
+| stale file, local edited, remote edited, incremental sync | ✔️ | ✔️ | | | ✔️ | | | ✔️ | | |
+| stale file, local edited, remote edited, full sync | ✔️ | ✔️ | | | ✔️ | | | ✔️ | | |
+| stale file, local deleted | ✔️ | | | ✔️ | | | | ✔️ | | |
+| stale file, local deleted, remote edited, incremental sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ | | |
+| stale file, local deleted, remote edited, full sync | ✔️ | | | ✔️ | ✔️ | | | ✔️ | | |
+| local deleted, aware | ✔️ | | | ✔️ | | | | | ✔️ | |
+| local deleted, unaware | ✔️ | | | ✔️ | | | | | ❌ | |
+| local deleted, remote edited | ✔️ | | | ✔️ | ✔️ | | | | | |
+| local deleted, remote renamed | ✔️ | | | ✔️ | | ✔️ | | | | |
+| local deleted, remote edited, remote renamed | ✔️ | | | ✔️ | ✔️ | ✔️ | | | | |
+| local deleted, aware, local edited, remote edited | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ✔️ | |
+| local deleted, unaware, local edited, remote edited | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ❌ | |
+| local deleted, aware, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | | ✔️ | |
+| local deleted, unaware, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | | ❌ | |
+| local deleted, remote deleted | ✔️ | | | ✔️ | | | ✔️ | | | |
+| local renamed | ✔️ | | ✔️ | | | | | | | |
+| local renamed, local edited | ✔️ | ✔️ | ✔️ | | | | | | | |
+| local renamed, remote edited | ✔️ | | ✔️ | | ✔️ | | | | | |
+| local renamed, local edited, remote edited, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | ✔️ |
+| local renamed, local edited, remote edited, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | ❌ |
+| local renamed, remote renamed | ✔️ | | ✔️ | | | ✔️ | | | | |
+| local renamed, local edited, remote renamed | ✔️ | ✔️ | ✔️ | | | ✔️ | | | | |
+| local renamed, remote edited, remote renamed | ✔️ | | ✔️ | | ✔️ | ✔️ | | | | |
+| local renamed, local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ✔️ |
+| local renamed, local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ❌ |
+| local renamed, remote deleted | ✔️ | | ✔️ | | | | ✔️ | | | |
+| local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | | | |
+| local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ | | |
+| local renamed, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ | | |
+| local renamed untracked, hash match | ✔️ | | ✔️ | | | | | | | |
+| local renamed untracked, hash mismatch | ✔️ | ✔️ | ✔️ | | | | | | | |
+| local renamed untracked, hash mismatch, remote edited | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | |
+| conflict hostname exists | | ✔️ | | | | | | | | |
+| conflict hostname exists, conflict date exists | | ✔️ | | | | | | | | |
 
 ### `sync_permissions.bats`
 

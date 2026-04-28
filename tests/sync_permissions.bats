@@ -340,7 +340,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_not_restored "$(uuid_for "index.md")" "index.md"
     assert_fixtures_intact_except "index.md"
     assert_last_updated_unchanged
     assert_failure
@@ -360,7 +360,7 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_tracked_file_not_restored "index.md"
+    assert_tracked_file_not_restored "$(uuid_for "index.md")" "index.md"
     assert_server_edited_content "Bestiary.md"
     assert_fixtures_intact_except "index.md" "Bestiary.md"
     assert_sync_metadata_updated

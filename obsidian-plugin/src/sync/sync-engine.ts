@@ -285,6 +285,15 @@ export class SyncEngine {
             const localPath = path.join(this.config.outputDir, entry.localFilename);
             const localExists = await this.fs.isFile(localPath);
 
+            if (entry.localDeleted) {
+                const remoteEdited = remote && remote.content_hash !== entry.serverHash;
+                if (localExists && remoteEdited) {
+                    await this.renameBlockingPath(localPath);
+                }
+                await this.pushLocalDeletion(uuid, entry, remote);
+                continue;
+            }
+
             if (!localExists) {
                 await this.pushLocalDeletion(uuid, entry, remote);
                 continue;
@@ -295,12 +304,11 @@ export class SyncEngine {
             const localRenamed = entry.localFilename !== entry.serverFilename;
             const isStale = !remote;
 
-            if (isStale && localEdited) {
-                const errorMsg = await this.tryCreateRemoteFile(entry.localFilename);
+            if (isStale && localEdited && !localRenamed) {
+                const conflictName = await this.renameBlockingPath(localPath);
+                const errorMsg = await this.tryCreateRemoteFile(conflictName);
                 if (errorMsg) {
-                    this.log(
-                        `push: ERROR cannot push "${entry.localFilename}": ${errorMsg}`,
-                    );
+                    this.log(`push: ERROR cannot push "${conflictName}": ${errorMsg}`);
                     staleUuids.push(uuid);
                 } else {
                     this.deleteSyncState(uuid);
@@ -311,6 +319,16 @@ export class SyncEngine {
             const remoteRenamed = remote && remote.filename !== entry.serverFilename;
 
             if (localRenamed) {
+                if (isStale) {
+                    if (localEdited) {
+                        this.deleteSyncState(uuid);
+                    } else {
+                        await this.fs.delete(localPath);
+                        this.log(`pull: deleted "${entry.localFilename}"`);
+                        this.deleteSyncState(uuid);
+                    }
+                    continue;
+                }
                 const renameSucceeded = await this.pushLocalRename(uuid, entry, remote);
                 if (!renameSucceeded) {
                     continue;
@@ -343,7 +361,7 @@ export class SyncEngine {
                     const conflictDir = this.findConflictingParentDir(file, errorMsg);
                     if (conflictDir) {
                         const dirPath = path.join(this.config.outputDir, conflictDir);
-                        const newDir = await this.renameBlockingPath(dirPath, "push");
+                        const newDir = await this.renameBlockingPath(dirPath);
                         const newFile = file.replace(conflictDir, newDir);
                         const retryError = await this.tryCreateRemoteFile(newFile);
                         if (retryError) {
@@ -354,10 +372,7 @@ export class SyncEngine {
                         }
                     } else {
                         const filePath = path.join(this.config.outputDir, file);
-                        const conflictName = await this.renameBlockingPath(
-                            filePath,
-                            "push",
-                        );
+                        const conflictName = await this.renameBlockingPath(filePath);
                         const err = await this.tryCreateRemoteFile(conflictName);
                         if (err) {
                             this.log(
@@ -614,11 +629,11 @@ export class SyncEngine {
             }
         } else if (response.status === 404) {
             // UUID is stale - the file no longer exists on the server
-            // Remove the stale entry from both syncState and remotePages,
-            // then create a new file
+            const localPath = path.join(this.config.outputDir, entry.localFilename);
+            const conflictName = await this.renameBlockingPath(localPath);
             this.syncState.delete(uuid);
             this.remotePages.delete(uuid);
-            await this.tryCreateRemoteFile(entry.localFilename);
+            await this.tryCreateRemoteFile(conflictName);
         }
     }
 
@@ -633,21 +648,14 @@ export class SyncEngine {
             const localExists = await this.fs.isFile(localPath);
 
             if (await this.hasLocalChanges(uuid, localPath)) {
-                await this.renameBlockingPath(localPath, "pull");
-                this.deleteSyncState(uuid);
+                await this.renameBlockingPath(localPath);
                 this.log(`pull: deleted "${entry.serverFilename}"`);
+                this.deleteSyncState(uuid);
             } else {
                 if (localExists) {
                     await this.fs.delete(localPath);
                 }
-                if (entry.localFilename !== entry.serverFilename) {
-                    this.log(
-                        `pull: deleted "${entry.serverFilename}" ` +
-                            `(was "${entry.localFilename}")`,
-                    );
-                } else {
-                    this.log(`pull: deleted "${entry.localFilename}"`);
-                }
+                this.log(`pull: deleted "${entry.serverFilename}"`);
                 this.deleteSyncState(uuid);
             }
         }
@@ -711,7 +719,7 @@ export class SyncEngine {
                 (await this.fs.isFile(destPath)) &&
                 (await this.hasLocalChanges(cachedUuid, destPath))
             ) {
-                await this.renameBlockingPath(destPath, "pull", true);
+                await this.renameBlockingPath(destPath);
             } else if (await this.fs.isFile(destPath)) {
                 await this.fs.delete(destPath);
             }
@@ -719,19 +727,19 @@ export class SyncEngine {
         }
 
         if (await this.fileBlockedByDirectory(destPath, uuid, destFile)) {
-            await this.renameBlockingPath(destPath, "pull");
+            await this.renameBlockingPath(destPath);
             const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
             if (fetched) {
                 this.log(`pull: "${destFile}" (v${version})`);
             }
         } else if (blockingParentPath) {
-            await this.renameBlockingPath(blockingParentPath, "pull");
+            await this.renameBlockingPath(blockingParentPath);
             const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
             if (fetched) {
                 this.log(`pull: "${destFile}" (v${version})`);
             }
         } else if (caseCollisionPath) {
-            await this.renameBlockingPath(caseCollisionPath, "pull");
+            await this.renameBlockingPath(caseCollisionPath);
             const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
             if (fetched) {
                 this.log(`pull: "${destFile}" (v${version})`);
@@ -771,7 +779,7 @@ export class SyncEngine {
                         if (actualSrcPath !== conflictPath) {
                             await this.fs.rename(actualSrcPath, conflictPath);
                         }
-                        await this.renameBlockingPath(conflictPath, "pull");
+                        await this.renameBlockingPath(conflictPath);
                         const fetched = await this.fetchRemoteFile(
                             uuid,
                             srcFile,
@@ -820,7 +828,7 @@ export class SyncEngine {
                         );
                         this.log(`pull: "${destFile}" (v${version}, merged)`);
                     } else {
-                        const conflictName = this.generateConflictName(srcFile);
+                        const conflictName = await this.generateConflictName(srcFile);
                         const conflictDir = this.config.outputDir;
                         const conflictPath = path.join(conflictDir, conflictName);
                         await this.fs.rename(actualSrcPath, conflictPath);
@@ -865,13 +873,13 @@ export class SyncEngine {
                     (await this.localFileWasRemoved(actualSrcPath)) &&
                     this.hasRemoteChanges(uuid)
                 ) {
-                    await this.renameBlockingPath(destPath, "pull");
+                    await this.renameBlockingPath(destPath);
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
                         this.log(`pull: "${destFile}" (v${version}, revivified)`);
                     }
                 } else {
-                    await this.renameBlockingPath(destPath, "pull");
+                    await this.renameBlockingPath(destPath);
                     await this.fs.rename(actualSrcPath, destPath);
                     this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
 
@@ -889,7 +897,7 @@ export class SyncEngine {
                     }
                 }
             } else if (await this.fs.isDirectory(destPath)) {
-                await this.renameBlockingPath(destPath, "pull");
+                await this.renameBlockingPath(destPath);
                 await this.fs.rename(actualSrcPath, destPath);
                 this.log(`pull: renamed "${srcFile}" to "${destFile}"`);
 
@@ -904,7 +912,7 @@ export class SyncEngine {
             } else if (await this.localFileWasRemoved(actualSrcPath)) {
                 if (this.hasRemoteChanges(uuid)) {
                     if (await this.fs.exists(destPath)) {
-                        await this.renameBlockingPath(destPath, "pull");
+                        await this.renameBlockingPath(destPath);
                     }
                     const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                     if (fetched) {
@@ -931,7 +939,7 @@ export class SyncEngine {
                 // destFile will be vacated by rename cycle; defer this fetch
                 deferredUuids.push(uuid);
             } else if (!entry) {
-                await this.renameBlockingPath(destPath, "pull");
+                await this.renameBlockingPath(destPath);
                 const fetched = await this.fetchRemoteFile(uuid, destFile, hash);
                 if (fetched) {
                     this.log(`pull: "${destFile}" (v${version})`);
@@ -960,7 +968,7 @@ export class SyncEngine {
                         );
                         this.log(`pull: "${destFile}" (v${version}, merged)`);
                     } else {
-                        await this.renameBlockingPath(destPath, "pull");
+                        await this.renameBlockingPath(destPath);
                         const fetched = await this.fetchRemoteFile(
                             uuid,
                             destFile,
@@ -990,7 +998,7 @@ export class SyncEngine {
                 this.updateSyncState(uuid, destFile, srcFile, hash, mergedHash);
                 this.log(`pull: "${destFile}" to "${srcFile}" (v${version}, merged)`);
             } else {
-                await this.renameBlockingPath(srcPath, "pull");
+                await this.renameBlockingPath(srcPath);
                 const fetched = await this.fetchRemoteFile(uuid, srcFile, hash, false);
                 if (fetched) {
                     this.updateSyncState(uuid, destFile, srcFile, hash, hash);
@@ -1247,8 +1255,7 @@ export class SyncEngine {
             const hasChanges = currentHash !== entry.serverHash;
 
             if (hasChanges) {
-                await this.renameBlockingPath(localPath, "pull");
-                this.log(`pull: deleted "${entry.serverFilename}"`);
+                await this.renameBlockingPath(localPath);
                 this.deleteSyncState(uuid);
                 continue;
             }
@@ -1476,7 +1483,7 @@ export class SyncEngine {
         return null;
     }
 
-    private generateConflictName(file: string): string {
+    private async generateConflictName(file: string): Promise<string> {
         const dir = path.dirname(file);
         const base = path.basename(file);
         const extIndex = base.lastIndexOf(".");
@@ -1491,24 +1498,46 @@ export class SyncEngine {
             ext = "";
         }
 
-        const conflictName = `${name} (conflict ${this.hostname})${ext}`;
+        let conflictName = `${name} (conflict ${this.hostname})${ext}`;
+        let conflictPath = path.join(
+            this.config.outputDir,
+            dir === "." ? conflictName : path.join(dir, conflictName),
+        );
+
+        if (!(await this.fs.exists(conflictPath))) {
+            return dir === "." ? conflictName : path.join(dir, conflictName);
+        }
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const day = String(now.getDate()).padStart(2, "0");
+        const dateStr = `${year}${month}${day}`;
+        conflictName = `${name} (conflict ${this.hostname} ${dateStr})${ext}`;
+        conflictPath = path.join(
+            this.config.outputDir,
+            dir === "." ? conflictName : path.join(dir, conflictName),
+        );
+
+        if (!(await this.fs.exists(conflictPath))) {
+            return dir === "." ? conflictName : path.join(dir, conflictName);
+        }
+
+        const hours = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        const seconds = String(now.getSeconds()).padStart(2, "0");
+        const timestamp = `${dateStr}${hours}${minutes}${seconds}`;
+        conflictName = `${name} (conflict ${this.hostname} ${timestamp})${ext}`;
         return dir === "." ? conflictName : path.join(dir, conflictName);
     }
 
-    private async renameBlockingPath(
-        blockingPath: string,
-        phase: "pull" | "push",
-        silent = false,
-    ): Promise<string> {
+    private async renameBlockingPath(blockingPath: string): Promise<string> {
         const relativePath = path.relative(this.config.outputDir, blockingPath);
-        const conflictName = this.generateConflictName(relativePath);
+        const conflictName = await this.generateConflictName(relativePath);
         const conflictPath = path.join(this.config.outputDir, conflictName);
 
         await this.fs.rename(blockingPath, conflictPath);
-
-        if (!silent) {
-            this.log(`${phase}: renamed "${relativePath}" to "${conflictName}"`);
-        }
+        this.log(`info: renamed "${relativePath}" to "${conflictName}"`);
 
         return conflictName;
     }

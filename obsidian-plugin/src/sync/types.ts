@@ -18,6 +18,7 @@ export interface SyncStateEntry {
     localFilename: string;
     serverHash: string;
     localHash: string;
+    localDeleted?: boolean;
 }
 
 export interface SyncConfig {

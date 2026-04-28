@@ -36,6 +36,7 @@ import {
     assertServerFileDeleted,
     assertStateMatchesFixture,
     assertSyncMetadataUpdated,
+    assertTimestampInRange,
     assertTrackedFileDeleted,
     assertTrackedFileIntact,
     assertUuidLocalFilename,
@@ -54,6 +55,7 @@ import {
     mergedOrcTroll,
     modifyFile,
     modifyFileWithContent,
+    nowTimestamp,
     renameLocalFile,
     renameLocalFileUntracked,
     restoreDatabase,
@@ -63,6 +65,7 @@ import {
     serverRename,
     setBaseHash,
     shortHostname,
+    todayDate,
     untrackAndRemoveFile,
     uuidFor,
 } from "./helpers.js";
@@ -171,7 +174,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "Rumours.md" to "Rumours (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Rumours.md" to "Rumours (conflict ${SHORT_HOST}).md"`,
             `push: "Rumours (conflict ${SHORT_HOST}).md/notes.txt" (v1)`,
             'pull: "Rumours.md" (v1)',
         ]);
@@ -199,7 +202,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Quests.md" to "Quests (conflict ${SHORT_HOST}).md"`,
             `push: "Quests (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: "Quests.md" (v1)',
         ]);
@@ -225,7 +228,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "npcs/Major.md" to "npcs/Major (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "npcs/Major.md" to "npcs/Major (conflict ${SHORT_HOST}).md"`,
             `push: "npcs/Major (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: renamed "characters/NPCs.md" to "npcs/Major.md"',
         ]);
@@ -256,7 +259,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "Monsters.md" to "Monsters (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Monsters.md" to "Monsters (conflict ${SHORT_HOST}).md"`,
             `push: "Monsters (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: renamed "Bestiary.md" to "Monsters.md"',
         ]);
@@ -314,7 +317,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "logs/Session 01.md" to ` +
+            `info: renamed "logs/Session 01.md" to ` +
                 `"logs/Session 01 (conflict ${SHORT_HOST}).md"`,
             `push: "logs/Session 01 (conflict ${SHORT_HOST}).md/notes.txt" (v1)`,
             'pull: renamed "sessions/session-01.md" to "logs/Session 01.md"',
@@ -586,7 +589,7 @@ describe("subsequent sync push", () => {
 
         assertIncrementalResults(result.incrementalResults, 3);
         expect(result.output).toEqual([
-            `push: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
             `push: "Home (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: renamed "index.md" to "Home.md"',
             'pull: renamed "Bestiary.md" to "index.md"',
@@ -670,7 +673,7 @@ describe("subsequent sync push", () => {
         assertSyncMetadataUpdated(result2.lastUpdate, result2.lastFullSync);
     });
 
-    test("local edited, remote edited", async () => {
+    test("local edited, remote edited, mergeable", async () => {
         // Local adds Orc section
         await createFile(
             outputDir,
@@ -715,6 +718,26 @@ Regenerates health.
         expect(content).toContain("## Orc");
         expect(content).toContain("## Troll");
 
+        await assertFilePushed(
+            outputDir,
+            "Bestiary.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local edited, remote edited, unmergeable", async () => {
+        await modifyFile(outputDir, "Bestiary.md");
+        await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual(['push: "Bestiary.md" (v4, replaced)']);
+        await assertFileModified(outputDir, "Bestiary.md");
         await assertFilePushed(
             outputDir,
             "Bestiary.md",
@@ -943,13 +966,16 @@ Regenerates health.
         await addStaleFile(outputDir, initialState, "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
-        // push: incremental sync learns UUID is stale from 404, creates new file
+        // push: incremental sync learns UUID is stale from 404, renames and creates
         const result = await createSync().run();
 
         assertIncrementalResults(result.incrementalResults, 0);
-        expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
-        await assertFileModified(outputDir, "my-notes.md");
-        assertFileInState("my-notes.md", result.state);
+        expect(result.output).toEqual([
+            `info: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"`,
+            `push: "my-notes (conflict ${SHORT_HOST}).md" (v1)`,
+        ]);
+        await assertFileModified(outputDir, `my-notes (conflict ${SHORT_HOST}).md`);
+        assertFileInState(`my-notes (conflict ${SHORT_HOST}).md`, result.state);
         await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -961,10 +987,71 @@ Regenerates health.
         // push: full sync already knows UUID is stale, creates new file
         const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
-        expect(result.output).toEqual(['push: "my-notes.md" (v1)']);
-        await assertFileModified(outputDir, "my-notes.md");
-        assertFileInState("my-notes.md", result.state);
+        expect(result.output).toEqual([
+            `info: renamed "my-notes.md" to "my-notes (conflict ${SHORT_HOST}).md"`,
+            `push: "my-notes (conflict ${SHORT_HOST}).md" (v1)`,
+        ]);
+        await assertFileModified(outputDir, `my-notes (conflict ${SHORT_HOST}).md`);
+        assertFileInState(`my-notes (conflict ${SHORT_HOST}).md`, result.state);
         await assertFixturesIntact(outputDir, result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("stale file, local edited, remote edited, incremental sync", async () => {
+        const uuid = await uuidFor(initialState, "index.md");
+        markFileStale(initialState, "index.md");
+        await modifyFile(outputDir, "index.md");
+        await serverEditContent(token, uuid);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            `info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"`,
+            `push: "index (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: "index.md" (v2)',
+        ]);
+        assertNotInState(result.state, "stale-uuid");
+        await assertFileModified(outputDir, `index (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
+            outputDir,
+            `index (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertServerEditedContent(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("stale file, local edited, remote edited, full sync", async () => {
+        const uuid = await uuidFor(initialState, "index.md");
+        markFileStale(initialState, "index.md");
+        await modifyFile(outputDir, "index.md");
+        await serverEditContent(token, uuid);
+
+        // Full sync detects stale entry by comparing against complete server state
+        const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
+
+        expect(result.output).toEqual([
+            `info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"`,
+            `push: "index (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: "index.md" (v2)',
+        ]);
+        assertNotInState(result.state, "stale-uuid");
+        await assertFileModified(outputDir, `index (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
+            outputDir,
+            `index (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertServerEditedContent(outputDir, "index.md");
+        assertFileInState("index.md", result.state);
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
@@ -1019,7 +1106,19 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local deleted", async () => {
+    test("local deleted, aware", async () => {
+        await deleteTrackedFile(outputDir, "index.md", initialState);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 0);
+        expect(result.output).toEqual(['push: deleted "index.md"']);
+        await assertFileDeletedOnServer(outputDir, result.state, "index.md", token);
+        await assertFixturesIntactExcept(outputDir, result.state, "index.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local deleted, unaware", async () => {
         await deleteTrackedFile(outputDir, "index.md");
 
         const result = await createSync().run();
@@ -1085,9 +1184,60 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local deleted, local edited, remote edited, remote renamed", async () => {
+    test("local deleted, aware, local edited, remote edited", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await deleteTrackedFile(outputDir, "Bestiary.md", initialState);
+        await createFile(outputDir, "Bestiary.md");
+        await serverEditContent(token, bestiaryUuid);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            `info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
+            `push: "Bestiary (conflict ${SHORT_HOST}).md" (v1)`,
+            'pull: "Bestiary.md" (v3, revivified)',
+        ]);
+        await assertFileUnchanged(outputDir, `Bestiary (conflict ${SHORT_HOST}).md`);
+        await assertFilePushed(
+            outputDir,
+            `Bestiary (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertServerEditedContent(outputDir, "Bestiary.md");
+        assertUuidLocalFilename(result.state, bestiaryUuid, "Bestiary.md");
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("local deleted, unaware, local edited, remote edited", async () => {
+        const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
+        await deleteTrackedFile(outputDir, "Bestiary.md");
+        await createFile(outputDir, "Bestiary.md");
+        await serverEditContent(token, bestiaryUuid);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual(['push: "Bestiary.md" (v4, replaced)']);
+        await assertFileUnchanged(outputDir, "Bestiary.md");
+        await assertFilePushed(
+            outputDir,
+            "Bestiary.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertFixturesIntactExcept(outputDir, result.state, "Bestiary.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    // noqa
+    test("local deleted, aware, local edited, remote edited, remote renamed", async () => {
         const homeUuid = await uuidFor(initialState, "Home.md");
-        await deleteTrackedFile(outputDir, "Home.md");
+        await deleteTrackedFile(outputDir, "Home.md", initialState);
         await createFile(outputDir, "Welcome.md");
         await serverEditContent(token, homeUuid);
         await serverRename(token, homeUuid, "Welcome.md");
@@ -1096,7 +1246,7 @@ Regenerates health.
 
         assertIncrementalResults(result.incrementalResults, 1);
         expect(result.output).toEqual([
-            `push: renamed "Welcome.md" to "Welcome (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Welcome.md" to "Welcome (conflict ${SHORT_HOST}).md"`,
             `push: "Welcome (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: "Welcome.md" (v4, revivified)',
         ]);
@@ -1110,6 +1260,35 @@ Regenerates health.
         );
         await assertServerEditedContent(outputDir, "Welcome.md");
         assertUuidLocalFilename(result.state, homeUuid, "Welcome.md");
+        await assertFixturesIntactExcept(outputDir, result.state, "Home.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    // noqa
+    test("local deleted, unaware, local edited, remote edited, remote renamed", async () => {
+        // Unaware: delete Home.md without marking state, then recreate Home.md
+        // Server renames to Welcome.md, but locally we still have Home.md
+        const homeUuid = await uuidFor(initialState, "Home.md");
+        await deleteTrackedFile(outputDir, "Home.md");
+        await createFile(outputDir, "Home.md");
+        await serverEditContent(token, homeUuid);
+        await serverRename(token, homeUuid, "Welcome.md");
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        expect(result.output).toEqual([
+            'push: renamed "Welcome.md" to "Home.md"',
+            'push: "Home.md" (v6, replaced)',
+        ]);
+        await assertFileUnchanged(outputDir, "Home.md");
+        await assertFilePushed(
+            outputDir,
+            "Home.md",
+            result.state,
+            token,
+            "text/markdown",
+        );
         await assertFixturesIntactExcept(outputDir, result.state, "Home.md");
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
@@ -1527,6 +1706,112 @@ Regenerates health.
         );
         assertFileInState("renamed-index.md", result.state);
         await assertFixturesIntactExcept(outputDir, result.state, "index.md");
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("conflict hostname exists", async () => {
+        await serverCreate(token, "Quests.md");
+        await createFile(outputDir, "Quests.md");
+        await createFile(outputDir, `Quests (conflict ${SHORT_HOST}).md`);
+
+        const result = await createSync().run();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        const today = todayDate();
+        expect(result.output).toEqual([
+            `push: "Quests (conflict ${SHORT_HOST}).md" (v1)`,
+            `info: renamed "Quests.md" to ` +
+                `"Quests (conflict ${SHORT_HOST} ${today}).md"`,
+            `push: "Quests (conflict ${SHORT_HOST} ${today}).md" (v1)`,
+            'pull: "Quests.md" (v1)',
+        ]);
+        await assertFileUnchanged(outputDir, `Quests (conflict ${SHORT_HOST}).md`);
+        await assertFileUnchanged(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${today}).md`,
+        );
+        await assertFilePushed(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertFilePushed(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${today}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Quests.md");
+        await assertFixturesIntact(outputDir, result.state);
+        assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
+    });
+
+    test("conflict hostname exists, conflict date exists", async () => {
+        const today = todayDate();
+        await serverCreate(token, "Quests.md");
+        await createFile(outputDir, "Quests.md");
+        await createFile(outputDir, `Quests (conflict ${SHORT_HOST}).md`);
+        await createFile(outputDir, `Quests (conflict ${SHORT_HOST} ${today}).md`);
+
+        const before = nowTimestamp();
+        const result = await createSync().run();
+        const after = nowTimestamp();
+
+        assertIncrementalResults(result.incrementalResults, 1);
+        // Extract the actual timestamp from the output - find the info: line
+        const renameOutput = result.output.find((line) => line.startsWith("info:"));
+        if (!renameOutput) {
+            throw new Error("Expected info output");
+        }
+        const match = renameOutput.match(/Quests \(conflict [^)]+\s(\d{14})\)\.md/);
+        if (!match) {
+            throw new Error("Expected timestamp match");
+        }
+        const timestamp = match[1];
+        assertTimestampInRange(timestamp, before, after);
+        expect(result.output).toEqual([
+            `push: "Quests (conflict ${SHORT_HOST} ${today}).md" (v1)`,
+            `push: "Quests (conflict ${SHORT_HOST}).md" (v1)`,
+            `info: renamed "Quests.md" to ` +
+                `"Quests (conflict ${SHORT_HOST} ${timestamp}).md"`,
+            `push: "Quests (conflict ${SHORT_HOST} ${timestamp}).md" (v1)`,
+            'pull: "Quests.md" (v1)',
+        ]);
+        await assertFileUnchanged(outputDir, `Quests (conflict ${SHORT_HOST}).md`);
+        await assertFileUnchanged(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${today}).md`,
+        );
+        await assertFileUnchanged(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${timestamp}).md`,
+        );
+        await assertFilePushed(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertFilePushed(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${today}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertFilePushed(
+            outputDir,
+            `Quests (conflict ${SHORT_HOST} ${timestamp}).md`,
+            result.state,
+            token,
+            "text/markdown",
+        );
+        await assertTrackedFileIntact(outputDir, result.state, "Quests.md");
+        await assertFixturesIntact(outputDir, result.state);
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 });

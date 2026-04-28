@@ -1,6 +1,6 @@
 bats_require_minimum_version 1.7.0
 
-source tests/sync-notebook.sh
+source tests/state-helpers.sh
 export -f update_sync_state
 export -f get_sync_state
 export -f update_remote_state
@@ -101,6 +101,14 @@ given_remote_entry() {
     run get_sync_state "uuid-1" local_filename
 
     diff -u <(echo "local.md") <(echo "$output")
+}
+
+@test "get_sync_state local_filename when empty" {
+    given_sync_entry "uuid-1" "server.md" "" "hash1" "hash2"
+
+    run get_sync_state "uuid-1" local_filename
+
+    diff -u <(echo "") <(echo "$output")
 }
 
 @test "get_sync_state hash" {

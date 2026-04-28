@@ -72,9 +72,9 @@ setup() {
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
-        pull: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
         pull: "index.md" (v1)
-        pull: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
+        info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
@@ -132,7 +132,7 @@ setup() {
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
-        pull: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"
+        info: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -161,7 +161,7 @@ setup() {
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
-        pull: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
@@ -215,7 +215,7 @@ setup() {
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
@@ -243,7 +243,7 @@ setup() {
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)

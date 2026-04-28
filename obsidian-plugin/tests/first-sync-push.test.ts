@@ -114,9 +114,9 @@ describe("first sync push", () => {
         const result = await sync.run();
 
         const expectedOutput = [
-            `push: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
             `push: "Home (conflict ${SHORT_HOST}).md" (v1)`,
-            `push: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"`,
             `push: "index (conflict ${SHORT_HOST}).md" (v1)`,
             'push: "notes.txt" (v1)',
             'push: "sessions/notes.txt" (v1)',
@@ -202,7 +202,7 @@ describe("first sync push", () => {
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
             'pull: "Home.md" (v2)',
-            `pull: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"`,
+            `info: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"`,
             'pull: "sessions/session-01.md" (v1)',
             'pull: "Bestiary.md" (v2)',
             'pull: "characters/NPCs.md" (v2)',
@@ -226,7 +226,7 @@ describe("first sync push", () => {
         const result = await sync.run();
 
         const expectedOutput = [
-            `push: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
             `push: "Bestiary (conflict ${SHORT_HOST}).md/notes.txt" (v1)`,
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
@@ -292,7 +292,7 @@ describe("first sync push", () => {
         const result = await sync.run();
 
         const expectedOutput = [
-            `push: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
             `push: "home (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
@@ -326,7 +326,7 @@ describe("first sync push", () => {
         const result = await sync.run();
 
         const expectedOutput = [
-            `push: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
+            `info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
             `push: "home (conflict ${SHORT_HOST}).md" (v1)`,
             'pull: "random-hexmap-7.png" (v1)',
             'pull: "index.md" (v1)',
