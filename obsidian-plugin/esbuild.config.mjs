@@ -35,6 +35,7 @@ const context = await esbuild.context({
         "node:path",
         "node:fs/promises",
         "node:crypto",
+        "node:os",
     ],
     format: "cjs",
     target: "es2018",
