@@ -9,9 +9,8 @@ from whatnext.models import State
 from help.models import HelpWiki
 from help.roadmap import (
     RoadmapEntry,
-    RoadmapState,
     RoadmapTask,
-    calculate_entry_state,
+    calculate_task_progress,
     generate_roadmap_markdown,
     parse_roadmap_file,
 )
@@ -259,6 +258,13 @@ class RoadmapTasksMixin:
             - [X] Ability scores @after ../work/complete.md
             - [ ] Basic info @after ../work/partial.md
         """))
+        (roadmap / "prematurely_marked.md").write_text(dedent("""\
+            # Prematurely Marked
+
+            This feature was marked complete before the work was done.
+
+            - [X] Release @after ../work/partial.md
+        """))
         return tasks
 
 
@@ -282,17 +288,25 @@ class TestRoadmap(RoadmapTasksMixin):
             )
         )
 
-    def test_calculates_entry_states(self, tasks_dir):
+    def test_calculates_task_progress(self, tasks_dir):
         roadmap = tasks_dir / "roadmap"
 
         notebook_sync = parse_roadmap_file(roadmap / "notebook_sync.md")
-        assert calculate_entry_state(notebook_sync) == RoadmapState.AVAILABLE
+        assert calculate_task_progress(notebook_sync.tasks[0]) == (3, 3)
 
         dark_mode = parse_roadmap_file(roadmap / "dark_mode.md")
-        assert calculate_entry_state(dark_mode) == RoadmapState.IN_PROGRESS
+        assert calculate_task_progress(dark_mode.tasks[0]) == (1, 3)
 
         session_scheduler = parse_roadmap_file(roadmap / "session_scheduler.md")
-        assert calculate_entry_state(session_scheduler) == RoadmapState.PLANNED
+        assert calculate_task_progress(session_scheduler.tasks[0]) == (0, 3)
+
+    def test_marked_complete_with_incomplete_dependencies_is_not_available(
+        self, tasks_dir
+    ):
+        roadmap = tasks_dir / "roadmap"
+        prematurely_marked = parse_roadmap_file(roadmap / "prematurely_marked.md")
+        completed, total = calculate_task_progress(prematurely_marked.tasks[0])
+        assert (completed, total) == (1, 3)
 
     def test_sorts_entries_by_activity(self, tasks_dir):
         markdown = generate_roadmap_markdown(tasks_dir / "roadmap")

@@ -88,42 +88,21 @@ def count_completed_in_path(path: str) -> tuple[int, int]:
     return completed, total
 
 
-def calculate_task_state(task: RoadmapTask) -> RoadmapState:
-    """Calculate the state of an individual roadmap task."""
-    if task.state == State.COMPLETE:
-        return RoadmapState.AVAILABLE
-
-    total_completed = 0
-    for dep in task.dependencies:
-        completed, _ = count_completed_in_path(dep)
-        total_completed += completed
-
-    if total_completed > 0:
-        return RoadmapState.IN_PROGRESS
-
-    return RoadmapState.PLANNED
-
-
-def calculate_entry_state(entry: RoadmapEntry) -> RoadmapState:
-    """Calculate the overall state of a roadmap entry based on its tasks."""
-    best_state = RoadmapState.PLANNED
-    for task in entry.tasks:
-        task_state = calculate_task_state(task)
-        if task_state.value < best_state.value:
-            best_state = task_state
-    return best_state
-
-
 def calculate_task_progress(task: RoadmapTask) -> tuple[int, int]:
     """Calculate progress for a single task including itself and dependencies."""
-    completed = 0
-    total = 1  # The task itself
-    if task.state == State.COMPLETE:
-        completed += 1
+    dep_completed = 0
+    dep_total = 0
     for dep in task.dependencies:
         c, t = count_completed_in_path(dep)
-        completed += c
-        total += t
+        dep_completed += c
+        dep_total += t
+    total = 1 + dep_total
+    # A roadmap task cannot be complete when dependencies are unsatisfied,
+    # no matter what the task file says.
+    if task.state == State.COMPLETE and dep_completed == dep_total:
+        completed = 1 + dep_completed
+    else:
+        completed = dep_completed
     return completed, total
 
 
@@ -138,12 +117,19 @@ def generate_roadmap_markdown(roadmap_dir: Path) -> str:
 
     for md_file in roadmap_dir.glob("*.md"):
         entry = parse_roadmap_file(md_file)
-        state = calculate_entry_state(entry)
+        entry_state = RoadmapState.PLANNED
 
         tasks = []
         for task in entry.tasks:
             completed, total = calculate_task_progress(task)
-            task_state = calculate_task_state(task)
+            if completed == total:
+                task_state = RoadmapState.AVAILABLE
+            elif completed > 0:
+                task_state = RoadmapState.IN_PROGRESS
+            else:
+                task_state = RoadmapState.PLANNED
+            if task_state.value < entry_state.value:
+                entry_state = task_state
             if task_state == RoadmapState.AVAILABLE:
                 status = "**Available**"
             elif task_state == RoadmapState.IN_PROGRESS:
@@ -168,7 +154,7 @@ def generate_roadmap_markdown(roadmap_dir: Path) -> str:
         entries.append({
             "title": entry.title,
             "description": entry.description,
-            "state": state,
+            "state": entry_state,
             "tasks": tasks,
         })
 
