@@ -6,5 +6,7 @@ export default defineConfig({
         pool: "forks",
         maxWorkers: 1,
         isolate: false,
+        reporters: ["verbose"],
+        slowTestThreshold: 10000,
     },
 });

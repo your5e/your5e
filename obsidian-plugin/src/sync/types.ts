@@ -18,6 +18,7 @@ export interface SyncStateEntry {
     localFilename: string;
     serverHash: string;
     localHash: string;
+    localDeleted?: boolean;
 }
 
 export interface SyncConfig {
@@ -34,6 +35,7 @@ export interface SyncConfig {
     afterFetchHook?: () => Promise<void>;
     onOutput?: (line: string) => void;
     abortSignal?: AbortSignal;
+    hostname?: string;
 }
 
 export interface SyncResult {

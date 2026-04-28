@@ -40,3 +40,20 @@ that for the merge.
 - [X] choose whether clients keep the version or we implement get-by-hash
 - [X] modify the sync bash script to do three-way merge on pull-only
 - [X] modify the obsidian engine to do three-way merge on pull-only
+
+# conflict resolution @phase
+
+In order to not have a permanent inability to finalise the sync, conflicts
+should be resolved in some manner that shows the user in their files, rather
+than in a log they are unlikely to ever look at.
+
+Plus, at least some of the point is to have your notes on at least other
+computer in case of data loss. That doesn't help if they never leave.
+
+- [X] resolve blocked syncing by renaming the local file (bash script)
+- [X] resolve blocked syncing by renaming the local file (obsidian engine)
+- [X] add "local deleted, local edited, remote edited" scenario
+- [X] add scenario for unmergeable server and local modifications
+- [X] add "stale file, local edited, remote edited" scenario
+- [X] add a test for conflict resolution filename being pushed also conflicting
+- [ ] update the sync doc to clarify that preserving content is the #1 goal

@@ -14,6 +14,7 @@ load 'setup_helpers.sh'
 setup_file() {
     export YOUR5E_API_TOKEN="$(cat "$BATS_TEST_DIRNAME/norm.token")"
     export YOUR5E_API_BASE="http://localhost:5854"
+    export SHORT_HOST="$(hostname -s)"
     restore_database
 }
 
@@ -25,7 +26,6 @@ setup() {
 
 @test "empty directory" {
     fail_on_since_parameter
-
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -50,7 +50,6 @@ setup() {
 
 @test "empty notebook" {
     fail_on_since_parameter
-
     run tests/sync-notebook.sh -p norm/empty-notebook "$output_dir"
 
     expected_output=""
@@ -63,18 +62,20 @@ setup() {
 }
 
 @test "local files" {
-    fail_on_since_parameter
     create_file "Home.md"
     create_file "index.md"
     create_file "notes.txt"
     create_file "sessions/notes.txt"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
-        pull: ERROR cannot pull "index.md", blocked by local file
-        pull: ERROR cannot pull "Home.md", blocked by local file
+        info: renamed "index.md" to "index (conflict ${SHORT_HOST}).md"
+        pull: "index.md" (v1)
+        info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -84,24 +85,22 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_ignored "Home.md"
-    assert_file_ignored "index.md"
-    assert_file_ignored "notes.txt"
-    assert_file_ignored "sessions/notes.txt"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "Home (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "Home (conflict ${SHORT_HOST}).md"
+    assert_file_unchanged "index (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "index (conflict ${SHORT_HOST}).md"
+    assert_file_unchanged "notes.txt"
+    assert_file_unchanged "sessions/notes.txt"
+    assert_fixture_files_downloaded
+    assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local matches remote" {
-    fail_on_since_parameter
     copy_fixture "Home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -124,16 +123,17 @@ setup() {
 }
 
 @test "local file clashes" {
-    fail_on_since_parameter
     create_file "sessions"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
-        pull: ERROR cannot pull "sessions/session-01.md", blocked by local file
+        info: renamed "sessions" to "sessions (conflict ${SHORT_HOST})"
+        pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
@@ -142,23 +142,18 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_ignored "sessions"
-    assert_file_not_downloaded "sessions/session-01.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "Home.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "sessions (conflict ${SHORT_HOST})"
+    assert_file_not_in_state "sessions (conflict ${SHORT_HOST})"
+    assert_fixture_files_downloaded
+    assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "local dir clashes" {
-    fail_on_since_parameter
     create_file "Bestiary.md/notes.txt"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -166,7 +161,8 @@ setup() {
         pull: "index.md" (v1)
         pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
-        pull: ERROR cannot pull "Bestiary.md", blocked by local directory
+        info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"
+        pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
         pull: "The Old Café.md" (v1)
         pull: "World Regions/Northern Kingdoms/Frosthold.md" (v1)
@@ -174,24 +170,19 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_ignored "Bestiary.md/notes.txt"
-    assert_file_not_downloaded "Bestiary.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "Home.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "Bestiary (conflict ${SHORT_HOST}).md/notes.txt"
+    assert_file_not_in_state "Bestiary (conflict ${SHORT_HOST}).md/notes.txt"
+    assert_fixture_files_downloaded
+    assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "hidden files ignored" {
-    fail_on_since_parameter
     create_file ".hidden.md"
     create_file ".obsidian/app.json"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
@@ -209,21 +200,23 @@ setup() {
 
     assert_file_unchanged ".hidden.md"
     assert_file_unchanged ".obsidian/app.json"
+    assert_fixture_files_downloaded
     assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision" {
-    fail_on_since_parameter
     create_file "home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: ERROR cannot pull "Home.md", blocked by local file with different case
+        info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -233,29 +226,25 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_ignored "home.md"
-    assert_file_not_in_state "Home.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_unchanged "home (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "home (conflict ${SHORT_HOST}).md"
+    assert_fixture_files_downloaded
+    assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }
 
 @test "case collision, matches" {
-    fail_on_since_parameter
     copy_fixture "Home.md" "home.md"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh -p norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF
         pull: "random-hexmap-7.png" (v1)
         pull: "index.md" (v1)
-        pull: ERROR cannot pull "Home.md", blocked by local file with different case
+        info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"
+        pull: "Home.md" (v2)
         pull: "sessions/session-01.md" (v1)
         pull: "Bestiary.md" (v2)
         pull: "characters/NPCs.md" (v2)
@@ -265,15 +254,10 @@ setup() {
     )
     diff -u <(echo "$expected_output") <(echo "$output")
 
-    assert_file_matches_fixture "Home.md" "home.md"
-    assert_file_not_in_state "Home.md"
-    assert_file_downloaded "random-hexmap-7.png"
-    assert_file_downloaded "index.md"
-    assert_file_downloaded "sessions/session-01.md"
-    assert_file_downloaded "Bestiary.md"
-    assert_file_downloaded "characters/NPCs.md"
-    assert_file_downloaded "The Old Café.md"
-    assert_file_downloaded "World Regions/Northern Kingdoms/Frosthold.md"
+    assert_file_matches_fixture "Home.md" "home (conflict ${SHORT_HOST}).md"
+    assert_file_not_in_state "home (conflict ${SHORT_HOST}).md"
+    assert_fixture_files_downloaded
+    assert_state_matches_fixture
     assert_last_updated_matches_expected
     assert_success
 }

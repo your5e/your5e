@@ -565,7 +565,6 @@ describe("sync permissions", () => {
 
             const expectedOutput = [
                 "NOTE permission denied, switching to pull-only mode",
-                'pull: SKIPPING pull "index.md", already deleted locally',
                 'pull: "Bestiary.md" (v3)',
             ];
             expect(result.output).toEqual(expectedOutput);
