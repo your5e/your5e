@@ -60,23 +60,7 @@ computer in case of data loss. That doesn't help if they never leave.
 
 # further testing @phase
 
-- [ ] add file merge strategy tests:
-      - files-identical (trivial, no merge needed)
-      - files-completely-different (no common content)
-      - one-side-unchanged (only local or only remote changed from base)
-      - add-at-top
-      - add-at-bottom
-      - add-in-middle
-      - both-add-top (bash special-cases this)
-      - both-add-bottom (bash special-cases this)
-      - one-adds-top-one-adds-bottom
-      - local-adds-remote-modifies-elsewhere
-      - both-delete-same-content (convergent edits)
-      - change-same-section
-      - same-line-different-positions (git merge-file conflicts, diff-match-patch may succeed)
-      - local-deletes-remote-modifies-same
-      - local-modifies-remote-deletes-same
-      - both-add-same-location (adjacent insertions)
-- [ ] consider server-side merge API if bash divergence is unacceptable
+- [X] add file merge strategy tests
+- [ ] add DMP merge API endpoint, replacing the git merge
 - [ ] add a multiple scenario combined sync test
         - confirm what happens on conflicts, banned files, etc when repeatedly syncing

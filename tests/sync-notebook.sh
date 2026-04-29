@@ -17,8 +17,7 @@ last_update=""
 incremental_sync=0
 deferred_uuids=()
 
-remote_state_file="$(mktemp)"
-trap 'rm -f "$remote_state_file"' EXIT
+remote_state_file=""
 
 function do_curl {
     curl \
@@ -31,6 +30,9 @@ function do_curl {
 }
 
 function main {
+    remote_state_file="$(mktemp)"
+    trap 'rm -f "$remote_state_file"' EXIT
+
     while getopts "b:d:hi:pt:vw" opt; do
         case "$opt" in
             b)  base_url="$OPTARG" ;;
@@ -1494,73 +1496,90 @@ function try_three_way_merge {
     local local_file="$3"
     local base_hash="$4"
     local remote_hash="$5"
-    local base_tmp remote_tmp
+    local base_tmp server_tmp
 
     if ! command -v git >/dev/null 2>&1; then
         return 1
     fi
 
     base_tmp=$(mktemp)
-    remote_tmp=$(mktemp)
+    server_tmp=$(mktemp)
 
     if ! fetch_content_by_hash "$notebook" "$uuid" "$base_hash" "$base_tmp"; then
-        rm -f "$base_tmp" "$remote_tmp"
+        rm -f "$base_tmp" "$server_tmp"
         return 1
     fi
-    if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$remote_tmp"; then
-        rm -f "$base_tmp" "$remote_tmp"
+    if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$server_tmp"; then
+        rm -f "$base_tmp" "$server_tmp"
         return 1
     fi
 
-    # git merge-file will see two additions to a file at the top/bottom as conflicting
-    # amendments, even though they are not actually editing the "same line" -- when that
-    # is the case, make both additions
-    if    is_pure_addition "$base_tmp" "$local_file" \
-       && is_pure_addition "$base_tmp" "$remote_tmp"
-    then
-        if    is_bottom_addition "$base_tmp" "$local_file" \
-           && is_bottom_addition "$base_tmp" "$remote_tmp"
-        then
-            local local_add remote_add
-            local_add=$(get_addition "$base_tmp" "$local_file")
-            remote_add=$(get_addition "$base_tmp" "$remote_tmp")
-            {
-                cat "$base_tmp"
-                echo "$local_add"
-                echo "$remote_add"
-            } > "$local_file"
-            rm -f "$base_tmp" "$remote_tmp"
-            return 0
-        fi
-
-        if    is_top_addition "$base_tmp" "$local_file" \
-           && is_top_addition "$base_tmp" "$remote_tmp"
-        then
-            local local_add remote_add
-            local_add=$(get_addition "$base_tmp" "$local_file")
-            remote_add=$(get_addition "$base_tmp" "$remote_tmp")
-            {
-                printf '%s' "$local_add"
-                printf '%s' "$remote_add"
-                cat "$base_tmp"
-            } > "$local_file"
-            rm -f "$base_tmp" "$remote_tmp"
-            return 0
-        fi
-    fi
-
-    # Fall back to git merge-file without --union
-    local merged_tmp
-    merged_tmp=$(mktemp)
-    cp "$local_file" "$merged_tmp"
-
-    if git merge-file -q "$merged_tmp" "$base_tmp" "$remote_tmp" 2>/dev/null; then
-        mv "$merged_tmp" "$local_file"
-        rm -f "$base_tmp" "$remote_tmp"
+    if three_way_merge "$base_tmp" "$server_tmp" "$local_file"; then
+        rm -f "$base_tmp" "$server_tmp"
         return 0
     fi
 
-    rm -f "$base_tmp" "$remote_tmp" "$merged_tmp"
+    rm -f "$base_tmp" "$server_tmp"
+    return 1
+}
+
+# Three-way merge with client-wins semantics.
+#
+# Applies client changes (from base) to the server version. Modifies
+# client_file in place. Returns 0 on success, 1 if merge fails.
+#
+# Special handling for pure additions: when both sides only add content
+# (no edits or deletions), additions are combined rather than conflicting.
+function three_way_merge {
+    local base_file="$1"
+    local server_file="$2"
+    local client_file="$3"
+
+    # git merge-file sees two additions at top/bottom as conflicts,
+    # even though they don't edit the same line -- combine them instead
+    if    is_pure_addition "$base_file" "$client_file" \
+       && is_pure_addition "$base_file" "$server_file"
+    then
+        if    is_bottom_addition "$base_file" "$client_file" \
+           && is_bottom_addition "$base_file" "$server_file"
+        then
+            local client_add server_add
+            client_add=$(get_addition "$base_file" "$client_file")
+            server_add=$(get_addition "$base_file" "$server_file")
+            {
+                cat "$base_file"
+                echo "$client_add"
+                echo "$server_add"
+            } > "$client_file"
+            return 0
+        fi
+
+        if    is_top_addition "$base_file" "$client_file" \
+           && is_top_addition "$base_file" "$server_file"
+        then
+            local client_add server_add
+            client_add=$(get_addition "$base_file" "$client_file")
+            server_add=$(get_addition "$base_file" "$server_file")
+            {
+                printf '%s' "$client_add"
+                printf '%s' "$server_add"
+                cat "$base_file"
+            } > "$client_file"
+            return 0
+        fi
+    fi
+
+    # Fall back to git merge-file
+    local merged_tmp
+    merged_tmp=$(mktemp)
+    cp "$client_file" "$merged_tmp"
+
+    if git merge-file -q "$merged_tmp" "$base_file" "$server_file" 2>/dev/null; then
+        mv "$merged_tmp" "$client_file"
+        return 0
+    fi
+
+    rm -f "$merged_tmp"
     return 1
 }
 

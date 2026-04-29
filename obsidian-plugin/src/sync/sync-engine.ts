@@ -1,7 +1,6 @@
-import * as crypto from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
-import DiffMatchPatch from "diff-match-patch";
+import { threeWayMerge } from "./merge.js";
 import type { FileSystem, SyncConfig, SyncResult, SyncStateEntry } from "./types.js";
 
 interface RemotePage {
@@ -1121,11 +1120,9 @@ export class SyncEngine {
         const localText = localContent.toString("utf-8");
         const remoteText = remoteContent.toString("utf-8");
 
-        const dmp = new DiffMatchPatch();
-        const patches = dmp.patch_make(baseText, localText);
-        const [merged, results] = dmp.patch_apply(patches, remoteText);
+        const [merged, success] = threeWayMerge(baseText, remoteText, localText);
 
-        if (!results.every((r) => r)) {
+        if (!success) {
             return false;
         }
 

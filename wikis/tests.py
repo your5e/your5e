@@ -1011,7 +1011,7 @@ class TestPage(WikiMixin):
             **HP:** 45
             **AC:** 19
         """).encode()
-        data, merge_type = page.three_way_merge(base_hash, incoming)
+        data, merge_type = page.merge_incoming(base_hash, incoming)
         assert merge_type == "merged"
         assert data == dedent("""\
             # Dragonborn Paladin
@@ -1043,7 +1043,7 @@ class TestPage(WikiMixin):
         incoming = dedent("""\
             The dragon is mass 250 kg.
         """).encode()
-        data, merge_type = page.three_way_merge(base_hash, incoming)
+        data, merge_type = page.merge_incoming(base_hash, incoming)
         assert merge_type == "replaced"
         assert data == incoming
 

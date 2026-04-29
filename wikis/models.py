@@ -184,7 +184,16 @@ class Page(models.Model):
     def latest_version(self):
         return self.version_set.order_by("-number").first()
 
-    def three_way_merge(self, base_hash, incoming):
+    @staticmethod
+    def three_way_merge(base, current, incoming):
+        dmp = diff_match_patch()
+        patches = dmp.patch_make(base, incoming)
+        merged, results = dmp.patch_apply(patches, current)
+        if all(results):
+            return merged, True
+        return incoming, False
+
+    def merge_incoming(self, base_hash, incoming):
         current_hash = self.latest_version.content.hash
         if base_hash == current_hash:
             return incoming, "applied"
@@ -193,10 +202,10 @@ class Page(models.Model):
         except Content.DoesNotExist:
             return incoming, "replaced"
         current = self.latest_version.content.data
-        dmp = diff_match_patch()
-        patches = dmp.patch_make(base.decode(), incoming.decode())
-        merged, results = dmp.patch_apply(patches, current.decode())
-        if all(results):
+        merged, success = self.three_way_merge(
+            base.decode(), current.decode(), incoming.decode(),
+        )
+        if success:
             return merged.encode(), "merged"
         return incoming, "replaced"
 
@@ -207,7 +216,7 @@ class Page(models.Model):
             if not data.endswith(b"\n"):
                 data = data + b"\n"
             if base_hash is not None and self.latest_version:
-                data, update_type = self.three_way_merge(base_hash, data)
+                data, update_type = self.merge_incoming(base_hash, data)
         content_hash = hashlib.sha256(data).hexdigest()
         content, _ = Content.objects.get_or_create(
             hash=content_hash,
