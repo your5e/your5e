@@ -55,7 +55,7 @@ server-tests:
 		-c "CREATE DATABASE your5e_seed WITH TEMPLATE your5e_test"
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T db \
 		psql -U your5e -d your5e_seed -tA -c \
-		"SELECT to_char(GREATEST(COALESCE(MAX(v.created_at), '-infinity'), COALESCE(MAX(p.deleted_at), '-infinity')), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM wikis_page p LEFT JOIN wikis_version v ON v.page_id = p.id WHERE p.wiki_id = 2" \
+		"SELECT to_char(GREATEST(COALESCE(MAX(v.created_at), '-infinity'), COALESCE(MAX(p.deleted_at), '-infinity')), 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') FROM wikis_page p LEFT JOIN wikis_version v ON v.page_id = p.id WHERE p.wiki_id = 2" \
 		| tr -d '\n' > tests/last_update
 	COMPOSE_FILE=$(TEST_COMPOSE_FILE) docker compose -p $(TEST_COMPOSE_PROJECT) exec -T api python -c "print('api ready')"
 

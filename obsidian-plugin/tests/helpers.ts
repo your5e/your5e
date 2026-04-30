@@ -802,7 +802,7 @@ export async function assertLastUpdateMatchesExpected(
 }
 
 export function assertLastUpdateIsEpoch(lastUpdate: string | undefined): void {
-    expect(lastUpdate).toBe("0001-01-01T00:00:00Z");
+    expect(lastUpdate).toBe("0001-01-01T00:00:00.000000Z");
 }
 
 export function assertLastUpdateExists(lastUpdate: string | undefined): void {

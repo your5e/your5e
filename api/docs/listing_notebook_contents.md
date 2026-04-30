@@ -27,7 +27,7 @@ The response structure is:
       "mime_type": "text/markdown",
       "version": 3,
       "created_by": "norm",
-      "updated_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T10:30:00.123456Z",
       "deleted_at": null,
       "content_hash": "a1b2c3..."
     },
@@ -40,7 +40,7 @@ The response structure is:
       "version": 1,
       "created_by": "norm",
       "updated_at": null,
-      "deleted_at": "2024-01-15T08:00:00Z",
+      "deleted_at": "2024-01-15T08:00:00.654321Z",
       "content_hash": "d4e5f6..."
     },
     {
@@ -48,7 +48,7 @@ The response structure is:
     }
   ],
   "total_results": 8,
-  "last_update": "2024-01-15T10:30:00Z"
+  "last_update": "2024-01-15T10:30:00.123456Z"
 }
 ```
 
@@ -58,9 +58,10 @@ notebook last changed.
 
 Arguments:
 
-- `since` shows only those pages updated or deleted since _timestamp_,
-  which can be either ISO 8601 (`?since=2024-01-15T10:30:00Z`) or epoch
-  seconds (`?since=1705312200`)
+- `since` shows only those pages updated or deleted since _timestamp_, which
+  can be either ISO 8601 `?since=2024-01-15T10:30:00Z` or epoch seconds
+  `?since=1705312200`; sub-second precision is accepted
+  (`?since=2024-01-15T10:30:00.123456Z`, `?since=1705312200.123456`)
 - `cursor` used when paginating results (links to prev/next results are
   included in the response)
 

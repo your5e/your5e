@@ -14,7 +14,7 @@ from notebooks.models import Notebook
 from notebooks.tests import PNG_BYTES, NotebookMixin
 from wikis.models import Page
 
-TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
 
 
 class NotebookApiMixin(ApiMixin, NotebookMixin):
@@ -412,7 +412,7 @@ class TestNotebookPages(NotebookApiMixin):
         self.assert_notebook_pages_response_structure(response)
         session_one = self.wendys_notebook.get_page(path="session-one")
         expected_last_update = session_one.latest_version.created_at.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
         assert response.json()["last_update"] == expected_last_update
 
@@ -466,32 +466,35 @@ class TestNotebookPages(NotebookApiMixin):
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter(self, api_client):
-        cutoff = (timezone.now() - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        updated = self.wendys_notebook.get_page(path="notes")
-        updated.update(
-            filename="notes.md",
-            mime_type="text/markdown",
-            data=b"# Notes\n\nUpdated after cutoff.",
-            created_by=self.wendy,
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = (base_second - timedelta(microseconds=550001)).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
-
-        deleted = self.wendys_notebook.get_page(path="links")
-        deleted.soft_delete()
-        deleted.refresh_from_db()
 
         response = api_client.get(
             "/v1/notebooks/wendy/heros-legendes/",
             {"since": cutoff},
         )
         assert response.status_code == HTTPStatus.OK
-        filenames = {
-            p["filename"]
-                for p in response.json()["results"]
+        results = response.json()["results"]
+        filenames = {p["filename"] for p in results}
+        assert filenames == {
+            "old-draft.md",
+            "heroes/shield.png",
+            "heroes/index.md",
+            "villains/necromancer.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+            "links.md",
+            "Session One.md",
         }
-        assert filenames == {"notes.md", "links.md"}
-        expected_last_update = deleted.deleted_at.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+        deleted_result = next(
+            p for p in results
+                if p["filename"] == "old-draft.md"
+        )
+        assert deleted_result["deleted_at"] is not None
+        expected_last_update = session_one.latest_version.created_at.strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
         assert response.json()["last_update"] == expected_last_update
 
@@ -509,20 +512,107 @@ class TestNotebookPages(NotebookApiMixin):
         assert TIMESTAMP_PATTERN.match(response.json()["last_update"])
         session_one = self.wendys_notebook.get_page(path="session-one")
         expected_last_update = session_one.latest_version.created_at.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
         assert response.json()["last_update"] == expected_last_update
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_unix_timestamp(self, api_client):
-        cutoff = int(timezone.now().timestamp()) - 1
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = int(base_second.timestamp())
 
-        page = self.wendys_notebook.get_page(path="notes")
-        page.update(
-            filename="notes.md",
-            mime_type="text/markdown",
-            data=b"# Notes\n\nUpdated after cutoff.",
-            created_by=self.wendy,
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": str(cutoff)},
+        )
+        assert response.status_code == HTTPStatus.OK
+        filenames = [
+            p["filename"]
+                for p in response.json()["results"]
+        ]
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+            "villains/necromancer.md",
+            "heroes/index.md",
+        ]
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_filter_subsecond_iso(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = (base_second + timedelta(microseconds=250000)).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": cutoff},
+        )
+        assert response.status_code == HTTPStatus.OK
+        filenames = [
+            p["filename"]
+                for p in response.json()["results"]
+        ]
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        ]
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_filter_subsecond_unix(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = (base_second + timedelta(microseconds=250000)).timestamp()
+
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": str(cutoff)},
+        )
+        assert response.status_code == HTTPStatus.OK
+        filenames = [
+            p["filename"]
+                for p in response.json()["results"]
+        ]
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        ]
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_filter_variable_precision_iso(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = (base_second + timedelta(microseconds=250000)).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )[:22] + "Z"
+
+        response = api_client.get(
+            "/v1/notebooks/wendy/heros-legendes/",
+            {"since": cutoff},
+        )
+        assert response.status_code == HTTPStatus.OK
+        filenames = [
+            p["filename"]
+                for p in response.json()["results"]
+        ]
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        ]
+
+    @ApiMixin.as_api_user("wendy")
+    def test_since_filter_variable_precision_unix(self, api_client):
+        session_one = self.wendys_notebook.get_page(path="session-one")
+        base_second = session_one.latest_version.created_at.replace(microsecond=0)
+        cutoff = round(
+            (base_second + timedelta(microseconds=250000)).timestamp(),
+            2,
         )
 
         response = api_client.get(
@@ -534,7 +624,11 @@ class TestNotebookPages(NotebookApiMixin):
             p["filename"]
                 for p in response.json()["results"]
         ]
-        assert filenames == ["notes.md"]
+        assert filenames == [
+            "Session One.md",
+            "links.md",
+            "World Regions/Northern Kingdoms/Frosthold.md",
+        ]
 
     @ApiMixin.as_api_user("wendy")
     def test_since_filter_invalid(self, api_client):
@@ -556,7 +650,7 @@ class TestNotebookPages(NotebookApiMixin):
     def test_since_using_last_update_no_changes(self, api_client):
         session_one = self.wendys_notebook.get_page(path="session-one")
         expected_last_update = session_one.latest_version.created_at.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
 
         response = api_client.get("/v1/notebooks/wendy/heros-legendes/")
@@ -597,7 +691,7 @@ class TestNotebookPages(NotebookApiMixin):
         assert len(response.json()["results"]) == 1
         assert response.json()["results"][0]["filename"] == "notes.md"
         expected_last_update = page.latest_version.created_at.strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+            "%Y-%m-%dT%H:%M:%S.%fZ"
         )
         assert response.json()["last_update"] == expected_last_update
 
@@ -632,7 +726,7 @@ class TestNotebookPages(NotebookApiMixin):
         assert response.json()["editable"] is True
         assert response.json()["next"] is None
         assert response.json()["previous"] is None
-        assert response.json()["last_update"] == "0001-01-01T00:00:00Z"
+        assert response.json()["last_update"] == "0001-01-01T00:00:00.000000Z"
 
         # this epoch timestamp is still valid for '?since=...'
         response = api_client.get(

@@ -65,7 +65,7 @@ class NotebookSerializer(serializers.ModelSerializer):
     owner = serializers.CharField(source="owner.username")
     url = serializers.SerializerMethodField()
     html_url = serializers.SerializerMethodField()
-    last_updated = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    last_updated = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S.%fZ")
     copied_from = serializers.SerializerMethodField()
     editable = serializers.SerializerMethodField()
 
@@ -181,7 +181,7 @@ class PageSerializer(serializers.Serializer):
     version = serializers.SerializerMethodField()
     created_by = serializers.SerializerMethodField()
     updated_at = serializers.SerializerMethodField()
-    deleted_at = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%SZ")
+    deleted_at = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S.%fZ")
     content_hash = serializers.SerializerMethodField()
 
     def get_url(self, obj):
@@ -216,7 +216,7 @@ class PageSerializer(serializers.Serializer):
     def get_updated_at(self, obj):
         if obj.deleted_at:
             return None
-        return obj.latest_version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return obj.latest_version.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     def get_content_hash(self, obj):
         return obj.latest_version.content.hash
@@ -227,12 +227,16 @@ class PagePagination(BasePagination):
 
 
 def parse_timestamp(value):
-    if value.isdigit():
-        return datetime.fromtimestamp(int(value), tz=UTC)
     try:
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
-    except ValueError as err:
-        raise ValidationError("Invalid timestamp format.") from err
+        return datetime.fromtimestamp(float(value), tz=UTC)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=UTC)
+        except ValueError:
+            pass
+    raise ValidationError("Invalid timestamp format.")
 
 
 class NotebookAccessMixin:
@@ -329,7 +333,7 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
             "mime_type": version.mime_type,
             "version": version.number,
             "created_by": version.created_by.username,
-            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "content_hash": version.content.hash,
         }, status=HTTPStatus.CREATED)
 
@@ -344,7 +348,7 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
                 Coalesce(Max("version__created_at"), datetime.min.replace(tzinfo=UTC)),
                 Coalesce(Max("deleted_at"), datetime.min.replace(tzinfo=UTC)),
             )
-        )["last_update"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        )["last_update"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         return response
 
@@ -600,7 +604,7 @@ class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
             "mime_type": version.mime_type,
             "version": version.number,
             "created_by": version.created_by.username,
-            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "updated_at": version.created_at.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "content_hash": version.content.hash,
         }
         if previous_hash is not None:

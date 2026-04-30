@@ -539,8 +539,7 @@ function assert_last_updated_matches_expected {
 function assert_last_updated_exists {
     local timestamp state="$output_dir/.sync-state"
     timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
-    [[ -n "$timestamp" ]]
-    [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+    [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$ ]]  # noqa
 }
 
 function assert_last_updated_not_set {
@@ -554,7 +553,7 @@ function assert_last_updated_is_epoch {
     local timestamp expected state="$output_dir/.sync-state"
     timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
     [[ -n "$timestamp" ]]
-    expected="0001-01-01T00:00:00Z"
+    expected="0001-01-01T00:00:00.000000Z"
     diff -u <(echo "$expected") <(echo "$timestamp")
 }
 

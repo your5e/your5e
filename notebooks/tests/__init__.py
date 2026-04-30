@@ -254,10 +254,42 @@ class NotebookMixin(UserMixin):
             role=NotebookPermission.Role.VIEWER,
         )
 
-        # backdate fixture data for "since..." tests
-        past = timezone.now() - timedelta(seconds=1)
-        Version.objects.update(created_at=past)
-        Page.objects.filter(deleted_at__isnull=False).update(deleted_at=past)
+        # backdate fixture data for "since..." tests with sub-second precision
+        # pages span two seconds for testing precision across second boundaries
+        base = timezone.now().replace(microsecond=0) - timedelta(seconds=3)
+        second = timedelta(seconds=1)
+        # first second: index, theron, notes, deleted, image
+        Version.objects.filter(page=index_page).update(
+            created_at=base + timedelta(microseconds=100000))
+        Version.objects.filter(page=heroes_page).update(
+            created_at=base + timedelta(microseconds=200000))
+        Version.objects.filter(page=notes_page).update(
+            created_at=base + timedelta(microseconds=300000))
+        Version.objects.filter(page=deleted_page).update(
+            created_at=base + timedelta(microseconds=400000))
+        deleted_page.deleted_at = base + timedelta(microseconds=450000)
+        deleted_page.save(update_fields=["deleted_at"])
+        Version.objects.filter(page=image_page).update(
+            created_at=base + timedelta(microseconds=500000))
+        # second second: heroes/index, villains, region, links, session one
+        Version.objects.filter(page=heroes_index).update(
+            created_at=base + second + timedelta(microseconds=100000))
+        Version.objects.filter(page=villains_page).update(
+            created_at=base + second + timedelta(microseconds=200000))
+        Version.objects.filter(page=region_page).update(
+            created_at=base + second + timedelta(microseconds=300000))
+        Version.objects.filter(page=page_with_wikilinks).update(
+            created_at=base + second + timedelta(microseconds=400000))
+        Version.objects.filter(page=versioned_page).update(
+            created_at=base + second + timedelta(microseconds=500000))
+        # other notebooks
+        Version.objects.filter(
+            page__wiki__in=[self.susans_notebook, self.marys_notebook]
+        ).update(created_at=base + timedelta(microseconds=10000))
+        Page.objects.filter(
+            wiki__in=[self.susans_notebook, self.marys_notebook],
+            deleted_at__isnull=False,
+        ).update(deleted_at=base + timedelta(microseconds=10000))
 
     def assert_notebook_name_present(self, content, notebook):
         assert html.escape(notebook.name) in content

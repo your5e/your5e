@@ -26,7 +26,7 @@ allowed.
   "mime_type": "text/markdown",
   "version": 1,
   "created_by": "norm",
-  "updated_at": "2024-01-15T12:00:00Z",
+  "updated_at": "2024-01-15T12:00:00.123456Z",
   "content_hash": "a1b2c3..."
 }
 ```
@@ -164,7 +164,7 @@ have access.
   "mime_type": "text/markdown",
   "version": 2,
   "created_by": "norm",
-  "updated_at": "2024-01-15T12:00:00Z",
+  "updated_at": "2024-01-15T12:00:00.123456Z",
   "content_hash": "a1b2c3..."
 }
 ```

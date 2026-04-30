@@ -19,7 +19,7 @@ The response structure is:
       "visibility": "public",
       "url": "/v1/notebooks/norm/campaign-notes/",
       "html_url": "https://your5e.com/notebooks/norm/campaign-notes/",
-      "last_updated": "2024-01-15T10:30:00Z",
+      "last_updated": "2024-01-15T10:30:00.123456Z",
       "copied_from": null,
       "editable": true
     },

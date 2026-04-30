@@ -6,7 +6,7 @@ import yaml
 from diff_match_patch import diff_match_patch
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models.functions import Coalesce, Greatest, Trunc
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from slugify import slugify
 
@@ -74,9 +74,8 @@ class Wiki(models.Model):
                         Coalesce("deleted_at", "latest_version_created"),
                         "latest_version_created",
                     ),
-                    last_modified_seconds=Trunc("last_modified", "second"),
                 )
-                .filter(last_modified_seconds__gt=timestamp)
+                .filter(last_modified__gt=timestamp)
                 .distinct()
                 .order_by("-last_modified", "-pk")
         )
