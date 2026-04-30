@@ -4,6 +4,9 @@ services:
       POSTGRES_DB: your5e_test
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U your5e -d your5e_test"]
+    volumes: !override
+      - type: tmpfs
+        target: /var/lib/postgresql/data
 
   web:
     ports: !override
