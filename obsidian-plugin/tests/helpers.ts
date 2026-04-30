@@ -772,6 +772,22 @@ export function deletePageByUuid(uuid: string): void {
     );
 }
 
+export function serverPurge(uuid: string): void {
+    execSync(
+        `
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \\
+    docker compose -p your5e-test exec -T db \\
+      psql -U your5e your5e_test <<-SQL
+        DELETE FROM wikis_version WHERE page_id = (
+            SELECT id FROM wikis_page WHERE uuid = '${uuid}'
+        );
+        DELETE FROM wikis_page WHERE uuid = '${uuid}';
+SQL
+  `,
+        { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+}
+
 export async function uuidFor(
     state: Map<string, SyncStateEntry>,
     filename: string,

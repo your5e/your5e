@@ -528,6 +528,10 @@ function setup_old_sync_metadata {
     mv "$state.tmp" "$state"
 }
 
+function force_full_sync {
+    update_sync_state "LAST_FULL_SYNC" "2020-01-01T00:00:00Z" "" "" ""
+}
+
 function assert_last_updated_matches_expected {
     local timestamp expected state="$output_dir/.sync-state"
     timestamp=$(awk -F'\t' '$1 == "LAST_UPDATED" {print $2; exit}' "$state")
@@ -712,6 +716,19 @@ function server_delete {
         -H "Authorization: Token $YOUR5E_API_TOKEN" \
         "$YOUR5E_API_BASE/v1/notebooks/norm/campaign-notes/$uuid" \
         >/dev/null
+}
+
+function server_purge {
+    local uuid="$1"
+
+    COMPOSE_FILE=docker-compose.yml:docker-compose.test.yml \
+    docker compose -p your5e-test exec -T db \
+        psql -U your5e your5e_test >/dev/null 2>&1 <<-SQL
+        DELETE FROM wikis_version WHERE page_id = (
+            SELECT id FROM wikis_page WHERE uuid = '$uuid'
+        );
+        DELETE FROM wikis_page WHERE uuid = '$uuid';
+	SQL
 }
 
 function server_create {

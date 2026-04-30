@@ -197,3 +197,27 @@ Ensure the script correctly fetches when there are more than `PAGE_SIZE` pages.
 | Test |
 |------|
 | sync fetches all pages across pagination boundaries |
+
+### `combined_sync.bats`
+
+Test that repeated syncs do not break in unexpected ways. Each test makes one
+change and syncs, building on the state from the previous test.
+
+| Test |
+|------|
+| initial sync |
+| stable sync |
+| local edit |
+| server edit |
+| merged edit |
+| replaced edit |
+| conflicting new file |
+| local rename |
+| server delete |
+| server rename |
+| local delete, aware |
+| local delete, unaware |
+| stale file |
+| stale file, full sync |
+| final stable state |
+| final stable sync |
