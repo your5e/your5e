@@ -373,6 +373,55 @@ class NotebookPagesView(NotebookAccessMixin, AuthenticatedAPIView, ListAPIView):
 
 
 class PageContentView(NotebookAccessMixin, AuthenticatedAPIView):
+    def post(self, request, username, slug, uuid):
+        from wikis.models import Content, Page
+
+        notebook = self.get_notebook()
+
+        try:
+            page_uuid = UUID(uuid)
+        except ValueError:
+            raise Http404 from None
+
+        page = notebook.page_set.filter(
+            uuid=page_uuid,
+            deleted_at__isnull=True,
+        ).first()
+
+        if not page:
+            raise Http404
+
+        base = request.query_params.get("base")
+        if not base:
+            raise ValidationError("base is required.")
+
+        current = request.query_params.get("current")
+        if not current:
+            raise ValidationError("current is required.")
+
+        try:
+            base = Content.objects.get(hash=base).data
+        except Content.DoesNotExist:
+            raise Http404 from None
+
+        try:
+            server = Content.objects.get(hash=current).data
+        except Content.DoesNotExist:
+            raise Http404 from None
+
+        local = request.body
+
+        merged, success = Page.three_way_merge(
+            base.decode(), server.decode(), local.decode()
+        )
+
+        response = HttpResponse(merged, content_type="text/markdown")
+        if success:
+            response["X-Merge-Success"] = "true"
+        else:
+            response["X-Merge-Success"] = "false"
+        return response
+
     def get(self, request, username, slug, uuid):
         notebook = self.get_notebook()
 

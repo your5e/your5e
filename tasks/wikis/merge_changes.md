@@ -61,6 +61,6 @@ computer in case of data loss. That doesn't help if they never leave.
 # further testing @phase
 
 - [X] add file merge strategy tests
-- [ ] add DMP merge API endpoint, replacing the git merge
+- [X] add DMP merge API endpoint, replacing the git merge
 - [ ] add a multiple scenario combined sync test
         - confirm what happens on conflicts, banned files, etc when repeatedly syncing

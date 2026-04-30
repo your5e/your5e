@@ -67,11 +67,10 @@ test-django: lint-django
 	docker compose exec $(EXEC_FLAGS) web pytest
 
 test-sync-integration:
-	shellcheck tests/*.sh tests/merge/*.sh
+	shellcheck tests/*.sh
 	python tests/check-test-coverage.py bats
 	bash tests/extract-state-helpers.sh
 	awk -f tests/check-line-length.awk tests/*.sh
-	tests/merge/generate-bats.sh > tests/merge.bats
 ifdef CI
 	kcov --include-path=$$PWD/tests coverage bats tests/*.bats
 else

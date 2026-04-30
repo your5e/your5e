@@ -488,7 +488,7 @@ function apply_remote_updates {
                 base_hash=$(get_sync_state "$uuid" hash)
                 remote_hash=$(get_remote_state "$uuid" hash)
 
-                if try_three_way_merge \
+                if three_way_merge \
                         "$notebook" \
                         "$uuid" \
                         "$src_path" \
@@ -536,7 +536,7 @@ function apply_remote_updates {
                 base_hash=$(get_sync_state "$uuid" hash)
                 remote_hash=$(get_remote_state "$uuid" hash)
 
-                if try_three_way_merge \
+                if three_way_merge \
                         "$notebook" \
                         "$uuid" \
                         "$src_path" \
@@ -716,7 +716,7 @@ function apply_remote_updates {
                     "$dest_file" \
                     "$remote_hash" \
                     "$remote_hash"
-            elif try_three_way_merge \
+            elif three_way_merge \
                     "$notebook" \
                     "$uuid" \
                     "$dest_path" \
@@ -753,7 +753,7 @@ function apply_remote_updates {
         base_hash=$(get_sync_state "$uuid" hash)
         remote_hash=$(get_remote_state "$uuid" hash)
 
-        if try_three_way_merge \
+        if three_way_merge \
                 "$notebook" \
                 "$uuid" \
                 "$src_path" \
@@ -1490,135 +1490,55 @@ function fetch_content_by_hash {
     [[ "$http_code" == "200" ]]
 }
 
-function try_three_way_merge {
+function three_way_merge {
     local notebook="$1"
     local uuid="$2"
     local local_file="$3"
     local base_hash="$4"
-    local remote_hash="$5"
-    local base_tmp server_tmp
+    local server_hash="$5"
+    local merged_tmp headers_tmp merge_url http_code merge_success
 
-    if ! command -v git >/dev/null 2>&1; then
-        return 1
-    fi
-
-    base_tmp=$(mktemp)
-    server_tmp=$(mktemp)
-
-    if ! fetch_content_by_hash "$notebook" "$uuid" "$base_hash" "$base_tmp"; then
-        rm -f "$base_tmp" "$server_tmp"
-        return 1
-    fi
-    if ! fetch_content_by_hash "$notebook" "$uuid" "$remote_hash" "$server_tmp"; then
-        rm -f "$base_tmp" "$server_tmp"
-        return 1
-    fi
-
-    if three_way_merge "$base_tmp" "$server_tmp" "$local_file"; then
-        rm -f "$base_tmp" "$server_tmp"
-        return 0
-    fi
-
-    rm -f "$base_tmp" "$server_tmp"
-    return 1
-}
-
-# Three-way merge with client-wins semantics.
-#
-# Applies client changes (from base) to the server version. Modifies
-# client_file in place. Returns 0 on success, 1 if merge fails.
-#
-# Special handling for pure additions: when both sides only add content
-# (no edits or deletions), additions are combined rather than conflicting.
-function three_way_merge {
-    local base_file="$1"
-    local server_file="$2"
-    local client_file="$3"
-
-    # git merge-file sees two additions at top/bottom as conflicts,
-    # even though they don't edit the same line -- combine them instead
-    if    is_pure_addition "$base_file" "$client_file" \
-       && is_pure_addition "$base_file" "$server_file"
-    then
-        if    is_bottom_addition "$base_file" "$client_file" \
-           && is_bottom_addition "$base_file" "$server_file"
-        then
-            local client_add server_add
-            client_add=$(get_addition "$base_file" "$client_file")
-            server_add=$(get_addition "$base_file" "$server_file")
-            {
-                cat "$base_file"
-                echo "$client_add"
-                echo "$server_add"
-            } > "$client_file"
-            return 0
-        fi
-
-        if    is_top_addition "$base_file" "$client_file" \
-           && is_top_addition "$base_file" "$server_file"
-        then
-            local client_add server_add
-            client_add=$(get_addition "$base_file" "$client_file")
-            server_add=$(get_addition "$base_file" "$server_file")
-            {
-                printf '%s' "$client_add"
-                printf '%s' "$server_add"
-                cat "$base_file"
-            } > "$client_file"
-            return 0
-        fi
-    fi
-
-    # Fall back to git merge-file
-    local merged_tmp
     merged_tmp=$(mktemp)
-    cp "$client_file" "$merged_tmp"
+    headers_tmp=$(mktemp)
+    merge_url=$(
+        printf "%s/v1/notebooks/%s/%s?base=%s&current=%s" \
+            "$base_url" \
+            "$notebook" \
+            "$uuid" \
+            "$base_hash" \
+            "$server_hash"
+    )
 
-    if git merge-file -q "$merged_tmp" "$base_file" "$server_file" 2>/dev/null; then
-        mv "$merged_tmp" "$client_file"
-        return 0
-    fi
+    http_code=$(
+        curl \
+            --connect-timeout 30 \
+            --max-time 120 \
+            --silent \
+            --header "Authorization: Token $api_token" \
+            --header "Content-Type: text/markdown" \
+            --data-binary @"$local_file" \
+            --dump-header "$headers_tmp" \
+            --output "$merged_tmp" \
+            --write-out "%{http_code}" \
+                "$merge_url"
+    )
 
-    rm -f "$merged_tmp"
-    return 1
-}
-
-function is_pure_addition {
-    local base="$1"
-    local modified="$2"
-    local diff_output
-
-    diff_output=$(/usr/bin/diff "$base" "$modified") || true
-    if echo "$diff_output" | grep -qE '^[0-9]+(c|d)'; then
+    if [[ "$http_code" != "200" ]]; then
+        rm -f "$merged_tmp" "$headers_tmp"
         return 1
     fi
+
+    merge_success=$(grep -i "x-merge-success" "$headers_tmp" \
+        | cut -d' ' -f2 | tr -d '\r')
+    rm -f "$headers_tmp"
+
+    if [[ "$merge_success" != "true" ]]; then
+        rm -f "$merged_tmp"
+        return 1
+    fi
+
+    mv "$merged_tmp" "$local_file"
     return 0
-}
-
-function is_top_addition {
-    local base="$1"
-    local modified="$2"
-    local first_diff_line
-
-    first_diff_line=$(/usr/bin/diff "$base" "$modified" 2>/dev/null | head -1)
-    echo "$first_diff_line" | grep -q '^0a'
-}
-
-function is_bottom_addition {
-    local base="$1"
-    local modified="$2"
-    local last_line first_diff_line
-
-    last_line=$(wc -l < "$base" | tr -d ' ')
-    first_diff_line=$(/usr/bin/diff "$base" "$modified" 2>/dev/null | head -1)
-    echo "$first_diff_line" | grep -q "^${last_line}a"
-}
-
-function get_addition {
-    local base="$1"
-    local modified="$2"
-
-    /usr/bin/diff "$base" "$modified" | sed -n '/^> /s/^> //p'
 }
 
 function local_file_was_removed {

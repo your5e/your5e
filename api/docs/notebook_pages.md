@@ -64,6 +64,40 @@ Returns _404 Not Found_ if the notebook or page does not exist, you don't have
 access, the page has been deleted, or the specified version/hash does not exist.
 
 
+## POST `/v1/notebooks/{username}/{notebook-slug}/{uuid}?base={hash}&current={hash}`
+
+Perform a three-way merge for pull-only sync. The client sends its local
+content, and the server merges changes from the current version (since the
+base) into the local content.
+
+The request body should be the raw local content, with `Content-Type:
+text/markdown`.
+
+Arguments:
+
+- `base` (required): the content hash of the common ancestor version
+- `current` (required): the content hash of the current version to merge with
+
+### Response
+
+Returns the merged content as `text/markdown`, with:
+
+- `X-Merge-Success: true` if the merge succeeded cleanly
+- `X-Merge-Success: false` if the merge failed and local content was
+  returned unchanged
+
+This endpoint does not modify the page content. It is a read-like operation
+that computes a merge result. Viewers can use this endpoint.
+
+Both hashes are looked up by content address, ensuring the merge is
+deterministic regardless of concurrent updates.
+
+Returns _400 Bad Request_ if `base` or `current` is not provided.
+
+Returns _404 Not Found_ if the notebook, page, or either hash does not exist,
+or you don't have access.
+
+
 ## PATCH `/v1/notebooks/{username}/{notebook-slug}/{uuid}`
 
 Update a page's metadata. Rename a page, revert it to an older version, or

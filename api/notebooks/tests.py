@@ -1940,6 +1940,276 @@ class TestPageCreate(NotebookApiMixin):
 
 
 @pytest.mark.django_db
+class TestPageContentMerge(NotebookApiMixin):
+    def test_unauthenticated(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json() == {"error": "Authentication required."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_owner(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("susan")
+    def test_editor(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("mary")
+    def test_viewer(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+
+    @ApiMixin.as_api_user("hugh")
+    def test_user(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_merge_with_no_server_changes(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        local_content = b"# Local Welcome\n\nThis is the local index page.\n"
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=local_content,
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response["Content-Type"] == "text/markdown"
+        assert response["X-Merge-Success"] == "true"
+        assert response.content == local_content
+
+    @ApiMixin.as_api_user("wendy")
+    def test_merge_with_server_changes(self, api_client):
+        page = self.wendys_notebook.get_page(path="index")
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Welcome
+
+                - Ale: 4cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.wendy,
+        )
+        base_hash = page.latest_version.content.hash
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=dedent("""\
+                # Welcome
+
+                - Ale: 5cp
+                - Bread: 2cp
+            """).encode(),
+            created_by=self.susan,
+        )
+        server_hash = page.latest_version.content.hash
+        uuid = str(page.uuid)
+        local_content = dedent("""\
+            # Welcome
+
+            - Ale: 4cp
+            - Bread: 3cp
+        """).encode()
+        expected_merged = dedent("""\
+            # Welcome
+
+            - Ale: 5cp
+            - Bread: 3cp
+        """).encode()
+
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={base_hash}&current={server_hash}",
+            data=local_content,
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response["X-Merge-Success"] == "true"
+        assert response.content == expected_merged
+
+    @ApiMixin.as_api_user("wendy")
+    def test_merge_conflict_falls_back_to_local(self, api_client):
+        page = self.wendys_notebook.get_page(path="index")
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Base\n\nOriginal content.\n",
+            created_by=self.wendy,
+        )
+        base_hash = page.latest_version.content.hash
+        page.update(
+            filename="index.md",
+            mime_type="text/markdown",
+            data=b"# Server\n\nCompletely different server content.\n",
+            created_by=self.susan,
+        )
+        server_hash = page.latest_version.content.hash
+        uuid = str(page.uuid)
+        local_content = b"# Local\n\nCompletely different local content.\n"
+
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={base_hash}&current={server_hash}",
+            data=local_content,
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response["X-Merge-Success"] == "false"
+        assert response.content == local_content
+
+    @ApiMixin.as_api_user("wendy")
+    def test_missing_base(self, api_client):
+        uuid = self.get_page_uuid("index")
+        server_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}?current={server_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "base is required."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_missing_current(self, api_client):
+        uuid = self.get_page_uuid("index")
+        base_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}?base={base_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json() == {"error": "current is required."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_base(self, api_client):
+        uuid = self.get_page_uuid("index")
+        server_hash = self.get_page_hash("index")
+        fake_hash = "0" * 64
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={fake_hash}&current={server_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_current(self, api_client):
+        uuid = self.get_page_uuid("index")
+        base_hash = self.get_page_hash("index")
+        fake_hash = "0" * 64
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={base_hash}&current={fake_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_deleted_page_returns_not_found(self, api_client):
+        uuid = str(self.deleted_page.uuid)
+        content_hash = self.deleted_page.latest_version.content.hash
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_page(self, api_client):
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            "/v1/notebooks/wendy/heros-legendes/00000000-0000-0000-0000-000000000000"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_nonexistent_notebook(self, api_client):
+        uuid = self.get_page_uuid("index")
+        content_hash = self.get_page_hash("index")
+        response = api_client.post(
+            f"/v1/notebooks/wendy/no-such-notebook/{uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+    @ApiMixin.as_api_user("wendy")
+    def test_uuid_from_different_notebook(self, api_client):
+        page = Page.objects.create(wiki=self.susans_notebook)
+        page.update(
+            filename="test.md",
+            mime_type="text/markdown",
+            data=b"# Test",
+            created_by=self.susan,
+        )
+        content_hash = page.latest_version.content.hash
+        response = api_client.post(
+            f"/v1/notebooks/wendy/heros-legendes/{page.uuid}"
+            f"?base={content_hash}&current={content_hash}",
+            data=b"# Local content\n",
+            content_type="text/markdown",
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"error": "Not found."}
+
+
+@pytest.mark.django_db
 class TestPageContentDelete(NotebookApiMixin):
     @ApiMixin.as_api_user("wendy")
     def test_owner(self, api_client):
