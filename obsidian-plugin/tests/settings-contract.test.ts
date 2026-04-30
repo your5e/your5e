@@ -82,26 +82,33 @@ describe("settings contract", () => {
     });
 });
 
-function createMockConfig(
-    overrides: Partial<FolderRenameConfig> = {},
-): FolderRenameConfig {
+interface MockConfigOverrides {
+    vault?: Partial<FolderRenameConfig["vault"]>;
+    settings?: Partial<PluginSettings>;
+    isSyncing?: FolderRenameConfig["isSyncing"];
+    abortSync?: FolderRenameConfig["abortSync"];
+    scheduler?: FolderRenameConfig["scheduler"];
+}
+
+function createMockConfig(overrides: MockConfigOverrides = {}): FolderRenameConfig {
     return {
         vault: {
             getAbstractFileByPath: vi.fn().mockReturnValue(null),
             rename: vi.fn().mockResolvedValue(undefined),
             createFolder: vi.fn().mockResolvedValue(undefined),
             delete: vi.fn().mockResolvedValue(undefined),
+            ...overrides.vault,
         },
         settings: {
             syncStates: {},
+            ...overrides.settings,
         } as PluginSettings,
-        isSyncing: vi.fn().mockReturnValue(false),
-        abortSync: vi.fn(),
-        scheduler: {
+        isSyncing: overrides.isSyncing ?? vi.fn().mockReturnValue(false),
+        abortSync: overrides.abortSync ?? vi.fn(),
+        scheduler: overrides.scheduler ?? {
             cancelFolder: vi.fn(),
             addFolder: vi.fn(),
         },
-        ...overrides,
     };
 }
 
@@ -374,7 +381,7 @@ describe("folder rename", () => {
             const config = createMockConfig({
                 settings: {
                     syncStates: { Conjurations: syncState },
-                } as PluginSettings,
+                },
                 vault: {
                     getAbstractFileByPath: vi.fn().mockImplementation((path) => {
                         if (path === "Conjurations") {
@@ -430,7 +437,7 @@ describe("folder rename", () => {
             const config = createMockConfig({
                 settings: {
                     syncStates: { Rituals: syncState },
-                } as PluginSettings,
+                },
             });
 
             await renameFolder(config, "Rituals", "Spells");
@@ -477,7 +484,7 @@ describe("folder rename", () => {
             const config = createMockConfig({
                 settings: {
                     syncStates: { Conjurations: syncState },
-                } as PluginSettings,
+                },
                 vault: {
                     getAbstractFileByPath: vi.fn().mockImplementation((path) => {
                         if (path === "Conjurations") {
@@ -516,22 +523,30 @@ describe("folder rename", () => {
     });
 });
 
+interface MockVaultRenameConfigOverrides {
+    settings?: Partial<PluginSettings>;
+    isSyncing?: VaultRenameConfig["isSyncing"];
+    abortSync?: VaultRenameConfig["abortSync"];
+    scheduler?: VaultRenameConfig["scheduler"];
+    log?: VaultRenameConfig["log"];
+}
+
 function createMockVaultRenameConfig(
-    overrides: Partial<VaultRenameConfig> = {},
+    overrides: MockVaultRenameConfigOverrides = {},
 ): VaultRenameConfig {
     return {
         settings: {
             folders: [],
             syncStates: {},
+            ...overrides.settings,
         } as PluginSettings,
-        isSyncing: vi.fn().mockReturnValue(false),
-        abortSync: vi.fn(),
-        scheduler: {
+        isSyncing: overrides.isSyncing ?? vi.fn().mockReturnValue(false),
+        abortSync: overrides.abortSync ?? vi.fn(),
+        scheduler: overrides.scheduler ?? {
             cancelFolder: vi.fn(),
             addFolder: vi.fn(),
         },
-        log: vi.fn(),
-        ...overrides,
+        log: overrides.log ?? vi.fn(),
     };
 }
 
@@ -542,7 +557,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Hexes", notebook: "test" }],
                     syncStates: {},
-                } as PluginSettings,
+                },
             });
 
             const result = handleVaultRename(config, "Cantrips", "Enchantments");
@@ -561,7 +576,7 @@ describe("vault rename detection", () => {
                         { folder: "Spells", notebook: "test2" },
                     ],
                     syncStates: {},
-                } as PluginSettings,
+                },
             });
 
             const result = handleVaultRename(config, "Conjurations", "Spells");
@@ -579,7 +594,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Conjurations", notebook: "test" }],
                     syncStates: {},
-                } as PluginSettings,
+                },
             });
 
             const result = handleVaultRename(config, "Conjurations", "Spells");
@@ -597,7 +612,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Conjurations", notebook: "test" }],
                     syncStates: { Conjurations: syncState },
-                } as PluginSettings,
+                },
             });
 
             handleVaultRename(config, "Conjurations", "Spells");
@@ -611,7 +626,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Conjurations", notebook: "test" }],
                     syncStates: {},
-                } as PluginSettings,
+                },
             });
 
             handleVaultRename(config, "Conjurations", "Spells");
@@ -625,7 +640,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Conjurations", notebook: "test" }],
                     syncStates: {},
-                } as PluginSettings,
+                },
             });
 
             handleVaultRename(config, "Conjurations", "Spells");
@@ -643,7 +658,7 @@ describe("vault rename detection", () => {
                 settings: {
                     folders: [{ folder: "Conjurations", notebook: "test" }],
                     syncStates: {},
-                } as PluginSettings,
+                },
                 isSyncing: vi.fn().mockReturnValue(true),
             });
 

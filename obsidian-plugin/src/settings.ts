@@ -39,7 +39,7 @@ export interface FolderRenameConfig {
             path: string,
         ): { path: string; children?: unknown[] } | null;
         rename(file: { path: string }, newPath: string): Promise<void>;
-        createFolder(path: string): Promise<void>;
+        createFolder(path: string): Promise<unknown>;
         delete(file: { path: string }): Promise<void>;
     };
     settings: PluginSettings;
@@ -103,8 +103,9 @@ export async function renameFolder(
                 };
             }
             await config.vault.rename(tempFolder, newPath);
-        } catch (error) {
-            return { action: "error", reason: error.message };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { action: "error", reason: message };
         }
     } else if (oldFolder && isNestedPath) {
         try {
@@ -119,8 +120,9 @@ export async function renameFolder(
                 };
             }
             await config.vault.rename(tempFolder, newPath);
-        } catch (error) {
-            return { action: "error", reason: error.message };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { action: "error", reason: message };
         }
     } else if (oldFolder) {
         try {
@@ -129,8 +131,9 @@ export async function renameFolder(
                 await config.vault.createFolder(parentPath);
             }
             await config.vault.rename(oldFolder, newPath);
-        } catch (error) {
-            return { action: "error", reason: error.message };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { action: "error", reason: message };
         }
     }
 

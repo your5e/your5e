@@ -50,7 +50,12 @@ describe("first sync pull", () => {
 
         const originalFetch = global.fetch;
         vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-            const url = typeof input === "string" ? input : input.url;
+            const url =
+                typeof input === "string"
+                    ? input
+                    : input instanceof URL
+                      ? input.href
+                      : input.url;
             if (url.includes("since=")) {
                 throw new Error("TEST GUARD: since parameter forbidden but was passed");
             }

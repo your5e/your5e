@@ -580,7 +580,7 @@ export class SyncEngine {
                     "Content-Type": contentType,
                     "Previous-Hash": entry.serverHash,
                 },
-                body: content,
+                body: new Uint8Array(content),
                 signal: AbortSignal.timeout(this.timeoutMs),
             },
             `pushing "${entry.localFilename}"`,
@@ -1314,7 +1314,7 @@ export class SyncEngine {
         const content = await this.fs.read(filePath);
 
         const formData = new FormData();
-        formData.append("file", new Blob([content]), file);
+        formData.append("file", new Blob([new Uint8Array(content)]), file);
         formData.append("filename", file);
 
         const response = await fetchWithContext(

@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import type { Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { FileSystem } from "./types.js";
@@ -35,7 +36,7 @@ export class NodeFileSystem implements FileSystem {
         dir: string,
         results: string[],
     ): Promise<void> {
-        let entries: Awaited<ReturnType<typeof fs.readdir<{ withFileTypes: true }>>>;
+        let entries: Dirent[];
         try {
             entries = await fs.readdir(dir, { withFileTypes: true });
         } catch {

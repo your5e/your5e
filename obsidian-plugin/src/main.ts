@@ -36,7 +36,7 @@ class FolderSuggestModal extends FuzzySuggestModal<FolderMapping> {
 }
 
 export default class Your5eSyncPlugin extends Plugin {
-    settings: PluginSettings;
+    settings!: PluginSettings;
     scheduler: SyncScheduler | null = null;
     syncLog: SyncLog = new SyncLog();
     private syncing: Set<string> = new Set();
@@ -192,7 +192,8 @@ export default class Your5eSyncPlugin extends Plugin {
             const result = await engine.run();
             this.saveFolderState(folderMapping.folder, result);
             await this.saveData(this.settings);
-        } catch (error) {
+        } catch (err) {
+            const error = err instanceof Error ? err : new Error(String(err));
             if (error.message === "Sync aborted") {
                 this.syncLog.log(folder, "sync aborted");
             } else {

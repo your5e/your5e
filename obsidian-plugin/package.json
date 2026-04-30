@@ -5,7 +5,7 @@
     "scripts": {
         "build": "node esbuild.config.mjs",
         "dev": "node esbuild.config.mjs --watch",
-        "lint": "biome check --write",
+        "lint": "biome check --write && tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest"
     },
