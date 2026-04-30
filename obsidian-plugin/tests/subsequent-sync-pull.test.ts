@@ -35,7 +35,6 @@ import {
     clearPagesCache,
     createFile,
     createTestDir,
-    deleteTrackedFile,
     getExpectedLastUpdate,
     getToken,
     initSyncedDir,
@@ -45,9 +44,8 @@ import {
     mergedOrcTroll,
     modifyFile,
     modifyFileWithContent,
+    moveFile,
     nowTimestamp,
-    renameLocalFile,
-    renameLocalFileUntracked,
     restoreDatabase,
     serverCreate,
     serverDelete,
@@ -56,6 +54,8 @@ import {
     setBaseHash,
     shortHostname,
     todayDate,
+    trackedDelete,
+    trackedRename,
     untrackAndRemoveFile,
     uuidFor,
 } from "./helpers.js";
@@ -928,7 +928,7 @@ Regenerates health.
 
     test("stale file, local deleted", async () => {
         await addStaleFile(outputDir, initialState, "my-notes.md");
-        await deleteTrackedFile(outputDir, "my-notes.md");
+        await trackedDelete(outputDir, "my-notes.md");
         assertInState(initialState, "stale-uuid");
 
         const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
@@ -944,7 +944,7 @@ Regenerates health.
     test("stale file, local deleted, remote edited, incremental sync", async () => {
         const uuid = await uuidFor(initialState, "index.md");
         markFileStale(initialState, "index.md");
-        await deleteTrackedFile(outputDir, "index.md");
+        await trackedDelete(outputDir, "index.md");
         await serverEditContent(token, uuid);
         assertInState(initialState, "stale-uuid");
 
@@ -963,7 +963,7 @@ Regenerates health.
     test("stale file, local deleted, remote edited, full sync", async () => {
         const uuid = await uuidFor(initialState, "index.md");
         markFileStale(initialState, "index.md");
-        await deleteTrackedFile(outputDir, "index.md");
+        await trackedDelete(outputDir, "index.md");
         await serverEditContent(token, uuid);
 
         // Full sync detects stale entry by comparing against complete server state
@@ -978,7 +978,7 @@ Regenerates health.
     });
 
     test("local deleted, aware", async () => {
-        await deleteTrackedFile(outputDir, "index.md", initialState);
+        await trackedDelete(outputDir, "index.md", initialState);
 
         const result = await createSync().run();
 
@@ -990,7 +990,7 @@ Regenerates health.
     });
 
     test("local deleted, unaware", async () => {
-        await deleteTrackedFile(outputDir, "index.md");
+        await trackedDelete(outputDir, "index.md");
 
         const result = await createSync().run();
 
@@ -1002,7 +1002,7 @@ Regenerates health.
     });
 
     test("local deleted, remote edited", async () => {
-        await deleteTrackedFile(outputDir, "Bestiary.md");
+        await trackedDelete(outputDir, "Bestiary.md");
         await serverEditContent(token, await uuidFor(initialState, "Bestiary.md"));
 
         const result = await createSync().run();
@@ -1017,7 +1017,7 @@ Regenerates health.
 
     test("local deleted, remote renamed", async () => {
         const npcsUuid = await uuidFor(initialState, "characters/NPCs.md");
-        await deleteTrackedFile(outputDir, "characters/NPCs.md");
+        await trackedDelete(outputDir, "characters/NPCs.md");
         await serverRename(token, npcsUuid, "NPCs.md");
 
         const result = await createSync().run();
@@ -1034,7 +1034,7 @@ Regenerates health.
 
     test("local deleted, remote edited, remote renamed", async () => {
         const homeUuid = await uuidFor(initialState, "Home.md");
-        await deleteTrackedFile(outputDir, "Home.md");
+        await trackedDelete(outputDir, "Home.md");
         await serverEditContent(token, homeUuid);
         await serverRename(token, homeUuid, "Welcome.md");
 
@@ -1051,7 +1051,7 @@ Regenerates health.
 
     test("local deleted, aware, local edited, remote edited", async () => {
         const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
-        await deleteTrackedFile(outputDir, "Bestiary.md", initialState);
+        await trackedDelete(outputDir, "Bestiary.md", initialState);
         await createFile(outputDir, "Bestiary.md");
         await serverEditContent(token, bestiaryUuid);
 
@@ -1072,7 +1072,7 @@ Regenerates health.
 
     test("local deleted, unaware, local edited, remote edited", async () => {
         const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
-        await deleteTrackedFile(outputDir, "Bestiary.md");
+        await trackedDelete(outputDir, "Bestiary.md");
         await createFile(outputDir, "Bestiary.md");
         await serverEditContent(token, bestiaryUuid);
 
@@ -1094,7 +1094,7 @@ Regenerates health.
     // noqa
     test("local deleted, aware, local edited, remote edited, remote renamed", async () => {
         const homeUuid = await uuidFor(initialState, "Home.md");
-        await deleteTrackedFile(outputDir, "Home.md", initialState);
+        await trackedDelete(outputDir, "Home.md", initialState);
         await createFile(outputDir, "Welcome.md");
         await serverEditContent(token, homeUuid);
         await serverRename(token, homeUuid, "Welcome.md");
@@ -1119,7 +1119,7 @@ Regenerates health.
         // Unaware: delete Home.md without marking state, then recreate Home.md
         // Server renames to Welcome.md, but locally we still have Home.md
         const homeUuid = await uuidFor(initialState, "Home.md");
-        await deleteTrackedFile(outputDir, "Home.md");
+        await trackedDelete(outputDir, "Home.md");
         await createFile(outputDir, "Home.md");
         await serverEditContent(token, homeUuid);
         await serverRename(token, homeUuid, "Welcome.md");
@@ -1140,7 +1140,7 @@ Regenerates health.
     });
 
     test("local deleted, remote deleted", async () => {
-        await deleteTrackedFile(outputDir, "Bestiary.md");
+        await trackedDelete(outputDir, "Bestiary.md");
         await serverDelete(token, await uuidFor(initialState, "Bestiary.md"));
 
         const result = await createSync().run();
@@ -1152,8 +1152,8 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed", async () => {
-        await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
+    test("local renamed, aware", async () => {
+        await trackedRename(outputDir, initialState, "index.md", "renamed-index.md");
 
         const result = await createSync().run();
 
@@ -1166,8 +1166,8 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited", async () => {
-        await renameLocalFile(outputDir, initialState, "index.md", "renamed-index.md");
+    test("local renamed, aware, local edited", async () => {
+        await trackedRename(outputDir, initialState, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
         const result = await createSync().run();
@@ -1181,9 +1181,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, remote edited", async () => {
+    test("local renamed, aware, remote edited", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(
+        await trackedRename(
             outputDir,
             initialState,
             "Bestiary.md",
@@ -1204,9 +1204,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote edited, mergeable", async () => {
+    test("local renamed, aware, local edited, remote edited, mergeable", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(
+        await trackedRename(
             outputDir,
             initialState,
             "Bestiary.md",
@@ -1228,9 +1228,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote edited, unmergeable", async () => {
+    test("local renamed, aware, local edited, remote edited, unmergeable", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(
+        await trackedRename(
             outputDir,
             initialState,
             "Bestiary.md",
@@ -1262,9 +1262,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, remote renamed", async () => {
+    test("local renamed, aware, remote renamed", async () => {
         const uuid = await uuidFor(initialState, "index.md");
-        await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
+        await trackedRename(outputDir, initialState, "index.md", "my-index.md");
         await serverRename(token, uuid, "server-index.md");
 
         const result = await createSync().run();
@@ -1278,9 +1278,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote renamed", async () => {
+    test("local renamed, aware, local edited, remote renamed", async () => {
         const uuid = await uuidFor(initialState, "index.md");
-        await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
+        await trackedRename(outputDir, initialState, "index.md", "my-index.md");
         await modifyFile(outputDir, "my-index.md");
         await serverRename(token, uuid, "server-index.md");
 
@@ -1295,9 +1295,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, remote edited, remote renamed", async () => {
+    test("local renamed, aware, remote edited, remote renamed", async () => {
         const uuid = await uuidFor(initialState, "index.md");
-        await renameLocalFile(outputDir, initialState, "index.md", "my-index.md");
+        await trackedRename(outputDir, initialState, "index.md", "my-index.md");
         await serverEditContent(token, uuid);
         await serverRename(token, uuid, "server-index.md");
 
@@ -1315,9 +1315,9 @@ Regenerates health.
     });
 
     // noqa
-    test("local renamed, local edited, remote edited, remote renamed, mergeable", async () => {
+    test("local renamed, aware, local edited, remote edited, remote renamed, mergeable", async () => {
         const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await trackedRename(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
         await modifyFileWithContent(outputDir, "my-bestiary.md", mergeableOrc());
         await serverEditContent(token, bestiaryUuid, mergeableTroll());
         await serverRename(token, bestiaryUuid, "server-bestiary.md");
@@ -1336,9 +1336,9 @@ Regenerates health.
     });
 
     // noqa
-    test("local renamed, local edited, remote edited, remote renamed, unmergeable", async () => {
+    test("local renamed, aware, local edited, remote edited, remote renamed, unmergeable", async () => {
         const bestiaryUuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await trackedRename(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
         await modifyFile(outputDir, "my-bestiary.md");
         await serverEditContent(token, bestiaryUuid);
         await serverRename(token, bestiaryUuid, "server-bestiary.md");
@@ -1360,9 +1360,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, remote deleted", async () => {
+    test("local renamed, aware, remote deleted", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await trackedRename(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
         await serverDelete(token, uuid);
 
         const result = await createSync().run();
@@ -1375,9 +1375,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, remote deleted", async () => {
+    test("local renamed, aware, local edited, remote deleted", async () => {
         const uuid = await uuidFor(initialState, "Bestiary.md");
-        await renameLocalFile(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
+        await trackedRename(outputDir, initialState, "Bestiary.md", "my-bestiary.md");
         await modifyFile(outputDir, "my-bestiary.md");
         await serverDelete(token, uuid);
 
@@ -1397,9 +1397,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, stale file", async () => {
+    test("local renamed, aware, stale file", async () => {
         await addStaleFile(outputDir, initialState, "original.md");
-        await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
+        await trackedRename(outputDir, initialState, "original.md", "my-notes.md");
 
         const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
 
@@ -1409,9 +1409,9 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed, local edited, stale file", async () => {
+    test("local renamed, aware, local edited, stale file", async () => {
         await addStaleFile(outputDir, initialState, "original.md");
-        await renameLocalFile(outputDir, initialState, "original.md", "my-notes.md");
+        await trackedRename(outputDir, initialState, "original.md", "my-notes.md");
         await modifyFile(outputDir, "my-notes.md");
 
         const result = await createSync({ lastFullSync: "2020-01-01T00:00:00Z" }).run();
@@ -1427,8 +1427,8 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed untracked, hash match", async () => {
-        await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
+    test("local renamed, unaware, hash match", async () => {
+        await moveFile(outputDir, "index.md", "renamed-index.md");
 
         const result = await createSync().run();
 
@@ -1443,8 +1443,8 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed untracked, hash mismatch", async () => {
-        await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
+    test("local renamed, unaware, hash mismatch", async () => {
+        await moveFile(outputDir, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
 
         const result = await createSync().run();
@@ -1458,8 +1458,8 @@ Regenerates health.
         assertSyncMetadataUpdated(result.lastUpdate, result.lastFullSync);
     });
 
-    test("local renamed untracked, hash mismatch, remote edited", async () => {
-        await renameLocalFileUntracked(outputDir, "index.md", "renamed-index.md");
+    test("local renamed, unaware, hash mismatch, remote edited", async () => {
+        await moveFile(outputDir, "index.md", "renamed-index.md");
         await modifyFile(outputDir, "renamed-index.md");
         await serverEditContent(token, await uuidFor(initialState, "index.md"));
 

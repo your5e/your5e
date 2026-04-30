@@ -64,5 +64,5 @@ computer in case of data loss. That doesn't help if they never leave.
 - [X] add DMP merge API endpoint, replacing the git merge
 - [X] add a multiple scenario combined sync test
         - confirm what happens on conflicts, banned files, etc when repeatedly syncing
-- [ ] test awareness of deletions and renames
+- [X] test awareness of deletions and renames
 - [ ] properly assert API results in all obsidian tests

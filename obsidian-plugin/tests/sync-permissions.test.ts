@@ -33,16 +33,16 @@ import {
     createFile,
     createTestDir,
     deletePageByUuid,
-    deleteTrackedFile,
     downgradeToViewer,
     getToken,
     initSyncedDir,
     invalidateToken,
     modifyFile,
-    renameLocalFile,
     restoreDatabase,
     serverCreate,
     serverEditContent,
+    trackedDelete,
+    trackedRename,
     uuidFor,
 } from "./helpers.js";
 
@@ -400,7 +400,7 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, revoked, local rename", async () => {
-            await renameLocalFile(outputDir, initialState, "index.md", "renamed.md");
+            await trackedRename(outputDir, initialState, "index.md", "renamed.md");
             const sync = createSync({
                 initialState,
                 lastUpdate: "2020-01-01T00:00:00Z",
@@ -452,7 +452,7 @@ describe("sync permissions", () => {
                 normToken,
                 await uuidFor(initialState, "Bestiary.md"),
             );
-            await renameLocalFile(outputDir, initialState, "index.md", "renamed.md");
+            await trackedRename(outputDir, initialState, "index.md", "renamed.md");
             const sync = createSync({
                 token: wendyToken,
                 initialState,
@@ -504,7 +504,7 @@ describe("sync permissions", () => {
         });
 
         test("mid-sync, revoked, local delete", async () => {
-            await deleteTrackedFile(outputDir, "index.md");
+            await trackedDelete(outputDir, "index.md");
             const sync = createSync({
                 initialState,
                 lastUpdate: "2020-01-01T00:00:00Z",
@@ -550,7 +550,7 @@ describe("sync permissions", () => {
                 normToken,
                 await uuidFor(initialState, "Bestiary.md"),
             );
-            await deleteTrackedFile(outputDir, "index.md");
+            await trackedDelete(outputDir, "index.md");
             const sync = createSync({
                 token: wendyToken,
                 initialState,

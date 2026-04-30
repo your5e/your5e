@@ -75,7 +75,7 @@ function untrack_and_remove_file {
     rm -rf "${output_dir:?}/$filename"
 }
 
-function delete_tracked_file {
+function tracked_delete {
     local filename="$1"
     rm "$output_dir/$filename"
 
@@ -85,7 +85,7 @@ function delete_tracked_file {
     update_sync_state "$uuid" "" "."
 }
 
-function rename_local_file {
+function tracked_rename {
     local from="$1" to="$2"
 
     mkdir -p "$(dirname "$output_dir/$to")"
@@ -98,7 +98,7 @@ function rename_local_file {
     update_sync_state "$uuid" "" "$to"
 }
 
-function rename_local_file_untracked {
+function move_file {
     local from="$1" to="$2"
 
     mkdir -p "$(dirname "$output_dir/$to")"

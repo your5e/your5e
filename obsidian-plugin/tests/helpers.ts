@@ -489,7 +489,7 @@ export async function modifyFile(outputDir: string, filename: string): Promise<v
     await fs.writeFile(path.join(outputDir, filename), "modified local content\n");
 }
 
-export async function renameLocalFile(
+export async function trackedRename(
     outputDir: string,
     state: Map<string, SyncStateEntry>,
     from: string,
@@ -508,7 +508,7 @@ export async function renameLocalFile(
     }
 }
 
-export async function renameLocalFileUntracked(
+export async function moveFile(
     outputDir: string,
     from: string,
     to: string,
@@ -520,7 +520,7 @@ export async function renameLocalFileUntracked(
     await removeEmptyParents(path.dirname(fromPath), outputDir);
 }
 
-export async function deleteTrackedFile(
+export async function trackedDelete(
     outputDir: string,
     filename: string,
     state?: Map<string, SyncStateEntry>,

@@ -288,7 +288,7 @@ setup() {
 }
 
 @test "mid-sync, revoked, local rename" {
-    rename_local_file "index.md" "renamed.md"
+    tracked_rename "index.md" "renamed.md"
     export AFTER_FETCH_HOOK="invalidate_token '$YOUR5E_API_TOKEN'"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -308,7 +308,7 @@ setup() {
 
 @test "mid-sync, downgraded, local rename" {
     server_edit_content "$(uuid_for "Bestiary.md")"
-    rename_local_file "index.md" "renamed.md"
+    tracked_rename "index.md" "renamed.md"
     export AFTER_FETCH_HOOK="downgrade_to_viewer 'wendy' 'norm' 'campaign-notes'"
 
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"

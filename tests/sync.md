@@ -139,23 +139,23 @@ Test updating the state from an existing synced directory works.
 | local deleted, aware, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | | ✔️ | |
 | local deleted, unaware, local edited, remote edited, remote renamed | ✔️ | ✔️ | | ✔️ | ✔️ | ✔️ | | | ❌ | |
 | local deleted, remote deleted | ✔️ | | | ✔️ | | | ✔️ | | | |
-| local renamed | ✔️ | | ✔️ | | | | | | | |
-| local renamed, local edited | ✔️ | ✔️ | ✔️ | | | | | | | |
-| local renamed, remote edited | ✔️ | | ✔️ | | ✔️ | | | | | |
-| local renamed, local edited, remote edited, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | ✔️ |
-| local renamed, local edited, remote edited, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | ❌ |
-| local renamed, remote renamed | ✔️ | | ✔️ | | | ✔️ | | | | |
-| local renamed, local edited, remote renamed | ✔️ | ✔️ | ✔️ | | | ✔️ | | | | |
-| local renamed, remote edited, remote renamed | ✔️ | | ✔️ | | ✔️ | ✔️ | | | | |
-| local renamed, local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ✔️ |
-| local renamed, local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | | ❌ |
-| local renamed, remote deleted | ✔️ | | ✔️ | | | | ✔️ | | | |
-| local renamed, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | | | |
-| local renamed, stale file | ✔️ | | ✔️ | | | | | ✔️ | | |
-| local renamed, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ | | |
-| local renamed untracked, hash match | ✔️ | | ✔️ | | | | | | | |
-| local renamed untracked, hash mismatch | ✔️ | ✔️ | ✔️ | | | | | | | |
-| local renamed untracked, hash mismatch, remote edited | ✔️ | ✔️ | ✔️ | | ✔️ | | | | | |
+| local renamed, aware | ✔️ | | ✔️ | | | | | | ✔️ | |
+| local renamed, aware, local edited | ✔️ | ✔️ | ✔️ | | | | | | ✔️ | |
+| local renamed, aware, remote edited | ✔️ | | ✔️ | | ✔️ | | | | ✔️ | |
+| local renamed, aware, local edited, remote edited, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | ✔️ | ✔️ |
+| local renamed, aware, local edited, remote edited, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | | | | ✔️ | ❌ |
+| local renamed, aware, remote renamed | ✔️ | | ✔️ | | | ✔️ | | | ✔️ | |
+| local renamed, aware, local edited, remote renamed | ✔️ | ✔️ | ✔️ | | | ✔️ | | | ✔️ | |
+| local renamed, aware, remote edited, remote renamed | ✔️ | | ✔️ | | ✔️ | ✔️ | | | ✔️ | |
+| local renamed, aware, local edited, remote edited, remote renamed, mergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | ✔️ | ✔️ |
+| local renamed, aware, local edited, remote edited, remote renamed, unmergeable | ✔️ | ✔️ | ✔️ | | ✔️ | ✔️ | | | ✔️ | ❌ |
+| local renamed, aware, remote deleted | ✔️ | | ✔️ | | | | ✔️ | | ✔️ | |
+| local renamed, aware, local edited, remote deleted | ✔️ | ✔️ | ✔️ | | | | ✔️ | | ✔️ | |
+| local renamed, aware, stale file | ✔️ | | ✔️ | | | | | ✔️ | ✔️ | |
+| local renamed, aware, local edited, stale file | ✔️ | ✔️ | ✔️ | | | | | ✔️ | ✔️ | |
+| local renamed, unaware, hash match | ✔️ | | ✔️ | | | | | | ❌ | |
+| local renamed, unaware, hash mismatch | ✔️ | ✔️ | ✔️ | | | | | | ❌ | |
+| local renamed, unaware, hash mismatch, remote edited | ✔️ | ✔️ | ✔️ | | ✔️ | | | | ❌ | |
 | conflict hostname exists | | ✔️ | | | | | | | | |
 | conflict hostname exists, conflict date exists | | ✔️ | | | | | | | | |
 
@@ -212,9 +212,10 @@ change and syncs, building on the state from the previous test.
 | merged edit |
 | replaced edit |
 | conflicting new file |
-| local rename |
+| local rename, aware |
 | server delete |
 | server rename |
+| local rename, unaware |
 | local delete, aware |
 | local delete, unaware |
 | stale file |

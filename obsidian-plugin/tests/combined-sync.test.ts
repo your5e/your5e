@@ -27,14 +27,13 @@ import {
     cleanupTestDir,
     createFile,
     createTestDir,
-    deleteTrackedFile,
     getToken,
     mergeableOrc,
     mergeableTroll,
     modifyFile,
     modifyFileWithContent,
+    moveFile,
     removeFile,
-    renameLocalFile,
     restoreDatabase,
     serverCreate,
     serverDelete,
@@ -42,6 +41,8 @@ import {
     serverPurge,
     serverRename,
     shortHostname,
+    trackedDelete,
+    trackedRename,
     uuidFor,
 } from "./helpers.js";
 
@@ -244,8 +245,8 @@ describe("combined sync", () => {
         lastFullSync = result.lastFullSync;
     });
 
-    test("local rename", async () => {
-        await renameLocalFile(
+    test("local rename, aware", async () => {
+        await trackedRename(
             outputDir,
             currentState,
             "my-notes.md",
@@ -315,8 +316,29 @@ describe("combined sync", () => {
         lastFullSync = result.lastFullSync;
     });
 
+    test("local rename, unaware", async () => {
+        await moveFile(outputDir, "index.md", "moved-index.md");
+
+        const result = await createSync().run();
+
+        const expectedOutput = [
+            'info: detected rename "index.md" to "moved-index.md"',
+            'push: renamed "index.md" to "moved-index.md"',
+            'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
+        ];
+        expect(result.output).toEqual(expectedOutput);
+        assertIncrementalResults(result.incrementalResults, 0);
+
+        assertFileInState("moved-index.md", result.state);
+        assertFileNotInState("index.md", result.state);
+
+        currentState = result.state;
+        lastUpdate = result.lastUpdate;
+        lastFullSync = result.lastFullSync;
+    });
+
     test("local delete, aware", async () => {
-        await deleteTrackedFile(outputDir, "Home.md", currentState);
+        await trackedDelete(outputDir, "Home.md", currentState);
 
         const result = await createSync().run();
 
@@ -325,7 +347,7 @@ describe("combined sync", () => {
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
         ];
         expect(result.output).toEqual(expectedOutput);
-        assertIncrementalResults(result.incrementalResults, 0);
+        assertIncrementalResults(result.incrementalResults, 1);
 
         await assertFileDeletedOnServer(outputDir, result.state, "Home.md", token);
         assertFileNotInState("Home.md", result.state);

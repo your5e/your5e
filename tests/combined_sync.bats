@@ -156,8 +156,8 @@ setup() {
     assert_tracked_file_intact "Quests.md"
 }
 
-@test "local rename" {
-    rename_local_file "my-notes.md" "notes/my-notes.md"
+@test "local rename, aware" {
+    tracked_rename "my-notes.md" "notes/my-notes.md"
 
     fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -212,10 +212,29 @@ setup() {
     assert_empty_dir_removed "sessions"
 }
 
-@test "local delete, aware" {
-    delete_tracked_file "Home.md"
+@test "local rename, unaware" {
+    move_file "index.md" "moved-index.md"
 
     fail_when_results_not 0
+    run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
+
+    expected_output=$(sed -e 's/^        //' <<-EOF
+        info: detected rename "index.md" to "moved-index.md"
+        push: renamed "index.md" to "moved-index.md"
+        push: ERROR cannot push ".obsidian/app.json": No hidden files.
+	EOF
+    )
+    diff -u <(echo "$expected_output") <(echo "$output")
+    assert_success
+
+    assert_file_in_state "moved-index.md"
+    assert_file_not_in_state "index.md"
+}
+
+@test "local delete, aware" {
+    tracked_delete "Home.md"
+
+    fail_when_results_not 1
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF

@@ -907,7 +907,7 @@ setup() {
 
 @test "stale file, local deleted" {
     add_stale_file "my-notes.md"
-    delete_tracked_file "my-notes.md"
+    tracked_delete "my-notes.md"
     assert_in_state "stale-uuid"
     setup_old_sync_metadata
 
@@ -927,7 +927,7 @@ setup() {
 
 @test "stale file, local deleted, remote edited, incremental sync" {
     mark_file_stale "index.md"
-    delete_tracked_file "index.md"
+    tracked_delete "index.md"
     server_edit_content "$(uuid_for "index.md")"
     assert_in_state "stale-uuid"
 
@@ -951,7 +951,7 @@ setup() {
 
 @test "stale file, local deleted, remote edited, full sync" {
     mark_file_stale "index.md"
-    delete_tracked_file "index.md"
+    tracked_delete "index.md"
     server_edit_content "$(uuid_for "index.md")"
     setup_old_sync_metadata
 
@@ -975,7 +975,7 @@ setup() {
 
 @test "local deleted, aware" {
     index_uuid=$(uuid_for "index.md")
-    delete_tracked_file "index.md"
+    tracked_delete "index.md"
 
     fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -1012,7 +1012,7 @@ setup() {
 }
 
 @test "local deleted, remote edited" {
-    delete_tracked_file "Bestiary.md"
+    tracked_delete "Bestiary.md"
     server_edit_content "$(uuid_for "Bestiary.md")"
 
     fail_when_results_not 1
@@ -1033,7 +1033,7 @@ setup() {
 
 @test "local deleted, remote renamed" {
     npcs_uuid=$(uuid_for "characters/NPCs.md")
-    delete_tracked_file "characters/NPCs.md"
+    tracked_delete "characters/NPCs.md"
     server_rename "$npcs_uuid" "NPCs.md"
 
     fail_when_results_not 1
@@ -1054,7 +1054,7 @@ setup() {
 
 @test "local deleted, remote edited, remote renamed" {
     home_uuid=$(uuid_for "Home.md")
-    delete_tracked_file "Home.md"
+    tracked_delete "Home.md"
     server_edit_content "$home_uuid"
     server_rename "$home_uuid" "Welcome.md"
 
@@ -1078,7 +1078,7 @@ setup() {
 
 @test "local deleted, aware, local edited, remote edited" {
     bestiary_uuid=$(uuid_for "Bestiary.md")
-    delete_tracked_file "Bestiary.md"
+    tracked_delete "Bestiary.md"
     create_file "Bestiary.md"
     server_edit_content "$bestiary_uuid"
 
@@ -1128,7 +1128,7 @@ setup() {
 
 @test "local deleted, aware, local edited, remote edited, remote renamed" {
     home_uuid=$(uuid_for "Home.md")
-    delete_tracked_file "Home.md"
+    tracked_delete "Home.md"
     create_file "Welcome.md"
     server_edit_content "$home_uuid"
     server_rename "$home_uuid" "Welcome.md"
@@ -1180,7 +1180,7 @@ setup() {
 }
 
 @test "local deleted, remote deleted" {
-    delete_tracked_file "Bestiary.md"
+    tracked_delete "Bestiary.md"
     server_delete "Bestiary.md"
 
     fail_when_results_not 1
@@ -1195,8 +1195,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed" {
-    rename_local_file "index.md" "renamed-index.md"
+@test "local renamed, aware" {
+    tracked_rename "index.md" "renamed-index.md"
 
     fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -1215,8 +1215,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited" {
-    rename_local_file "index.md" "renamed-index.md"
+@test "local renamed, aware, local edited" {
+    tracked_rename "index.md" "renamed-index.md"
     modify_file "renamed-index.md"
 
     fail_when_results_not 0
@@ -1237,8 +1237,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, remote edited" {
-    rename_local_file "Bestiary.md" "renamed-bestiary.md"
+@test "local renamed, aware, remote edited" {
+    tracked_rename "Bestiary.md" "renamed-bestiary.md"
     server_edit_content "$(uuid_for "Bestiary.md")"
 
     fail_when_results_not 1
@@ -1259,8 +1259,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote edited, mergeable" {
-    rename_local_file "Bestiary.md" "renamed-bestiary.md"
+@test "local renamed, aware, local edited, remote edited, mergeable" {
+    tracked_rename "Bestiary.md" "renamed-bestiary.md"
     modify_file "renamed-bestiary.md" "$(mergeable_orc)"
     server_edit_content "$(uuid_for "Bestiary.md")" "$(mergeable_troll)"
 
@@ -1282,8 +1282,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote edited, unmergeable" {
-    rename_local_file "Bestiary.md" "renamed-bestiary.md"
+@test "local renamed, aware, local edited, remote edited, unmergeable" {
+    tracked_rename "Bestiary.md" "renamed-bestiary.md"
     modify_file "renamed-bestiary.md"
     server_edit_content "$(uuid_for "Bestiary.md")"
 
@@ -1305,9 +1305,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, remote renamed" {
+@test "local renamed, aware, remote renamed" {
     index_uuid=$(uuid_for "index.md")
-    rename_local_file "index.md" "my-index.md"
+    tracked_rename "index.md" "my-index.md"
     server_rename "$index_uuid" "server-index.md"
 
     fail_when_results_not 1
@@ -1328,9 +1328,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote renamed" {
+@test "local renamed, aware, local edited, remote renamed" {
     index_uuid=$(uuid_for "index.md")
-    rename_local_file "index.md" "my-index.md"
+    tracked_rename "index.md" "my-index.md"
     modify_file "my-index.md"
     server_rename "$index_uuid" "server-index.md"
 
@@ -1353,9 +1353,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, remote edited, remote renamed" {
+@test "local renamed, aware, remote edited, remote renamed" {
     index_uuid=$(uuid_for "index.md")
-    rename_local_file "index.md" "my-index.md"
+    tracked_rename "index.md" "my-index.md"
     server_edit_content "$index_uuid"
     server_rename "$index_uuid" "server-index.md"
 
@@ -1378,9 +1378,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote edited, remote renamed, mergeable" {
+@test "local renamed, aware, local edited, remote edited, remote renamed, mergeable" {
     bestiary_uuid=$(uuid_for "Bestiary.md")
-    rename_local_file "Bestiary.md" "my-bestiary.md"
+    tracked_rename "Bestiary.md" "my-bestiary.md"
     modify_file "my-bestiary.md" "$(mergeable_orc)"
     server_edit_content "$bestiary_uuid" "$(mergeable_troll)"
     server_rename "$bestiary_uuid" "server-bestiary.md"
@@ -1404,9 +1404,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote edited, remote renamed, unmergeable" {
+@test "local renamed, aware, local edited, remote edited, remote renamed, unmergeable" {
     bestiary_uuid=$(uuid_for "Bestiary.md")
-    rename_local_file "Bestiary.md" "my-bestiary.md"
+    tracked_rename "Bestiary.md" "my-bestiary.md"
     modify_file "my-bestiary.md"
     server_edit_content "$bestiary_uuid"
     server_rename "$bestiary_uuid" "server-bestiary.md"
@@ -1430,8 +1430,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, remote deleted" {
-    rename_local_file "Bestiary.md" "my-bestiary.md"
+@test "local renamed, aware, remote deleted" {
+    tracked_rename "Bestiary.md" "my-bestiary.md"
     server_delete "Bestiary.md"
 
     fail_when_results_not 1
@@ -1451,8 +1451,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, remote deleted" {
-    rename_local_file "Bestiary.md" "my-bestiary.md"
+@test "local renamed, aware, local edited, remote deleted" {
+    tracked_rename "Bestiary.md" "my-bestiary.md"
     modify_file "my-bestiary.md"
     server_delete "Bestiary.md"
 
@@ -1474,9 +1474,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, stale file" {
+@test "local renamed, aware, stale file" {
     add_stale_file "original.md"
-    rename_local_file "original.md" "my-notes.md"
+    tracked_rename "original.md" "my-notes.md"
     setup_old_sync_metadata
 
     fail_on_since_parameter
@@ -1494,9 +1494,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed, local edited, stale file" {
+@test "local renamed, aware, local edited, stale file" {
     add_stale_file "original.md"
-    rename_local_file "original.md" "my-notes.md"
+    tracked_rename "original.md" "my-notes.md"
     modify_file "my-notes.md"
     setup_old_sync_metadata
 
@@ -1517,8 +1517,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed untracked, hash match" {
-    rename_local_file_untracked "index.md" "renamed-index.md"
+@test "local renamed, unaware, hash match" {
+    move_file "index.md" "renamed-index.md"
 
     fail_when_results_not 0
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
@@ -1538,9 +1538,9 @@ setup() {
     assert_success
 }
 
-@test "local renamed untracked, hash mismatch" {
+@test "local renamed, unaware, hash mismatch" {
     index_uuid=$(uuid_for "index.md")
-    rename_local_file_untracked "index.md" "renamed-index.md"
+    move_file "index.md" "renamed-index.md"
     modify_file "renamed-index.md"
 
     fail_when_results_not 0
@@ -1563,8 +1563,8 @@ setup() {
     assert_success
 }
 
-@test "local renamed untracked, hash mismatch, remote edited" {
-    rename_local_file_untracked "index.md" "renamed-index.md"
+@test "local renamed, unaware, hash mismatch, remote edited" {
+    move_file "index.md" "renamed-index.md"
     modify_file "renamed-index.md"
     server_edit_content "$(uuid_for "index.md")"
 
