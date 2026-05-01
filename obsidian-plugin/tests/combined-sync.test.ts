@@ -28,6 +28,8 @@ import {
     createFile,
     createTestDir,
     getToken,
+    guardNoSinceParameter,
+    guardRequireSinceParameter,
     mergeableOrc,
     mergeableTroll,
     modifyFile,
@@ -35,6 +37,7 @@ import {
     moveFile,
     removeFile,
     restoreDatabase,
+    runSync,
     serverCreate,
     serverDelete,
     serverEditContent,
@@ -82,10 +85,11 @@ describe("combined sync", () => {
     }
 
     test("initial sync", async () => {
+        guardNoSinceParameter();
         await createFile(outputDir, "my-notes.md");
         await createFile(outputDir, ".obsidian/app.json");
 
-        const result = await createSync().run();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -117,7 +121,8 @@ describe("combined sync", () => {
     });
 
     test("stable sync", async () => {
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -133,7 +138,8 @@ describe("combined sync", () => {
     test("local edit", async () => {
         await modifyFile(outputDir, "my-notes.md");
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: "my-notes.md" (v2)',
@@ -158,7 +164,8 @@ describe("combined sync", () => {
     test("server edit", async () => {
         await serverEditContent(token, await uuidFor(currentState, "The Old Café.md"));
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -182,7 +189,8 @@ describe("combined sync", () => {
             mergeableTroll(),
         );
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: "Bestiary.md" (v4, merged)',
@@ -200,7 +208,8 @@ describe("combined sync", () => {
         await modifyFile(outputDir, "index.md");
         await serverEditContent(token, await uuidFor(currentState, "index.md"));
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: "index.md" (v3, replaced)',
@@ -218,7 +227,8 @@ describe("combined sync", () => {
         await serverCreate(token, "Quests.md");
         await createFile(outputDir, "Quests.md");
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -253,7 +263,8 @@ describe("combined sync", () => {
             "notes/my-notes.md",
         );
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: renamed "my-notes.md" to "notes/my-notes.md"',
@@ -273,7 +284,8 @@ describe("combined sync", () => {
     test("server delete", async () => {
         await serverDelete(token, await uuidFor(currentState, "characters/NPCs.md"));
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -293,7 +305,8 @@ describe("combined sync", () => {
         const sessionUuid = await uuidFor(currentState, "sessions/session-01.md");
         await serverRename(token, sessionUuid, "logs/Session 01.md");
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -319,7 +332,8 @@ describe("combined sync", () => {
     test("local rename, unaware", async () => {
         await moveFile(outputDir, "index.md", "moved-index.md");
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'info: detected rename "index.md" to "moved-index.md"',
@@ -340,7 +354,8 @@ describe("combined sync", () => {
     test("local delete, aware", async () => {
         await trackedDelete(outputDir, "Home.md", currentState);
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: deleted "Home.md"',
@@ -360,7 +375,8 @@ describe("combined sync", () => {
     test("local delete, unaware", async () => {
         await removeFile(outputDir, "The Old Café.md");
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: deleted "The Old Café.md"',
@@ -386,7 +402,8 @@ describe("combined sync", () => {
         const bestiaryUuid = await uuidFor(currentState, "Bestiary.md");
         serverPurge(bestiaryUuid);
 
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -402,15 +419,10 @@ describe("combined sync", () => {
     });
 
     test("stale file, full sync", async () => {
+        guardNoSinceParameter();
         lastFullSync = "2020-01-01T00:00:00Z";
-        const fetchSpy = vi.spyOn(global, "fetch");
 
-        const result = await createSync().run();
-
-        // Verify full sync (no ?since= parameter)
-        const firstFetch = fetchSpy.mock.calls[0][0];
-        expect(firstFetch).not.toContain("since=");
-        vi.restoreAllMocks();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -427,7 +439,8 @@ describe("combined sync", () => {
     });
 
     test("final stable state", async () => {
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',
@@ -453,7 +466,8 @@ describe("combined sync", () => {
     });
 
     test("final stable sync", async () => {
-        const result = await createSync().run();
+        guardRequireSinceParameter();
+        const result = await runSync(createSync());
 
         const expectedOutput = [
             'push: ERROR cannot push ".obsidian/app.json": No hidden files.',

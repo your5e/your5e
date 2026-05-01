@@ -7,7 +7,7 @@
  * Ported from tests/first_sync_push.bats
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import {
@@ -31,7 +31,9 @@ import {
     createFile,
     createTestDir,
     getToken,
+    guardNoSinceParameter,
     restoreDatabase,
+    runSync,
     shortHostname,
 } from "./helpers.js";
 
@@ -49,6 +51,7 @@ describe("first sync push", () => {
     beforeEach(async () => {
         restoreDatabase();
         ({ testDir, outputDir } = await createTestDir());
+        guardNoSinceParameter();
     });
 
     afterEach(async () => {
@@ -72,7 +75,7 @@ describe("first sync push", () => {
     test("empty directory", async () => {
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -95,7 +98,7 @@ describe("first sync push", () => {
     test("empty notebook", async () => {
         const sync = createSync({ notebook: "norm/empty-notebook" });
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         expect(result.output).toEqual([]);
         await assertOutputDirExists(outputDir);
@@ -111,7 +114,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `info: renamed "Home.md" to "Home (conflict ${SHORT_HOST}).md"`,
@@ -171,7 +174,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -195,7 +198,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `push: ERROR cannot push "sessions": Filename must have an extension.`,
@@ -223,7 +226,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `info: renamed "Bestiary.md" to "Bestiary (conflict ${SHORT_HOST}).md"`,
@@ -261,7 +264,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `push: ERROR cannot push ".hidden.md": No hidden files.`,
@@ -289,7 +292,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,
@@ -323,7 +326,7 @@ describe("first sync push", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             `info: renamed "home.md" to "home (conflict ${SHORT_HOST}).md"`,

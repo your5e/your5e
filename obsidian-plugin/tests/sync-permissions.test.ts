@@ -10,7 +10,7 @@
  * Ported from tests/sync_permissions.bats
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import type { SyncStateEntry } from "../src/sync/types.js";
@@ -35,10 +35,13 @@ import {
     deletePageByUuid,
     downgradeToViewer,
     getToken,
+    guardNoSinceParameter,
+    guardRequireSinceParameter,
     initSyncedDir,
     invalidateToken,
     modifyFile,
     restoreDatabase,
+    runSync,
     serverCreate,
     serverEditContent,
     trackedDelete,
@@ -68,6 +71,7 @@ describe("sync permissions", () => {
 
     afterEach(async () => {
         await cleanupTestDir(testDir);
+        vi.restoreAllMocks();
     });
 
     function createSync(overrides: {
@@ -94,9 +98,10 @@ describe("sync permissions", () => {
     }
 
     test("full sync switches to pull", async () => {
+        guardNoSinceParameter();
         const sync = createSync({ token: susanToken });
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             "NOTE read-only access, switching to pull-only mode",
@@ -118,9 +123,10 @@ describe("sync permissions", () => {
     });
 
     test("pull, non-collaborator, public", async () => {
+        guardNoSinceParameter();
         const sync = createSync({ token: hughToken, pullOnly: true });
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -210,7 +216,9 @@ describe("sync permissions", () => {
         const recentSyncTime = new Date().toISOString();
 
         beforeEach(async () => {
+            vi.restoreAllMocks();
             initialState = await initSyncedDir(outputDir, normToken);
+            guardRequireSinceParameter();
         });
 
         test("mid-sync, revoked, new file", async () => {
@@ -272,7 +280,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 "NOTE permission denied, switching to pull-only mode",
@@ -365,7 +373,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 "NOTE permission denied, switching to pull-only mode",
@@ -463,7 +471,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 "NOTE permission denied, switching to pull-only mode",
@@ -561,7 +569,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 "NOTE permission denied, switching to pull-only mode",
@@ -651,7 +659,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 'pull: "Home.md" (v3)',
@@ -698,7 +706,7 @@ describe("sync permissions", () => {
                 },
             });
 
-            const result = await sync.run();
+            const result = await runSync(sync);
 
             const expectedOutput = [
                 'pull: SKIPPING "Rumours.md", deleted remotely during sync',

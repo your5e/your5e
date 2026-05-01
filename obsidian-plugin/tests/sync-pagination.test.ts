@@ -10,7 +10,7 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { NodeFileSystem } from "../src/sync/node-fs.js";
 import { SyncEngine } from "../src/sync/sync-engine.js";
 import {
@@ -20,8 +20,10 @@ import {
     assertLastUpdateExists,
     cleanupTestDir,
     createTestDir,
+    extractFetchUrl,
     getToken,
     restoreDatabase,
+    runSync,
 } from "./helpers.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
@@ -31,11 +33,30 @@ describe("sync pagination", () => {
     let token: string;
     let testDir: string;
     let outputDir: string;
+    let listingCallCount: number;
     const pagesToCreate = PAGE_SIZE + 1;
 
     beforeAll(async () => {
         token = await getToken();
         restoreDatabase();
+
+        listingCallCount = 0;
+        const originalFetch = global.fetch;
+        vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+            const url = extractFetchUrl(input);
+            if (url.includes("since=")) {
+                throw new Error("TEST GUARD: since= forbidden but was passed");
+            }
+            const isGet = !init?.method || init.method === "GET";
+            const isListing =
+                isGet &&
+                /\/v1\/notebooks\/[^/]+\/[^/]+\/(\?|$)/.test(url) &&
+                !/\/v1\/notebooks\/[^/]+\/[^/]+\/[^/?]/.test(url);
+            if (isListing) {
+                listingCallCount++;
+            }
+            return originalFetch(input, init);
+        });
 
         for (let i = 1; i <= pagesToCreate; i++) {
             execSync(
@@ -65,7 +86,7 @@ describe("sync pagination", () => {
             pullOnly: true,
         });
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -104,5 +125,6 @@ describe("sync pagination", () => {
             result.state,
         );
         assertLastUpdateExists(result.lastUpdate);
+        expect(listingCallCount).toBeGreaterThan(1);
     });
 });

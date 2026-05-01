@@ -457,6 +457,42 @@ function fail_on_multiple_curl_calls {
     export -f curl
 }
 
+function fail_on_single_listing_call {
+    # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
+    curl() {
+        local marker="${BATS_TEST_TMPDIR}/.listing_count"
+        local is_listing=0
+
+        if [[ "$*" == *"-X GET"* ]] || [[ "$*" != *"-X "* ]]; then
+            if [[ "$*" == *"/v1/notebooks/"*"/" ]] \
+                    && [[ "$*" != *"/v1/notebooks/"*"/"*"/" ]]; then
+                is_listing=1
+            fi
+        fi
+
+        if [[ "$is_listing" -eq 1 ]]; then
+            # check since= not used
+            if [[ "$*" == *"since="* ]]; then
+                echo "TEST GUARD: since parameter forbidden but was passed" >&2
+                return 1
+            fi
+            echo "1" >> "$marker"
+        else
+            # check pagination happened
+            if [[ -f "$marker" ]]; then
+                local count
+                count=$(wc -l < "$marker" | tr -d ' ')
+                if [[ "$count" -eq 1 ]]; then
+                    echo "TEST GUARD: expected multiple listing calls, got 1" >&2
+                    return 1
+                fi
+            fi
+        fi
+        command curl "$@"
+    }
+    export -f curl
+}
+
 function fail_on_missing_since_parameter {
     # shellcheck disable=SC2317,SC2329  # invoked indirectly via export -f
     curl() {

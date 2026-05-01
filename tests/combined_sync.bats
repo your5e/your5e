@@ -33,6 +33,7 @@ setup() {
     create_file "my-notes.md"
     create_file ".obsidian/app.json"
 
+    fail_on_since_parameter
     run tests/sync-notebook.sh norm/campaign-notes "$output_dir"
 
     expected_output=$(sed -e 's/^        //' <<-EOF

@@ -3,8 +3,9 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import * as path from "node:path";
-import { expect } from "vitest";
-import type { SyncStateEntry } from "../src/sync/types.js";
+import { expect, vi } from "vitest";
+import type { SyncEngine } from "../src/sync/sync-engine.js";
+import type { SyncResult, SyncStateEntry } from "../src/sync/types.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURES_DIR = path.join(PROJECT_ROOT, "tests/fixtures");
@@ -30,6 +31,49 @@ SQL
   `,
         { cwd: PROJECT_ROOT, stdio: "pipe" },
     );
+}
+
+export function extractFetchUrl(input: Parameters<typeof fetch>[0]): string {
+    if (typeof input === "string") {
+        return input;
+    }
+    if (input instanceof URL) {
+        return input.href;
+    }
+    return input.url;
+}
+
+export function guardNoSinceParameter(): void {
+    const originalFetch = global.fetch;
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+        const url = extractFetchUrl(input);
+        if (url.includes("since=")) {
+            throw new Error("TEST GUARD: since= forbidden but was passed");
+        }
+        return originalFetch(input, init);
+    });
+}
+
+export function guardRequireSinceParameter(): void {
+    const originalFetch = global.fetch;
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+        const url = extractFetchUrl(input);
+        const method = init?.method?.toUpperCase() ?? "GET";
+        const pagesListingPattern = /\/v1\/notebooks\/[^/]+\/[^/]+\/(\?|$)/;
+        const isPageListing = method === "GET" && pagesListingPattern.test(url);
+        if (isPageListing && !url.includes("since=")) {
+            throw new Error("TEST GUARD: since= required but was missing");
+        }
+        return originalFetch(input, init);
+    });
+}
+
+export async function runSync(sync: SyncEngine): Promise<SyncResult> {
+    try {
+        return await sync.run();
+    } finally {
+        vi.restoreAllMocks();
+    }
 }
 
 export async function createTestDir(): Promise<{

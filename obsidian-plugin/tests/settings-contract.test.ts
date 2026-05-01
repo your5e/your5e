@@ -17,7 +17,9 @@ import {
     createFile,
     createTestDir,
     getToken,
+    guardNoSinceParameter,
     restoreDatabase,
+    runSync,
 } from "./helpers.js";
 
 describe("settings contract", () => {
@@ -63,8 +65,9 @@ describe("settings contract", () => {
         const sync = new SyncEngine(config);
 
         await createFile(outputDir, "local-only.md", "this should not be pushed\n");
+        guardNoSinceParameter();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         expect(result.output).not.toContainEqual(
             expect.stringMatching(/push:.*local-only\.md/),

@@ -29,7 +29,9 @@ import {
     createFile,
     createTestDir,
     getToken,
+    guardNoSinceParameter,
     restoreDatabase,
+    runSync,
     shortHostname,
 } from "./helpers.js";
 
@@ -47,25 +49,11 @@ describe("first sync pull", () => {
     beforeEach(async () => {
         restoreDatabase();
         ({ testDir, outputDir } = await createTestDir());
-
-        const originalFetch = global.fetch;
-        vi.spyOn(global, "fetch").mockImplementation((input, init) => {
-            const url =
-                typeof input === "string"
-                    ? input
-                    : input instanceof URL
-                      ? input.href
-                      : input.url;
-            if (url.includes("since=")) {
-                throw new Error("TEST GUARD: since parameter forbidden but was passed");
-            }
-            return originalFetch(input, init);
-        });
+        guardNoSinceParameter();
     });
 
     afterEach(async () => {
         await cleanupTestDir(testDir);
-        vi.restoreAllMocks();
     });
 
     function createSync(
@@ -86,7 +74,7 @@ describe("first sync pull", () => {
     test("empty directory", async () => {
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -109,7 +97,7 @@ describe("first sync pull", () => {
     test("empty notebook", async () => {
         const sync = createSync({ notebook: "norm/empty-notebook" });
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         expect(result.output).toEqual([]);
         await assertOutputDirExists(outputDir);
@@ -125,7 +113,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -157,7 +145,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -181,7 +169,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -208,7 +196,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -242,7 +230,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -268,7 +256,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',
@@ -295,7 +283,7 @@ describe("first sync pull", () => {
 
         const sync = createSync();
 
-        const result = await sync.run();
+        const result = await runSync(sync);
 
         const expectedOutput = [
             'pull: "random-hexmap-7.png" (v1)',

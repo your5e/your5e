@@ -20,7 +20,7 @@ setup_file() {
 }
 
 setup() {
-    fail_on_since_parameter
+    fail_on_single_listing_call
     fixtures="$BATS_TEST_DIRNAME/fixtures"
     output_dir="$BATS_TEST_TMPDIR/output"
 }
